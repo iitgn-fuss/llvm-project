@@ -10,6 +10,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
@@ -108,69 +109,226 @@ struct DisjointSets {
 
 } // namespace
 
-/// The groups of one region. Loop phis are returned through \p Group's
-/// CarriedPhis.
-static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L) {
-  SmallVector<Instruction *, 16> Cands;
-  DenseMap<const Instruction *, unsigned> Index;
-  DisjointSets DS;
-  for (Instruction &I : BB)
-    if (isCandidate(I) && !reachesAddress(I)) {
-      Index[&I] = DS.add();
-      Cands.push_back(&I);
-    }
-
-  // Connect operations by def-use.
-  for (Instruction *I : Cands)
-    for (Value *Op : I->operands())
-      if (auto *OpI = dyn_cast<Instruction>(Op)) {
-        auto It = Index.find(OpI);
-        if (It != Index.end())
-          DS.unite(Index[I], It->second);
+/// Strongly connected components of the region graph (same-iteration and
+/// carried edges), by iterative Tarjan. Returns the component id of each node;
+/// ids are dense. \p HasCycle[c] is true for components that are cycles (more
+/// than one node, or a node with a carried edge to itself).
+static SmallVector<unsigned, 32> computeSCCs(const RegionGraph &RG,
+                                             SmallVectorImpl<bool> &HasCycle) {
+  unsigned N = RG.Insts.size();
+  SmallVector<SmallVector<unsigned, 2>, 32> Succs(N);
+  for (unsigned U = 0; U != N; ++U) {
+    for (unsigned P : RG.Preds[U])
+      Succs[P].push_back(U);
+    for (auto &E : RG.Carried[U])
+      Succs[E.first].push_back(U);
+  }
+  const unsigned None = ~0u;
+  SmallVector<unsigned, 32> Index(N, None), Low(N, 0), Comp(N, None);
+  SmallVector<bool, 32> OnStack(N, false);
+  SmallVector<unsigned, 32> Stack;
+  SmallVector<std::pair<unsigned, unsigned>, 32> Work; // (node, next succ)
+  unsigned Counter = 0, NumComps = 0;
+  for (unsigned Root = 0; Root != N; ++Root) {
+    if (Index[Root] != None)
+      continue;
+    Work.push_back({Root, 0});
+    Index[Root] = Low[Root] = Counter++;
+    Stack.push_back(Root);
+    OnStack[Root] = true;
+    while (!Work.empty()) {
+      auto &[V, Next] = Work.back();
+      if (Next < Succs[V].size()) {
+        unsigned W = Succs[V][Next++];
+        if (Index[W] == None) {
+          Index[W] = Low[W] = Counter++;
+          Stack.push_back(W);
+          OnStack[W] = true;
+          Work.push_back({W, 0});
+        } else if (OnStack[W]) {
+          Low[V] = std::min(Low[V], Index[W]);
+        }
+        continue;
       }
+      unsigned Vn = V;
+      Work.pop_back();
+      if (!Work.empty())
+        Low[Work.back().first] = std::min(Low[Work.back().first], Low[Vn]);
+      if (Low[Vn] == Index[Vn]) {
+        unsigned Size = 0, X;
+        do {
+          X = Stack.pop_back_val();
+          OnStack[X] = false;
+          Comp[X] = NumComps;
+          ++Size;
+        } while (X != Vn);
+        bool Cycle = Size > 1;
+        if (!Cycle)
+          for (auto &E : RG.Carried[Vn])
+            Cycle |= E.first == Vn;
+        HasCycle.push_back(Cycle);
+        ++NumComps;
+      }
+    }
+  }
+  return Comp;
+}
 
-  // One group per set, in order of first appearance.
-  SmallVector<Group, 4> Groups;
-  DenseMap<unsigned, unsigned> GroupOfRoot;
-  DenseMap<const Instruction *, unsigned> GroupOf;
-  for (Instruction *I : Cands) {
-    unsigned Root = DS.find(Index[I]);
-    auto [It, New] = GroupOfRoot.try_emplace(Root, Groups.size());
-    if (New)
-      Groups.emplace_back();
-    Groups[It->second].Ops.push_back(I);
-    GroupOf[I] = It->second;
+/// A canonical description of the group: operations in program order as
+/// opcode(operand-refs), where an operand-ref is a position in the group, a
+/// constant's value or the kind of input, then the live-out positions.
+static std::string sliceKey(const Group &G, const Loop *L) {
+  DenseMap<const Value *, unsigned> Pos;
+  for (unsigned K = 0; K != G.Ops.size(); ++K)
+    Pos[G.Ops[K]] = K;
+  std::string Key = G.Recurrence ? "R:" : "S:";
+  raw_string_ostream OS(Key);
+  for (const Instruction *I : G.Ops) {
+    OS << I->getOpcodeName() << '(';
+    bool First = true;
+    for (const Value *V : I->operands()) {
+      if (!First)
+        OS << ',';
+      First = false;
+      auto It = Pos.find(V);
+      if (It != Pos.end())
+        OS << '#' << It->second;
+      else if (auto *C = dyn_cast<ConstantInt>(V))
+        OS << 'c' << C->getValue();
+      else if (isa<Constant>(V))
+        OS << "const";
+      else if (auto *P = dyn_cast<PHINode>(V);
+               P && is_contained(G.CarriedPhis, P))
+        OS << "phi";
+      else if (isa<Argument>(V))
+        OS << "arg";
+      else if (isa<LoadInst>(V))
+        OS << "load";
+      else if (L && L->isLoopInvariant(V))
+        OS << "invariant";
+      else
+        OS << "inst";
+    }
+    OS << ");";
+  }
+  OS << "out=";
+  for (const Instruction *I : G.LiveOuts)
+    OS << Pos[I] << ',';
+  return Key;
+}
+
+/// The groups of one region: every whole all-in-scope recurrence (with its
+/// phis, kept in vector form), and the use-def connected slices of the
+/// candidates outside recurrences. Operations of a recurrence that has a member
+/// out of scope are not candidates, so no transfer lands on a cycle.
+/// \p Classes numbers the slice classes of the function.
+static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
+                                        StringMap<unsigned> &Classes) {
+  RegionGraph RG = buildRegionGraph(BB, L);
+  unsigned N = RG.Insts.size();
+  SmallVector<bool, 32> InScope(N, false);
+  for (unsigned I = 0; I != N; ++I)
+    InScope[I] = isCandidate(*RG.Insts[I]) && !reachesAddress(*RG.Insts[I]);
+
+  SmallVector<bool, 8> CompCycle;
+  SmallVector<unsigned, 32> Comp = computeSCCs(RG, CompCycle);
+  SmallVector<SmallVector<unsigned, 4>, 8> CompNodes(CompCycle.size());
+  for (unsigned I = 0; I != N; ++I)
+    CompNodes[Comp[I]].push_back(I);
+
+  // Group number of each node, or none: a recurrence is one group, the other
+  // candidates group by use-def.
+  const unsigned None = ~0u;
+  SmallVector<unsigned, 32> GroupOfNode(N, None);
+  SmallVector<bool, 32> IsRec(N, false);
+  unsigned NumRec = 0;
+  SmallVector<unsigned, 8> RecOfComp(CompCycle.size(), None);
+  for (unsigned C = 0; C != CompCycle.size(); ++C) {
+    if (!CompCycle[C])
+      continue;
+    // Whether the whole recurrence is in scope.
+    bool AllInScope = all_of(CompNodes[C], [&](unsigned I) { return InScope[I]; });
+    for (unsigned I : CompNodes[C]) {
+      IsRec[I] = true;
+      if (AllInScope)
+        GroupOfNode[I] = RecOfComp[C] != None ? RecOfComp[C]
+                                              : (RecOfComp[C] = NumRec++);
+    }
   }
 
-  // A loop phi joins a group when its latch value and all its users are in
-  // that group, so the value stays in vector form around the loop.
-  DenseSet<const PHINode *> Joined;
+  // The acyclic candidates, connected by def-use.
+  DisjointSets DS;
+  SmallVector<unsigned, 32> DSIndex(N, None);
+  for (unsigned I = 0; I != N; ++I)
+    if (InScope[I] && !IsRec[I])
+      DSIndex[I] = DS.add();
+  for (unsigned I = 0; I != N; ++I)
+    if (DSIndex[I] != None)
+      for (unsigned P : RG.Preds[I])
+        if (DSIndex[P] != None)
+          DS.unite(DSIndex[I], DSIndex[P]);
+
+  // One group per recurrence or set, in order of first appearance.
+  SmallVector<Group, 4> Groups;
+  DenseMap<unsigned, unsigned> GroupOfKey; // 2*rec or 2*root+1
+  DenseMap<const Instruction *, unsigned> GroupOf;
+  for (unsigned I = 0; I != N; ++I) {
+    unsigned Key;
+    if (IsRec[I] && GroupOfNode[I] != None)
+      Key = 2 * GroupOfNode[I];
+    else if (DSIndex[I] != None)
+      Key = 2 * DS.find(DSIndex[I]) + 1;
+    else
+      continue;
+    auto [It, New] = GroupOfKey.try_emplace(Key, Groups.size());
+    if (New) {
+      Groups.emplace_back();
+      Groups.back().Recurrence = (Key & 1) == 0;
+    }
+    Groups[It->second].Ops.push_back(const_cast<Instruction *>(RG.Insts[I]));
+    GroupOf[RG.Insts[I]] = It->second;
+  }
+
+  // The phis of a recurrence stay in vector form: every phi that closes the
+  // cycle joins its group. If such a phi has a user outside the group the
+  // value would have to leave the vector domain on the cycle, so the
+  // recurrence is not a group at all.
+  SmallVector<bool, 4> Drop(Groups.size(), false);
   if (L)
     for (PHINode &Phi : BB.phis()) {
-      if (!Phi.getType()->isIntegerTy(32) || Phi.use_empty())
+      auto LatchIt = RG.PhiLatch.find(&Phi);
+      if (!Phi.getType()->isIntegerTy(32) || Phi.use_empty() ||
+          LatchIt == RG.PhiLatch.end())
         continue;
-      auto *Latch = dyn_cast<Instruction>(Phi.getIncomingValueForBlock(&BB));
-      auto LIt = Latch ? GroupOf.find(Latch) : GroupOf.end();
-      if (LIt == GroupOf.end())
+      auto GIt = GroupOf.find(RG.Insts[LatchIt->second.first]);
+      if (GIt == GroupOf.end() || !Groups[GIt->second].Recurrence)
         continue;
-      bool AllInGroup = all_of(Phi.users(), [&](User *U) {
+      unsigned G = GIt->second;
+      auto InG = [&](User *U) {
         auto It = GroupOf.find(dyn_cast<Instruction>(U));
-        return It != GroupOf.end() && It->second == LIt->second;
-      });
-      if (AllInGroup) {
-        Groups[LIt->second].CarriedPhis.push_back(&Phi);
-        Joined.insert(&Phi);
+        return It != GroupOf.end() && It->second == G;
+      };
+      if (all_of(Phi.users(), InG)) {
+        // A phi whose latch is a phi (distance above 1) is not joined.
+        if (isa<PHINode>(Phi.getIncomingValueForBlock(&BB)))
+          Drop[G] = true;
+        else
+          Groups[G].CarriedPhis.push_back(&Phi);
+      } else if (any_of(Phi.users(), InG)) {
+        Drop[G] = true;
       }
     }
+  SmallVector<Group, 4> Kept;
+  for (unsigned G = 0; G != Groups.size(); ++G)
+    if (!Drop[G])
+      Kept.push_back(std::move(Groups[G]));
+  Groups = std::move(Kept);
 
-  for (unsigned G = 0; G != Groups.size(); ++G) {
-    Group &Grp = Groups[G];
+  for (Group &Grp : Groups) {
     auto InGroup = [&](const Value *V) {
-      if (auto *I = dyn_cast<Instruction>(V)) {
-        auto It = GroupOf.find(I);
-        if (It != GroupOf.end() && It->second == G)
+      if (auto *I = dyn_cast<Instruction>(V))
+        if (is_contained(Grp.Ops, I))
           return true;
-      }
       auto *P = dyn_cast<PHINode>(V);
       return P && is_contained(Grp.CarriedPhis, P);
     };
@@ -181,8 +339,12 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L) {
       if (any_of(I->users(), [&](User *U) { return !InGroup(U); }))
         Grp.LiveOuts.push_back(I);
     }
+    Grp.SliceClass =
+        Classes.try_emplace(sliceKey(Grp, L), Classes.size()).first->second;
     LLVM_DEBUG({
-      dbgs() << "savio: group of " << Grp.Ops.size() << " ops in ";
+      dbgs() << "savio: group of " << Grp.Ops.size() << " ops ("
+             << (Grp.Recurrence ? "recurrence" : "slice") << ", class "
+             << Grp.SliceClass << ") in ";
       BB.printAsOperand(dbgs(), false);
       dbgs() << "\n";
       for (Instruction *I : Grp.LiveOuts) {
@@ -197,12 +359,13 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L) {
 
 SmallVector<Region, 4> savio::formRegions(Function &F, LoopInfo &LI) {
   SmallVector<Region, 4> Regions;
+  StringMap<unsigned> Classes;
   for (BasicBlock &BB : F) {
     Loop *L = LI.getLoopFor(&BB);
     // v1: innermost single-block loops, and blocks outside any loop.
     if (L && !(L->isInnermost() && L->getNumBlocks() == 1))
       continue;
-    SmallVector<Group, 4> Groups = formGroups(BB, L);
+    SmallVector<Group, 4> Groups = formGroups(BB, L, Classes);
     if (!Groups.empty())
       Regions.push_back({&BB, L, std::move(Groups)});
   }
@@ -359,8 +522,12 @@ public:
   /// Fills the nodes; false if the assignment needs a cost the port
   /// description lacks.
   bool build() {
-    for (const Instruction *IP : RG.Insts) {
-      const Instruction &I = *IP;
+    for (unsigned NI = 0; NI != RG.Insts.size(); ++NI) {
+      const Instruction &I = *RG.Insts[NI];
+      // The region graph holds one edge per operand defined in the block, in
+      // operand order: same-iteration in Preds, through a header phi in
+      // Carried.
+      unsigned PredCur = 0, CarriedCur = 0;
       auto GIt = GroupOf.find(&I);
       bool InGroup = GIt != GroupOf.end();
       unsigned GIdx = InGroup ? GIt->second : 0;
@@ -377,16 +544,20 @@ public:
         const Instruction *Def = nullptr; // Operand defined in the block.
         if (auto *Phi = dyn_cast<PHINode>(V)) {
           // A loop phi closes a recurrence through this operand when its latch
-          // value is an instruction of the block.
-          auto It = RG.PhiLatch.find(Phi);
-          if (R.L && It != RG.PhiLatch.end()) {
-            Latch = RG.Insts[It->second.first];
-            Dist = It->second.second;
+          // value is an instruction of the block: a carried edge.
+          if (RG.PhiLatch.count(Phi)) {
+            assert(CarriedCur < RG.Carried[NI].size() && "missing carried edge");
+            auto [LatchNode, D] = RG.Carried[NI][CarriedCur++];
+            Latch = RG.Insts[LatchNode];
+            Dist = D;
             Joined = InGroup && is_contained(R.Groups[GIdx].CarriedPhis, Phi);
           }
         } else if (auto *OpI = dyn_cast<Instruction>(V)) {
-          if (RG.Index.count(OpI))
-            Def = OpI;
+          if (RG.Index.count(OpI)) {
+            assert(PredCur < RG.Preds[NI].size() && "missing pred edge");
+            Def = RG.Insts[RG.Preds[NI][PredCur++]];
+            assert(Def == OpI && "region graph edge order differs");
+          }
         }
 
         if (Joined) {
@@ -429,6 +600,8 @@ public:
           OwnEdges.push_back({0, Latch, false, Dist});
       }
 
+      assert(PredCur == RG.Preds[NI].size() &&
+             CarriedCur == RG.Carried[NI].size() && "unconsumed graph edges");
       std::optional<OpCost> C;
       if (InGroup) {
         std::string Key;

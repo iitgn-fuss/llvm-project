@@ -47,6 +47,12 @@ struct Group {
   SmallVector<Instruction *, 4> LiveOuts;
   /// Loop phis kept in vector form when the group is Singleton Vectorized.
   SmallVector<PHINode *, 2> CarriedPhis;
+  /// Groups of one function with equal class are instances of the same slice
+  /// (same operations, constants and input kinds): interchangeable.
+  unsigned SliceClass = 0;
+  /// True for a whole recurrence (a cycle of the dependence graph, all in
+  /// scope) moved as a vector-phi group; false for an acyclic slice.
+  bool Recurrence = false;
 };
 
 struct Region {

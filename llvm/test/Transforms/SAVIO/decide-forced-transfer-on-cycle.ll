@@ -1,10 +1,10 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -savio-force -pass-remarks=savio -disable-output %s 2>&1 | FileCheck %s
-; acc = fshl(acc, 5) ^ v. The xor is forced into the vector domain, so its input
-; %rot needs a GprToVec transfer and its result (used by the fshl through the
-; phi) a VecToGpr transfer: both lie on the accumulator cycle. The cycle is
-; fshl + GprToVec + vector xor + VecToGpr, so T rises from the scalar cycle
-; (fshl + xor = 2) to 1 + 1 + 1 + 1 = 4.
-; CHECK: remark: {{.*}}T 2.00 -> 4.00 (recurrence)
+; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -savio-force -S %s | FileCheck %s
+; acc = fshl(acc, 5) ^ v. The recurrence (fshl, xor) has an operation with no
+; vector equivalent, so it is pinned scalar: even -savio-force cannot move the
+; xor, since that would put GprToVec and VecToGpr transfers on the cycle (this
+; test used to force exactly that, T 2.00 -> 4.00 in Part 1).
+; CHECK-NOT: llvm.savio.sv
+; CHECK: xor i32
 target triple = "arm64-apple-macos"
 
 declare i32 @llvm.fshl.i32(i32, i32, i32)
