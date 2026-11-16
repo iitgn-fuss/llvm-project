@@ -1,0 +1,241 @@
+//===- SingletonVectorize.cpp - SAVIO Singleton Vectorize rewrite ---------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#include "llvm/Transforms/Vectorize/SAVIO/SingletonVectorize.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/Analysis/LoopInfo.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/Module.h"
+
+using namespace llvm;
+using namespace llvm::savio;
+
+static Intrinsic::ID svIntrinsicFor(unsigned Opcode) {
+  switch (Opcode) {
+  case Instruction::Add:
+    return Intrinsic::savio_sv_add_v4i32;
+  case Instruction::Sub:
+    return Intrinsic::savio_sv_sub_v4i32;
+  case Instruction::Mul:
+    return Intrinsic::savio_sv_mul_v4i32;
+  case Instruction::And:
+    return Intrinsic::savio_sv_and_v4i32;
+  case Instruction::Or:
+    return Intrinsic::savio_sv_or_v4i32;
+  case Instruction::Xor:
+    return Intrinsic::savio_sv_xor_v4i32;
+  case Instruction::Shl:
+    return Intrinsic::savio_sv_shl_v4i32;
+  case Instruction::LShr:
+    return Intrinsic::savio_sv_lshr_v4i32;
+  case Instruction::AShr:
+    return Intrinsic::savio_sv_ashr_v4i32;
+  case Instruction::UDiv:
+    return Intrinsic::savio_sv_udiv_v4i32;
+  case Instruction::URem:
+    return Intrinsic::savio_sv_urem_v4i32;
+  default:
+    llvm_unreachable("operation is not in scope of Singleton Vectorize");
+  }
+}
+
+namespace {
+
+class Rewriter {
+  const Group &G;
+  Loop *L;
+  BasicBlock *BB;
+  IRBuilder<> B;
+  FixedVectorType *VecTy;
+  Value *Lane0;
+
+  /// Vector form of group operations, joined phis and boundary inputs.
+  DenseMap<Value *, Value *> VecOf;
+
+  Value *insertLane0(Value *Scalar) {
+    return B.CreateInsertElement(PoisonValue::get(VecTy), Scalar, Lane0);
+  }
+
+  /// The vector form of the operand \p V of \p Op, which is not in the group.
+  Value *enter(Instruction *Op, Value *V) {
+    if (isa<Constant>(V)) {
+      B.SetInsertPoint(Op);
+      return insertLane0(V);
+    }
+    auto It = VecOf.find(V);
+    if (It != VecOf.end())
+      return It->second;
+
+    InputKind K = classifyInput(L, G, V);
+    BasicBlock *Preheader = L ? L->getLoopPreheader() : nullptr;
+    Value *Vec;
+    if (K == InputKind::Free && Preheader && L->isLoopInvariant(V)) {
+      // Invariant: the transfer is done once, in the preheader.
+      B.SetInsertPoint(Preheader->getTerminator());
+      Vec = insertLane0(V);
+    } else if (auto *EE = dyn_cast<ExtractElementInst>(V);
+               K == InputKind::LaneToLane0 && EE &&
+               isa<FixedVectorType>(EE->getVectorOperand()->getType()) &&
+               isa<ConstantInt>(EE->getIndexOperand())) {
+      // The lane moves to lane 0 with a shuffle.
+      B.SetInsertPoint(Op);
+      uint64_t Idx = cast<ConstantInt>(EE->getIndexOperand())->getZExtValue();
+      int Mask[4] = {int(Idx), PoisonMaskElem, PoisonMaskElem, PoisonMaskElem};
+      Vec = B.CreateShuffleVector(EE->getVectorOperand(),
+                                  PoisonValue::get(EE->getVectorOperand()
+                                                       ->getType()),
+                                  Mask);
+    } else {
+      // A load or GPR value: insert just before its first use.
+      B.SetInsertPoint(Op);
+      Vec = insertLane0(V);
+    }
+    VecOf[V] = Vec;
+    return Vec;
+  }
+
+public:
+  Rewriter(const Group &G, Loop *L)
+      : G(G), L(L), BB(G.Ops.front()->getParent()), B(BB->getContext()),
+        VecTy(FixedVectorType::get(B.getInt32Ty(), 4)),
+        Lane0(B.getInt32(0)) {}
+
+  void run() {
+    Module *M = BB->getModule();
+
+    // Carried phis keep their value in vector form: the value entering from
+    // outside the loop is inserted in lane 0 at the end of that predecessor.
+    SmallVector<PHINode *, 2> VecPhis;
+    for (PHINode *Phi : G.CarriedPhis) {
+      PHINode *VP = PHINode::Create(VecTy, Phi->getNumIncomingValues(),
+                                    Phi->getName() + ".sv", Phi->getIterator());
+      VP->setDebugLoc(Phi->getDebugLoc());
+      DenseMap<BasicBlock *, Value *> FromPred;
+      for (unsigned I = 0, E = Phi->getNumIncomingValues(); I != E; ++I) {
+        BasicBlock *Pred = Phi->getIncomingBlock(I);
+        if (Pred == BB)
+          continue; // The latch value is added once its operation exists.
+        Value *&Entry = FromPred[Pred];
+        if (!Entry) {
+          B.SetInsertPoint(Pred->getTerminator());
+          Entry = insertLane0(Phi->getIncomingValue(I));
+        }
+        VP->addIncoming(Entry, Pred);
+      }
+      VecOf[Phi] = VP;
+      VecPhis.push_back(VP);
+    }
+
+    for (Instruction *Op : G.Ops) {
+      Value *Args[2];
+      for (unsigned I = 0; I != 2; ++I) {
+        Value *V = Op->getOperand(I);
+        if (auto It = VecOf.find(V); It != VecOf.end() && isInGroup(G, dyn_cast<User>(V))) {
+          Args[I] = It->second;
+        } else if (I == 1 && Op->isShift() && isa<ConstantInt>(V)) {
+          // Constant shift count: a splat the backend matches to an immediate.
+          Args[I] = ConstantVector::getSplat(ElementCount::getFixed(4),
+                                             cast<ConstantInt>(V));
+        } else {
+          Args[I] = enter(Op, V);
+        }
+      }
+      B.SetInsertPoint(Op);
+      B.SetCurrentDebugLocation(Op->getDebugLoc());
+      Function *Decl =
+          Intrinsic::getOrInsertDeclaration(M, svIntrinsicFor(Op->getOpcode()));
+      VecOf[Op] = B.CreateCall(Decl, Args, Op->getName() + ".sv");
+    }
+
+    for (unsigned I = 0, E = G.CarriedPhis.size(); I != E; ++I)
+      VecPhis[I]->addIncoming(
+          VecOf[G.CarriedPhis[I]->getIncomingValueForBlock(BB)], BB);
+
+    for (Instruction *Op : G.LiveOuts)
+      leave(Op);
+
+    // Erase the scalar group. What still uses it is itself erased.
+    for (PHINode *Phi : G.CarriedPhis)
+      Phi->replaceAllUsesWith(PoisonValue::get(Phi->getType()));
+    for (Instruction *Op : G.Ops)
+      Op->replaceAllUsesWith(PoisonValue::get(Op->getType()));
+    SmallVector<ExtractElementInst *, 2> Extracts;
+    for (Instruction *Op : G.Ops)
+      for (Value *V : Op->operands())
+        if (auto *EE = dyn_cast<ExtractElementInst>(V))
+          Extracts.push_back(EE);
+    for (Instruction *Op : G.Ops)
+      Op->eraseFromParent();
+    for (PHINode *Phi : G.CarriedPhis)
+      Phi->eraseFromParent();
+    for (ExtractElementInst *EE : Extracts)
+      if (EE->use_empty())
+        EE->eraseFromParent();
+  }
+
+private:
+  /// Gives the users of the live-out \p Op outside the group its scalar value.
+  void leave(Instruction *Op) {
+    Value *Vec = VecOf[Op];
+    SmallVector<Use *, 4> Outside;
+    for (Use &U : Op->uses())
+      if (!isInGroup(G, U.getUser()))
+        Outside.push_back(&U);
+
+    if (!liveOutNeedsGpr(G, *Op)) {
+      // Every user is a store: each stores lane 0 straight from the vector.
+      for (Use *U : Outside) {
+        auto *S = cast<StoreInst>(U->getUser());
+        B.SetInsertPoint(S);
+        B.SetCurrentDebugLocation(S->getDebugLoc());
+        S->setOperand(0, B.CreateExtractElement(Vec, Lane0));
+      }
+      return;
+    }
+
+    // Users after the loop that are single-entry phis of another block take
+    // the value in that block, outside the loop.
+    auto IsExitPhi = [&](Use *U) {
+      auto *P = dyn_cast<PHINode>(U->getUser());
+      return P && P->getParent() != BB && P->getNumIncomingValues() == 1;
+    };
+    if (L && all_of(Outside, IsExitPhi)) {
+      DenseMap<BasicBlock *, Value *> PerBlock;
+      for (Use *U : Outside) {
+        auto *P = cast<PHINode>(U->getUser());
+        Value *&E = PerBlock[P->getParent()];
+        if (!E) {
+          B.SetInsertPoint(P->getParent()->getFirstInsertionPt());
+          B.SetCurrentDebugLocation(P->getDebugLoc());
+          E = B.CreateExtractElement(Vec, Lane0);
+        }
+        P->replaceAllUsesWith(E);
+        P->eraseFromParent();
+      }
+      return;
+    }
+
+    // One extract right after the operation serves every outside user.
+    B.SetInsertPoint(cast<Instruction>(Vec)->getNextNode());
+    B.SetCurrentDebugLocation(Op->getDebugLoc());
+    Value *E = B.CreateExtractElement(Vec, Lane0);
+    for (Use *U : Outside)
+      U->set(E);
+  }
+};
+
+} // namespace
+
+void savio::rewriteSingletonVectorize(const Group &G, Loop *L) {
+  assert(!G.Ops.empty() && "empty group");
+  Rewriter(G, L).run();
+}

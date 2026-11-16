@@ -209,12 +209,8 @@ SmallVector<Region, 4> savio::formRegions(Function &F, LoopInfo &LI) {
   return Regions;
 }
 
-namespace {
-
-enum class InputKind { Free, GprToVec, LaneToLane0 };
-
-/// How an operand \p V of a Singleton Vectorized group reaches it.
-InputKind classifyInput(const Region &R, const Group &G, const Value *V) {
+InputKind savio::classifyInput(const Loop *L, const Group &G,
+                               const Value *V) {
   if (isa<Constant>(V))
     return InputKind::Free;
   // A load whose users are all in the group is replaced by a vector load.
@@ -225,12 +221,28 @@ InputKind classifyInput(const Region &R, const Group &G, const Value *V) {
         }))
       return InputKind::Free;
   // In a loop the transfer of an invariant value is hoisted out of it.
-  if (R.L && R.L->isLoopInvariant(V))
+  if (L && L->isLoopInvariant(V))
     return InputKind::Free;
   if (isa<ExtractElementInst>(V))
     return InputKind::LaneToLane0;
   return InputKind::GprToVec;
 }
+
+bool savio::isInGroup(const Group &G, const User *U) {
+  if (auto *I = dyn_cast<Instruction>(U))
+    if (is_contained(G.Ops, I))
+      return true;
+  auto *P = dyn_cast<PHINode>(U);
+  return P && is_contained(G.CarriedPhis, P);
+}
+
+bool savio::liveOutNeedsGpr(const Group &G, const Instruction &I) {
+  return !all_of(I.users(), [&](const User *U) {
+    return isInGroup(G, U) || isSimpleStoreOf(U, &I);
+  });
+}
+
+namespace {
 
 /// Cost model nodes of a region for one assignment.
 ///
@@ -318,7 +330,7 @@ public:
           continue;
         }
         if (P) {
-          InputKind K = classifyInput(R, G, V);
+          InputKind K = classifyInput(R.L, G, V);
           if (K != InputKind::Free) {
             auto Key = std::make_pair(GIdx, (const Value *)V);
             auto It = InNode.find(Key);
@@ -374,18 +386,7 @@ public:
       // Live-out of a Singleton Vectorized group: back to a GPR unless every
       // user outside the group is a store, which can store from the vector.
       if (P && is_contained(G.LiveOuts, &I)) {
-        bool OnlyStoresOutside = all_of(I.users(), [&](User *U) {
-          if (auto *UI = dyn_cast<Instruction>(U)) {
-            auto It = GroupOf.find(UI);
-            if (It != GroupOf.end() && It->second == GIdx)
-              return true;
-          }
-          if (auto *Ph = dyn_cast<PHINode>(U))
-            if (is_contained(G.CarriedPhis, Ph))
-              return true;
-          return isSimpleStoreOf(U, &I);
-        });
-        if (!OnlyStoresOutside) {
+        if (liveOutNeedsGpr(G, I)) {
           unsigned T;
           if (!addTransfer(TransferKind::VecToGpr, {Me}, T))
             return false;

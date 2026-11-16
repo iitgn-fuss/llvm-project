@@ -18,6 +18,7 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Transforms/Vectorize/SAVIO/Partitioner.h"
 #include "llvm/Transforms/Vectorize/SAVIO/PortDescription.h"
+#include "llvm/Transforms/Vectorize/SAVIO/SingletonVectorize.h"
 #include <map>
 
 using namespace llvm;
@@ -123,7 +124,7 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
     llvm_unreachable("unknown bound");
   };
 
-  // Decisions only: the IR is not rewritten yet.
+  bool Changed = false;
   for (Region &Reg : formRegions(F, LI)) {
     if (BFI.getBlockFreq(Reg.BB).getFrequency() <
         SAVIOColdFraction * EntryFreq)
@@ -147,6 +148,11 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
                << "T " << Before << " -> " << After << " ("
                << BoundName(D.Before.limiting()) << ")";
       });
+    // The remarks above name operations the rewrite erases.
+    for (unsigned G : D.Promoted) {
+      rewriteSingletonVectorize(Reg.Groups[G], Reg.L);
+      Changed = true;
+    }
   }
-  return PreservedAnalyses::all();
+  return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }

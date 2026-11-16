@@ -27,6 +27,7 @@ add_llvm_component_library(LLVMVectorize
   SAVIO/PortDescription.cpp
   SAVIO/RegionCost.cpp
   SAVIO/SAVIOPass.cpp
+  SAVIO/SingletonVectorize.cpp
   SLPVectorizer/SLPUtils.cpp
   SLPVectorizer.cpp
   Vectorize.cpp

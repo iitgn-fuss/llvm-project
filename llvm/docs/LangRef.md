@@ -25913,6 +25913,49 @@ The '`llvm.vp.is.fpclass`' intrinsic performs `llvm.is.fpclass` ({ref}`llvm.is.f
 
 (int_mload_mstore)=
 
+### SAVIO Singleton Vectorize Intrinsics
+
+These intrinsics are created by the experimental SAVIO pass (`-enable-savio`).
+They hold one scalar `i32` value in lane 0 of a `<4 x i32>` so that the
+operation can run on a vector execution unit. They are opaque on purpose: a
+plain vector operation with only lane 0 used would be folded back into a scalar
+operation.
+
+#### '`llvm.savio.sv.*.v4i32`' Intrinsics
+
+##### Syntax:
+
+```
+declare <4 x i32> @llvm.savio.sv.add.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <4 x i32> @llvm.savio.sv.sub.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <4 x i32> @llvm.savio.sv.mul.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <4 x i32> @llvm.savio.sv.and.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <4 x i32> @llvm.savio.sv.or.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <4 x i32> @llvm.savio.sv.xor.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <4 x i32> @llvm.savio.sv.shl.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <4 x i32> @llvm.savio.sv.lshr.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <4 x i32> @llvm.savio.sv.ashr.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <4 x i32> @llvm.savio.sv.udiv.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <4 x i32> @llvm.savio.sv.urem.v4i32(<4 x i32> %a, <4 x i32> %b)
+```
+
+##### Overview:
+
+Each intrinsic performs the scalar `i32` operation of the same name on lane 0
+of its operands.
+
+##### Semantics:
+
+Lane 0 of the result is `op i32 %a[0], %b[0]`. The other lanes of the result
+are `poison`; the other lanes of the operands are ignored and may be `poison`.
+The intrinsics never have undefined behavior, for any operand lanes. For `shl`,
+`lshr` and `ashr` a shift amount of 32 or more in lane 0 makes lane 0 of the
+result `poison`, as for the scalar instruction. For `udiv` and `urem` a zero
+divisor in lane 0 makes lane 0 of the result `poison` (it is not undefined
+behavior), so the intrinsics are speculatable. SAVIO only creates them from
+scalar operations that were already undefined on a zero divisor, so no defined
+program changes meaning.
+
 ### Masked Vector Load and Store Intrinsics
 
 LLVM provides intrinsics for predicated vector load and store operations. The predicate is specified by a mask argument, which holds one bit per vector element, switching the associated vector lane on or off. The memory addresses corresponding to the "off" lanes are not accessed. When all bits of the mask are on, the intrinsic is identical to a regular vector load or store. When all bits are off, no memory is accessed.

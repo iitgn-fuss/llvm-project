@@ -3203,6 +3203,20 @@ def int_protected_field_ptr :
                         [IntrNoMem, ImmArg<ArgIndex<2>>]>;
 
 //===----------------------------------------------------------------------===//
+// SAVIO Singleton Vectorize intrinsics
+//===----------------------------------------------------------------------===//
+
+// Lane 0 of the result is the scalar operation on lane 0 of the operands; the
+// other lanes are poison. Never undefined behavior for any lane values: a zero
+// divisor in lane 0 of udiv/urem makes lane 0 of the result poison.
+foreach Op = ["add", "sub", "mul", "and", "or", "xor", "shl", "lshr", "ashr",
+              "udiv", "urem"] in
+  def int_savio_sv_#Op#_v4i32
+      : DefaultAttrsIntrinsic<[llvm_v4i32_ty],
+                              [llvm_v4i32_ty, llvm_v4i32_ty],
+                              [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
+//===----------------------------------------------------------------------===//
 // Target-specific intrinsics
 //===----------------------------------------------------------------------===//
 

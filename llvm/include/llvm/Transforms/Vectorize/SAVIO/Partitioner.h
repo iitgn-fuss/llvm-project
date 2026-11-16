@@ -27,6 +27,8 @@ class Loop;
 class LoopInfo;
 class PHINode;
 class Use;
+class User;
+class Value;
 
 extern cl::opt<double> SAVIOMargin;
 extern cl::opt<bool> SAVIOForce;
@@ -55,6 +57,23 @@ struct Decision {
   RegionEstimate Before, After;
   SmallVector<unsigned, 4> Promoted; // Indices into Region::Groups.
 };
+
+/// How an operand of a Singleton Vectorized group reaches it. The cost model
+/// charges exactly this boundary and the rewrite materializes exactly it.
+enum class InputKind { Free, GprToVec, LaneToLane0 };
+
+/// Classifies the operand \p V of an operation of \p G, which is not itself
+/// in \p G. \p L is the loop of the region, or null.
+InputKind classifyInput(const Loop *L, const Group &G, const Value *V);
+
+/// True if the user \p U of a live-out of \p G is in \p G (an operation or a
+/// carried phi).
+bool isInGroup(const Group &G, const User *U);
+
+/// True if the live-out \p I of \p G needs a vector-to-GPR transfer: some user
+/// outside \p G is not a simple store of it. Otherwise every such user stores
+/// lane 0 straight from the vector.
+bool liveOutNeedsGpr(const Group &G, const Instruction &I);
 
 /// Regions of \p F that have at least one group: innermost single-block loops
 /// and blocks outside loops. Blocks of other loops are not regions in v1.
