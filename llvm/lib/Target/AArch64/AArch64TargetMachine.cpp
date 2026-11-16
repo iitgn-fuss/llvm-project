@@ -58,8 +58,6 @@
 
 using namespace llvm;
 
-extern cl::opt<bool> EnableSAVIO;
-
 static cl::opt<bool> EnableCCMP("aarch64-enable-ccmp",
                                 cl::desc("Enable the CCMP formation pass"),
                                 cl::init(true), cl::Hidden);
@@ -631,7 +629,11 @@ void AArch64TargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
       });
   PB.registerOptimizerLastEPCallback(
       [](ModulePassManager &MPM, OptimizationLevel Level,
-         ThinOrFullLTOPhase) {
+         ThinOrFullLTOPhase Phase) {
+        // Run once, in the final optimization pipeline.
+        if (Phase == ThinOrFullLTOPhase::ThinLTOPreLink ||
+            Phase == ThinOrFullLTOPhase::FullLTOPreLink)
+          return;
         if (EnableSAVIO && Level != OptimizationLevel::O0)
           MPM.addPass(createModuleToFunctionPassAdaptor(SAVIOPass()));
       });

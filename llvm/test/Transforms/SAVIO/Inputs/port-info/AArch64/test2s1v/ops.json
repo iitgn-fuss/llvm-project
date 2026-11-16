@@ -1,0 +1,345 @@
+{
+  "ops": [
+    {
+      "opcode": "T_ADD",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_VADD",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_SUB",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_VSUB",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_MUL",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_VMUL",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_AND",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_VAND",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_OR",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_VOR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_XOR",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_VXOR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_SHL",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_VSHL",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_LSHR",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_VLSHR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_ASHR",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_VASHR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_UDIV",
+      "uses": [
+        {
+          "class": "int_div",
+          "cycles": 4
+        }
+      ],
+      "latency": 9,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_MSUB",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_VUDIV_FP",
+      "uses": [
+        {
+          "class": "fp_div",
+          "cycles": 4
+        }
+      ],
+      "latency": 11,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_VUDIV_FIX",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 3
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_GPR_TO_VEC",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_VEC_TO_GPR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_LANE0",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_LD_VEC",
+      "uses": [],
+      "latency": 0,
+      "uops": 0,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    },
+    {
+      "opcode": "T_ST_VEC",
+      "uses": [],
+      "latency": 0,
+      "uops": 0,
+      "source": "estimate",
+      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+    }
+  ]
+}

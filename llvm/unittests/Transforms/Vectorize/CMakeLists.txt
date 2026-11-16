@@ -14,5 +14,9 @@ add_llvm_unittest(VectorizeTests
   VPPostDomFrontierTest.cpp
   VPlanHCFGTest.cpp
   VPlanPatternMatchTest.cpp
+  SAVIOPortDescriptionTest.cpp
   VPlanVerifierTest.cpp
   )
+
+target_compile_definitions(VectorizeTests PRIVATE
+  SAVIO_TEST_INPUTS="${LLVM_MAIN_SRC_DIR}/test/Transforms/SAVIO/Inputs")

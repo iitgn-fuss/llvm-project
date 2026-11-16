@@ -16,8 +16,14 @@
 #define LLVM_TRANSFORMS_VECTORIZE_SAVIO_SAVIOPASS_H
 
 #include "llvm/IR/PassManager.h"
+#include "llvm/Support/CommandLine.h"
+#include <string>
 
 namespace llvm {
+
+extern cl::opt<bool> EnableSAVIO;
+extern cl::opt<std::string> SAVIOPortInfo;
+extern cl::opt<std::string> SAVIOCPU;
 
 class SAVIOPass : public PassInfoMixin<SAVIOPass> {
 public:

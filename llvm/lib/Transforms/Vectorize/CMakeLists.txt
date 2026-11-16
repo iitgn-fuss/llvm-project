@@ -23,6 +23,7 @@ add_llvm_component_library(LLVMVectorize
   SandboxVectorizer/Scheduler.cpp
   SandboxVectorizer/SeedCollector.cpp
   SandboxVectorizer/VecUtils.cpp
+  SAVIO/PortDescription.cpp
   SAVIO/SAVIOPass.cpp
   SLPVectorizer/SLPUtils.cpp
   SLPVectorizer.cpp
