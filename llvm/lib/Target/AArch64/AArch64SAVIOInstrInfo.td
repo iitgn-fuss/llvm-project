@@ -31,6 +31,10 @@ let isPseudo = 1, hasSideEffects = 0, hasNoSchedulingInfo = 1 in {
   def SAVIO_SV_UDIV_V4I32 : Pseudo<(outs V128:$dst), (ins V128:$a, V128:$b), []>;
   def SAVIO_SV_UREM_V4I32 : Pseudo<(outs V128:$dst), (ins V128:$a, V128:$b), []>;
 
+  // Lanes 0 and 1 of an unsigned divide/remainder through fdiv .2d.
+  def SAVIO_FPDIV2_UDIV_V4I32 : Pseudo<(outs V128:$dst), (ins V128:$a, V128:$b), []>;
+  def SAVIO_FPDIV2_UREM_V4I32 : Pseudo<(outs V128:$dst), (ins V128:$a, V128:$b), []>;
+
   // Shifts by a constant count (1..31).
   def SAVIO_SV_SHL_IMM_V4I32  : Pseudo<(outs V128:$dst), (ins V128:$a, i32imm:$n), []>;
   def SAVIO_SV_LSHR_IMM_V4I32 : Pseudo<(outs V128:$dst), (ins V128:$a, i32imm:$n), []>;
@@ -65,3 +69,8 @@ multiclass SAVIOSVShiftImm<string Name, Intrinsic Int> {
 defm : SAVIOSVShiftImm<"SHL", int_savio_sv_shl_v4i32>;
 defm : SAVIOSVShiftImm<"LSHR", int_savio_sv_lshr_v4i32>;
 defm : SAVIOSVShiftImm<"ASHR", int_savio_sv_ashr_v4i32>;
+
+def : Pat<(v4i32 (int_savio_fpdiv2_udiv_v4i32 (v4i32 V128:$a), (v4i32 V128:$b))),
+          (SAVIO_FPDIV2_UDIV_V4I32 V128:$a, V128:$b)>;
+def : Pat<(v4i32 (int_savio_fpdiv2_urem_v4i32 (v4i32 V128:$a), (v4i32 V128:$b))),
+          (SAVIO_FPDIV2_UREM_V4I32 V128:$a, V128:$b)>;

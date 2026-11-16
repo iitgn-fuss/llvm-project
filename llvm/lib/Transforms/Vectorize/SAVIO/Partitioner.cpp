@@ -353,6 +353,8 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
   Groups = std::move(Kept);
 
   for (Group &Grp : Groups) {
+    if (Grp.VectorDivide)
+      continue;
     auto InGroup = [&](const Value *V) {
       if (auto *I = dyn_cast<Instruction>(V))
         if (is_contained(Grp.Ops, I))
@@ -383,6 +385,33 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
         dbgs() << "\n";
       }
     });
+  }
+
+  // The lane pairs of each unsigned divide or remainder of <4 x i32> by a
+  // non-constant divisor (a constant divisor becomes a multiply: the integer
+  // divider is not used and the fdiv form would lose): two groups, pair
+  // {0,1} then pair {2,3}, instances of one slice class per opcode.
+  for (const Instruction *CI : RG.Insts) {
+    auto *I = const_cast<Instruction *>(CI);
+    auto *VT = dyn_cast<FixedVectorType>(I->getType());
+    if (!VT || VT->getNumElements() != 4 ||
+        !VT->getElementType()->isIntegerTy(32) ||
+        (I->getOpcode() != Instruction::UDiv &&
+         I->getOpcode() != Instruction::URem) ||
+        isa<Constant>(I->getOperand(1)))
+      continue;
+    std::string Key = (Twine(RegionNo) + "V:" + I->getOpcodeName() +
+                       " v4i32")
+                          .str();
+    unsigned Cls = Classes.try_emplace(Key, Classes.size()).first->second;
+    for (unsigned Pair = 0; Pair != 2; ++Pair) {
+      Groups.emplace_back();
+      Group &Grp = Groups.back();
+      Grp.Ops.push_back(I);
+      Grp.SliceClass = Cls;
+      Grp.VectorDivide = true;
+      Grp.Pair = Pair;
+    }
   }
   return Groups;
 }
@@ -530,6 +559,8 @@ class NodeBuilder {
   SmallVector<unsigned, 32> NodeOf, OutNode;
   /// Group of each graph node, or None.
   SmallVector<unsigned, 32> GroupOfNode;
+  /// The two lane-pair groups of each vector divide node (pair 0, pair 1).
+  DenseMap<unsigned, std::pair<unsigned, unsigned>> PairGroups;
   SmallVector<bool, 32> ControlOnly;
   DenseMap<std::tuple<unsigned, const Value *, unsigned>, unsigned> InNode;
   static constexpr unsigned None = ~0u;
@@ -567,8 +598,16 @@ public:
         NodeOf(size_t(Copies) * N, None), OutNode(size_t(Copies) * N, None),
         GroupOfNode(N, None), ControlOnly(N, false) {
     for (unsigned G = 0; G != NG; ++G)
-      for (Instruction *I : R.Groups[G].Ops)
-        GroupOfNode[RG.Index.lookup(I)] = G;
+      for (Instruction *I : R.Groups[G].Ops) {
+        unsigned NI = RG.Index.lookup(I);
+        if (!R.Groups[G].VectorDivide) {
+          GroupOfNode[NI] = G;
+        } else if (R.Groups[G].Pair == 0) {
+          PairGroups[NI].first = G;
+        } else {
+          PairGroups[NI].second = G;
+        }
+      }
     // In a loop, the terminator and what only feeds it (the exit test).
     if (R.L)
       for (unsigned I = 0; I != N; ++I) {
@@ -699,6 +738,8 @@ private:
 
     assert(PredCur == RG.Preds[NI].size() &&
            CarriedCur == RG.Carried[NI].size() && "unconsumed graph edges");
+    if (auto PG = PairGroups.find(NI); PG != PairGroups.end())
+      return buildVectorDivide(J, NI, PG->second, Nd, OwnEdges);
     std::optional<OpCost> C;
     const ConcurrencyTable *Conc = nullptr;
     if (InGroup) {
@@ -740,6 +781,63 @@ private:
         OutNode[V] = T;
       }
     }
+    return true;
+  }
+
+  /// A `udiv`/`urem <4 x i32>`: one node per lane pair, joined by a node of no
+  /// cost that stands for the instruction. A pair that stays is half of the
+  /// backend's scalar split (key "<op> v4i32", half the resource use and
+  /// micro-ops, the same latency); a moved pair is the fpdiv2 sequence ("fpdiv2.
+  /// <op> v4i32") with its concurrency table. Without the split's cost the
+  /// instruction costs what the fallback says, and cannot be moved. The
+  /// operands are vectors already: there is no transfer.
+  bool buildVectorDivide(unsigned J, unsigned NI,
+                         std::pair<unsigned, unsigned> Groups, CostNode &Nd,
+                         ArrayRef<CarriedEdge> OwnEdges) {
+    const Instruction &I = *RG.Insts[NI];
+    unsigned V = J * N + NI;
+    bool Pr[2] = {bool(Promoted[virtualGroup(Groups.first, J)]),
+                  bool(Promoted[virtualGroup(Groups.second, J)])};
+    std::string Op = (Twine(I.getOpcodeName()) + " v4i32").str();
+    std::optional<OpCost> Base = PD.irOpCost(Op);
+    if (!Base) {
+      if (Pr[0] || Pr[1])
+        return false;
+      Nd.Cost = Fallback(I);
+      NodeOf[V] = Nodes.size();
+      unsigned Me = Nodes.size();
+      Nodes.push_back(std::move(Nd));
+      for (const CarriedEdge &E : OwnEdges)
+        Pending.push_back({Me, E.Latch, E.Joined, E.Dist});
+      return true;
+    }
+    std::string FpKey = "fpdiv2." + Op;
+    SmallVector<unsigned, 2> PairNodes;
+    for (unsigned P = 0; P != 2; ++P) {
+      CostNode PN;
+      PN.Preds = Nd.Preds;
+      if (Pr[P]) {
+        std::optional<OpCost> C = PD.irOpCost(FpKey);
+        if (!C)
+          return false;
+        PN.Cost = *C;
+        PN.Conc = PD.concurrency(FpKey);
+      } else {
+        PN.Cost = *Base;
+        for (ResourceUse &U : PN.Cost.Uses)
+          U.Cycles /= 2;
+        PN.Cost.Uops = (PN.Cost.Uops + 1) / 2;
+      }
+      PairNodes.push_back(Nodes.size());
+      Nodes.push_back(std::move(PN));
+      for (const CarriedEdge &E : OwnEdges)
+        Pending.push_back({PairNodes.back(), E.Latch, E.Joined, E.Dist});
+    }
+    CostNode Join;
+    Join.Cost = OpCost{{}, 0, 0};
+    Join.Preds.assign(PairNodes.begin(), PairNodes.end());
+    NodeOf[V] = Nodes.size();
+    Nodes.push_back(std::move(Join));
     return true;
   }
 
@@ -917,8 +1015,14 @@ Decision savio::decide(const Region &R, const PortDescription &PD,
         BestClass = G.SliceClass;
       }
     }
+    // A vector divide's instances are lane pairs: the count is in lanes.
+    unsigned Limit = SAVIOForceCount;
+    if (any_of(R.Groups, [&](const Group &G) {
+          return G.SliceClass == BestClass && G.VectorDivide;
+        }))
+      Limit /= 2;
     unsigned Taken = 0;
-    for (unsigned G = 0; G != N && Taken < unsigned(SAVIOForceCount); ++G) {
+    for (unsigned G = 0; G != N && Taken < Limit; ++G) {
       if (R.Groups[G].SliceClass != BestClass)
         continue;
       Promoted[G] = true;

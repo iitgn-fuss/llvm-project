@@ -34,6 +34,8 @@ class Value;
 
 extern cl::opt<double> SAVIOMargin;
 extern cl::opt<bool> SAVIOForce;
+/// With -savio-force-count=n the first n instances of the largest slice class
+/// move; for the lane pairs of a vector divide n counts lanes (2 per pair).
 extern cl::opt<int> SAVIOForceCount;
 
 namespace savio {
@@ -55,6 +57,14 @@ struct Group {
   /// True for a whole recurrence (a cycle of the dependence graph, all in
   /// scope) moved as a vector-phi group; false for an acyclic slice.
   bool Recurrence = false;
+  /// True for one lane pair of a `udiv`/`urem <4 x i32>` (Ops holds that one
+  /// vector instruction): Pair 0 is lanes {0,1}, Pair 1 is lanes {2,3}. The
+  /// two pairs of one instruction are two instances of one slice class; moving
+  /// a pair sends its lanes through fdiv .2d. Has no inputs or live-outs: the
+  /// operands are never transferred, only lanes of vectors that are already
+  /// vectors.
+  bool VectorDivide = false;
+  unsigned Pair = 0;
 };
 
 struct Region {

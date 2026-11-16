@@ -27,6 +27,12 @@ namespace savio {
 /// The scalar operations and joined carried phis of the group are erased.
 void rewriteSingletonVectorize(const Group &G, Loop *L);
 
+/// Sends the lane pairs of \p I, a `udiv` or `urem <4 x i32>`, selected by
+/// \p PairMask (bit 0: lanes {0,1}, bit 1: lanes {2,3}) through
+/// llvm.savio.fpdiv2.*; the other lanes stay `udiv`/`urem` on scalars. \p I is
+/// replaced and erased.
+void rewriteVectorDivide(Instruction *I, unsigned PairMask);
+
 } // end namespace savio
 } // end namespace llvm
 

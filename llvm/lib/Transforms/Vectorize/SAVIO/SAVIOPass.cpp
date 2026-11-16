@@ -298,6 +298,12 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
           K = M.K;
           U = M.U;
         }
+      // The instances of a vector divide are lane pairs; the remark counts
+      // lanes.
+      if (Reg.Groups[G].VectorDivide) {
+        K *= 2;
+        U *= 2;
+      }
       ORE.emit([&] {
         OptimizationRemark Rm(DEBUG_TYPE, "Promoted", Reg.Groups[G].Ops[0]);
         Rm << "T " << Before << " -> " << After << " ("
@@ -307,9 +313,22 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
         return Rm;
       });
     }
-    // The remarks above name operations the rewrite erases.
-    for (unsigned G : D.Promoted)
-      rewriteSingletonVectorize(Reg.Groups[G], Reg.L);
+    // The remarks above name operations the rewrite erases. The lane pairs of
+    // one vector divide are rewritten together.
+    SmallVector<std::pair<Instruction *, unsigned>, 2> Divides;
+    for (unsigned G : D.Promoted) {
+      const Group &Grp = Reg.Groups[G];
+      if (!Grp.VectorDivide) {
+        rewriteSingletonVectorize(Grp, Reg.L);
+        continue;
+      }
+      auto *It = find_if(Divides, [&](auto &P) { return P.first == Grp.Ops[0]; });
+      if (It == Divides.end())
+        It = Divides.insert(Divides.end(), {Grp.Ops[0], 0u});
+      It->second |= 1u << Grp.Pair;
+    }
+    for (auto &[I, Mask] : Divides)
+      rewriteVectorDivide(I, Mask);
     Changed = true;
   };
 

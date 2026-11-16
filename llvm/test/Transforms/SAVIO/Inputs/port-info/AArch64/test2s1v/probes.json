@@ -77,6 +77,30 @@
     "sv.urem v4i32": [
       "T_VUDIV_FP",
       "T_VUDIV_FIX"
+    ],
+    "udiv v4i32": [
+      "T_UDIV",
+      "T_UDIV",
+      "T_UDIV",
+      "T_UDIV"
+    ],
+    "urem v4i32": [
+      "T_UDIV",
+      "T_MSUB",
+      "T_UDIV",
+      "T_MSUB",
+      "T_UDIV",
+      "T_MSUB",
+      "T_UDIV",
+      "T_MSUB"
+    ],
+    "fpdiv2.udiv v4i32": [
+      "T_VUDIV_FP",
+      "T_VUDIV_FIX"
+    ],
+    "fpdiv2.urem v4i32": [
+      "T_VUDIV_FP",
+      "T_VUDIV_FIX"
     ]
   }
 }

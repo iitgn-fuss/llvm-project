@@ -54,6 +54,7 @@ private:
   void expandShiftImm(MachineInstr &MI, unsigned Opc);
   void expandVarShift(MachineInstr &MI, unsigned Opc, bool NegateCount);
   void expandDiv(MachineInstr &MI, bool Rem);
+  void expandDiv2(MachineInstr &MI, bool Rem);
 
   Register lowHalf(MachineInstr &MI, Register Vec);
 };
@@ -164,6 +165,53 @@ void AArch64SAVIOExpandImpl::expandDiv(MachineInstr &MI, bool Rem) {
       .addImm(AArch64::dsub);
 }
 
+/// Lanes 0 and 1 together: widen each operand's low two 32-bit lanes to 64 bits
+/// (ushll .2d, #0), convert to double (ucvtf .2d), divide (fdiv .2d), truncate
+/// (fcvtzu .2d) and narrow (xtn). The operands are read through their low 64
+/// bits, so the poison upper lanes never reach the divider. Exact for the same
+/// reason as the lane-0 form. urem adds an mls on the two 32-bit lanes.
+void AArch64SAVIOExpandImpl::expandDiv2(MachineInstr &MI, bool Rem) {
+  MachineBasicBlock &MBB = *MI.getParent();
+  DebugLoc DL = MI.getDebugLoc();
+  Register Dst = MI.getOperand(0).getReg();
+  Register A = MI.getOperand(1).getReg();
+  Register P = MI.getOperand(2).getReg();
+
+  auto ToDouble = [&](Register V) {
+    Register Lo = lowHalf(MI, V);
+    Register Wide = MRI->createVirtualRegister(&AArch64::FPR128RegClass);
+    BuildMI(MBB, MI, DL, TII->get(AArch64::USHLLv2i32_shift), Wide)
+        .addReg(Lo)
+        .addImm(0);
+    Register D = MRI->createVirtualRegister(&AArch64::FPR128RegClass);
+    BuildMI(MBB, MI, DL, TII->get(AArch64::UCVTFv2f64), D).addReg(Wide);
+    return D;
+  };
+
+  Register DA = ToDouble(A);
+  Register DP = ToDouble(P);
+  Register DQ = MRI->createVirtualRegister(&AArch64::FPR128RegClass);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::FDIVv2f64), DQ).addReg(DA).addReg(DP);
+  Register QW = MRI->createVirtualRegister(&AArch64::FPR128RegClass);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::FCVTZUv2f64), QW).addReg(DQ);
+  Register Q = MRI->createVirtualRegister(&AArch64::FPR64RegClass);
+  BuildMI(MBB, MI, DL, TII->get(AArch64::XTNv2i32), Q).addReg(QW);
+
+  Register Res = Q;
+  if (Rem) {
+    Register ALo = lowHalf(MI, A);
+    Register PLo = lowHalf(MI, P);
+    Res = MRI->createVirtualRegister(&AArch64::FPR64RegClass);
+    BuildMI(MBB, MI, DL, TII->get(AArch64::MLSv2i32), Res)
+        .addReg(ALo)
+        .addReg(Q)
+        .addReg(PLo);
+  }
+  BuildMI(MBB, MI, DL, TII->get(TargetOpcode::SUBREG_TO_REG), Dst)
+      .addReg(Res)
+      .addImm(AArch64::dsub);
+}
+
 bool AArch64SAVIOExpandImpl::expand(MachineInstr &MI) {
   switch (MI.getOpcode()) {
   default:
@@ -209,6 +257,12 @@ bool AArch64SAVIOExpandImpl::expand(MachineInstr &MI) {
     break;
   case AArch64::SAVIO_SV_UREM_V4I32:
     expandDiv(MI, /*Rem=*/true);
+    break;
+  case AArch64::SAVIO_FPDIV2_UDIV_V4I32:
+    expandDiv2(MI, /*Rem=*/false);
+    break;
+  case AArch64::SAVIO_FPDIV2_UREM_V4I32:
+    expandDiv2(MI, /*Rem=*/true);
     break;
   }
   ++NumExpanded;

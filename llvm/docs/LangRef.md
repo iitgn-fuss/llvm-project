@@ -25956,6 +25956,30 @@ behavior), so the intrinsics are speculatable. SAVIO only creates them from
 scalar operations that were already undefined on a zero divisor, so no defined
 program changes meaning.
 
+#### '`llvm.savio.fpdiv2.*.v4i32`' Intrinsics
+
+##### Syntax:
+
+```
+declare <4 x i32> @llvm.savio.fpdiv2.udiv.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <4 x i32> @llvm.savio.fpdiv2.urem.v4i32(<4 x i32> %a, <4 x i32> %b)
+```
+
+##### Overview:
+
+Unsigned divide or remainder of two lanes of an existing `<4 x i32>` operation.
+SAVIO creates them from `udiv`/`urem <4 x i32>`, to send lane pairs through the
+floating-point divider (on AArch64, `fdiv .2d`) instead of four integer
+divides.
+
+##### Semantics:
+
+Lanes 0 and 1 of the result are `op i32 %a[i], %b[i]`; lanes 2 and 3 are
+`poison`, and the same lanes of the operands are ignored. The intrinsics never
+have undefined behavior: a zero divisor in lane 0 or 1 makes that lane of the
+result `poison`. Lanes 2 and 3 of the original operation are done by shuffling
+them to lanes 0 and 1 first.
+
 ### Masked Vector Load and Store Intrinsics
 
 LLVM provides intrinsics for predicated vector load and store operations. The predicate is specified by a mask argument, which holds one bit per vector element, switching the associated vector lane on or off. The memory addresses corresponding to the "off" lanes are not accessed. When all bits of the mask are on, the intrinsic is identical to a regular vector load or store. When all bits are off, no memory is accessed.
