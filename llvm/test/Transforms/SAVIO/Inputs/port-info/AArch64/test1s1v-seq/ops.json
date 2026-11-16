@@ -1,0 +1,359 @@
+{
+  "ops": [
+    {
+      "opcode": "T_ADD",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 2
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_VADD",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 3
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_SUB",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 4
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_VSUB",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_MUL",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_VMUL",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_AND",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_VAND",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_OR",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_VOR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_XOR",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_VXOR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_SHL",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_VSHL",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_LSHR",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_VLSHR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_ASHR",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_VASHR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_UDIV",
+      "uses": [
+        {
+          "class": "int_div",
+          "cycles": 4
+        }
+      ],
+      "latency": 9,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_MSUB",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_VUDIV_FP",
+      "uses": [
+        {
+          "class": "fp_div",
+          "cycles": 4
+        }
+      ],
+      "latency": 11,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_VUDIV_FIX",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 3
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_GPR_TO_VEC",
+      "uses": [],
+      "latency": 0,
+      "uops": 0,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_VEC_TO_GPR",
+      "uses": [],
+      "latency": 0,
+      "uops": 0,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_LANE0",
+      "uses": [],
+      "latency": 0,
+      "uops": 0,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_LD_VEC",
+      "uses": [],
+      "latency": 0,
+      "uops": 0,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    },
+    {
+      "opcode": "T_ST_VEC",
+      "uses": [],
+      "latency": 0,
+      "uops": 0,
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    }
+  ],
+  "sequences": [
+    {
+      "key": "sv.add v4i32",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 10
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "throughput_by_concurrency": [
+        [
+          1,
+          10
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          3
+        ]
+      ],
+      "source": "estimate",
+      "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win"
+    }
+  ]
+}

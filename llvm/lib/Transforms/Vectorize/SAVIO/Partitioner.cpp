@@ -366,8 +366,10 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
       if (any_of(I->users(), [&](User *U) { return !InGroup(U); }))
         Grp.LiveOuts.push_back(I);
     }
-    Grp.SliceClass =
-        Classes.try_emplace(sliceKey(Grp, L, RegionNo), Classes.size()).first->second;
+    std::string Key = sliceKey(Grp, L, RegionNo);
+    if (Grp.Recurrence) // A whole recurrence is one instance: never shared.
+      Key += "@" + std::to_string(Classes.size());
+    Grp.SliceClass = Classes.try_emplace(Key, Classes.size()).first->second;
     LLVM_DEBUG({
       dbgs() << "savio: group of " << Grp.Ops.size() << " ops ("
              << (Grp.Recurrence ? "recurrence" : "slice") << ", class "
@@ -694,14 +696,17 @@ private:
 } // namespace
 
 static void recordMoved(const Region &R, Decision &D) {
-  SmallVector<std::pair<unsigned, unsigned>, 2> M;
+  DenseMap<unsigned, unsigned> Total;
+  for (const Group &G : R.Groups)
+    ++Total[G.SliceClass];
+  SmallVector<ClassMove, 2> M;
   for (unsigned G : D.Promoted) {
     unsigned C = R.Groups[G].SliceClass;
-    auto *It = find_if(M, [&](auto &P) { return P.first == C; });
+    auto *It = find_if(M, [&](const ClassMove &P) { return P.Class == C; });
     if (It == M.end())
-      M.push_back({C, 1});
+      M.push_back({C, 1, Total[C]});
     else
-      ++It->second;
+      ++It->K;
   }
   D.MovedPerClass = M;
 }
@@ -769,7 +774,9 @@ Decision savio::decide(const Region &R, const PortDescription &PD,
     return D;
   }
 
-  // Fraction search: per slice class, estimate every k of its U instances
+  // Fraction search. Unlike the greedy loop it replaces, there is no "only
+  // while the resource bound limits" precondition: any bound may be lowered,
+  // guarded by the margin. Per slice class, estimate every k of its U instances
   // (spread evenly) with the other classes fixed; take the best if it beats
   // the current T by the margin. Repeat over classes until nothing changes.
   SmallVector<unsigned, 4> Classes;
@@ -822,6 +829,6 @@ Decision savio::decide(const Region &R, const PortDescription &PD,
       D.Promoted.push_back(G);
   for (unsigned C : Classes)
     if (Current[C])
-      D.MovedPerClass.push_back({C, Current[C]});
+      D.MovedPerClass.push_back({C, Current[C], unsigned(Members[C].size())});
   return D;
 }

@@ -49,7 +49,8 @@ struct Group {
   /// Loop phis kept in vector form when the group is Singleton Vectorized.
   SmallVector<PHINode *, 2> CarriedPhis;
   /// Groups of one function with equal class are instances of the same slice
-  /// (same operations, constants and input kinds): interchangeable.
+  /// (same operations, constants and input kinds): interchangeable. A
+  /// recurrence group is a single instance and always has a class of its own.
   unsigned SliceClass = 0;
   /// True for a whole recurrence (a cycle of the dependence graph, all in
   /// scope) moved as a vector-phi group; false for an acyclic slice.
@@ -62,14 +63,19 @@ struct Region {
   SmallVector<Group, 4> Groups;
 };
 
+/// k of the U instances of a slice class are moved.
+struct ClassMove {
+  unsigned Class, K, U;
+};
+
 struct Decision {
   RegionEstimate Before, After;
   /// Indices into Region::Groups (of the region as it is now).
   SmallVector<unsigned, 4> Promoted;
   /// Extra unroll factor applied before Promoted (Task 5); 1 for now.
   unsigned Unroll = 1;
-  /// (slice class, k of U instances) moved.
-  SmallVector<std::pair<unsigned, unsigned>, 2> MovedPerClass;
+  /// Classes with at least one instance moved.
+  SmallVector<ClassMove, 2> MovedPerClass;
 };
 
 /// How an operand of a Singleton Vectorized group reaches it. The cost model

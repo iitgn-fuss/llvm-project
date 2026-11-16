@@ -1,0 +1,32 @@
+{
+  "cpu": "test1s1v-seq",
+  "arch": "AArch64",
+  "complete": true,
+  "dispatch_width": 64,
+  "classes": {
+    "scalar": {
+      "units": 1
+    },
+    "vector": {
+      "units": 1
+    },
+    "int_div": {
+      "units": 1
+    },
+    "fp_div": {
+      "units": 1
+    }
+  },
+  "registers": {
+    "gpr": 31,
+    "vec": 32,
+    "vec_callee_saved": 8
+  },
+  "source": "estimate",
+  "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit, free transfers, dispatch 64; scalar add 2 cycles, scalar sub 4, vector sub 1; the sv.add sequence costs 10 cycles alone and 3 per instance from 2 in flight, so one moved instance loses and two win",
+  "window_uops": {
+    "value": 64,
+    "source": "estimate",
+    "evidence": "synthetic fixture"
+  }
+}

@@ -678,12 +678,160 @@ TEST_F(SAVIOClassifyInputTest, FractionPicksBalance) {
   };
   Decision D = decide(R, **PDOrErr, Fallback, 0.05);
   ASSERT_EQ(D.MovedPerClass.size(), 1u);
-  EXPECT_EQ(D.MovedPerClass[0].first, R.Groups[0].SliceClass);
-  EXPECT_EQ(D.MovedPerClass[0].second, 2u);
+  EXPECT_EQ(D.MovedPerClass[0].Class, R.Groups[0].SliceClass);
+  EXPECT_EQ(D.MovedPerClass[0].K, 2u);
+  EXPECT_EQ(D.MovedPerClass[0].U, 5u);
   EXPECT_EQ(D.Promoted.size(), 2u);
   EXPECT_EQ(D.Unroll, 1u);
   EXPECT_DOUBLE_EQ(D.Before.t(), 10.0);
   EXPECT_DOUBLE_EQ(D.After.t(), 6.0);
+}
+
+TEST_F(SAVIOClassifyInputTest, FractionNonMonotone) {
+  // Four instances of one slice outside a loop (add 1, store). Machine
+  // test1s1v-seq: scalar add 2 cycles on one unit; the sv.add sequence costs
+  // 10 cycles alone but 3 per instance from two in flight. T(k) = max(2(4-k),
+  // vec(k)) = 8, 10, 6, 9, 12: one instance loses to the unchanged block, two
+  // win. A greedy that adds one group at a time stops at k = 0; the search
+  // finds k = 2, spread evenly over indices 0 and 2.
+  Function *F = parse(R"(
+    define void @f(ptr %o, i32 %a0, i32 %a1, i32 %a2, i32 %a3, i32 %s) {
+    entry:
+      %p0 = getelementptr inbounds i32, ptr %o, i64 0
+      %r0 = add i32 %a0, 1
+      store i32 %r0, ptr %p0
+      %p1 = getelementptr inbounds i32, ptr %o, i64 1
+      %r1 = add i32 %a1, 1
+      store i32 %r1, ptr %p1
+      %p2 = getelementptr inbounds i32, ptr %o, i64 2
+      %r2 = add i32 %a2, 1
+      store i32 %r2, ptr %p2
+      %p3 = getelementptr inbounds i32, ptr %o, i64 3
+      %r3 = add i32 %a3, 1
+      store i32 %r3, ptr %p3
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  const Region &R = Regions[0];
+  ASSERT_EQ(R.Groups.size(), 4u);
+  SmallString<128> Root(SAVIO_TEST_INPUTS);
+  sys::path::append(Root, "port-info");
+  auto PDOrErr = PortDescription::load(Root, "AArch64", "test1s1v-seq");
+  ASSERT_TRUE(!!PDOrErr) << toString(PDOrErr.takeError());
+  auto Fallback = [](const Instruction &) {
+    OpCost C;
+    C.Latency = 1;
+    C.Uops = 1;
+    return C;
+  };
+  Decision D = decide(R, **PDOrErr, Fallback, 0.05);
+  ASSERT_EQ(D.MovedPerClass.size(), 1u);
+  EXPECT_EQ(D.MovedPerClass[0].K, 2u);
+  EXPECT_EQ(D.MovedPerClass[0].U, 4u);
+  ASSERT_EQ(D.Promoted.size(), 2u);
+  EXPECT_EQ(D.Promoted[0], 0u);
+  EXPECT_EQ(D.Promoted[1], 2u);
+  EXPECT_DOUBLE_EQ(D.Before.t(), 8.0);
+  EXPECT_DOUBLE_EQ(D.After.t(), 6.0);
+}
+
+TEST_F(SAVIOClassifyInputTest, FractionTwoClasses) {
+  // The four adds of FractionNonMonotone plus one sub (scalar 4 cycles, vector
+  // 1). Unchanged T = 12. Coordinate descent: class add first, k = 2 (T 8;
+  // k = 1: 10, k = 3: 9); then class sub, k = 1 (T 7). The greedy loop moves
+  // the sub first (T 8) and then no single add helps, ending at T 8.
+  Function *F = parse(R"(
+    define void @f(ptr %o, i32 %a0, i32 %a1, i32 %a2, i32 %a3, i32 %s) {
+    entry:
+      %p0 = getelementptr inbounds i32, ptr %o, i64 0
+      %r0 = add i32 %a0, 1
+      store i32 %r0, ptr %p0
+      %p1 = getelementptr inbounds i32, ptr %o, i64 1
+      %r1 = add i32 %a1, 1
+      store i32 %r1, ptr %p1
+      %p2 = getelementptr inbounds i32, ptr %o, i64 2
+      %r2 = add i32 %a2, 1
+      store i32 %r2, ptr %p2
+      %p3 = getelementptr inbounds i32, ptr %o, i64 3
+      %r3 = add i32 %a3, 1
+      store i32 %r3, ptr %p3
+      %ps = getelementptr inbounds i32, ptr %o, i64 4
+      %rs = sub i32 %s, 1
+      store i32 %rs, ptr %ps
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  const Region &R = Regions[0];
+  ASSERT_EQ(R.Groups.size(), 5u);
+  SmallString<128> Root(SAVIO_TEST_INPUTS);
+  sys::path::append(Root, "port-info");
+  auto PDOrErr = PortDescription::load(Root, "AArch64", "test1s1v-seq");
+  ASSERT_TRUE(!!PDOrErr) << toString(PDOrErr.takeError());
+  auto Fallback = [](const Instruction &) {
+    OpCost C;
+    C.Latency = 1;
+    C.Uops = 1;
+    return C;
+  };
+  Decision D = decide(R, **PDOrErr, Fallback, 0.05);
+  ASSERT_EQ(D.MovedPerClass.size(), 2u);
+  EXPECT_NE(D.MovedPerClass[0].Class, D.MovedPerClass[1].Class);
+  EXPECT_EQ(D.MovedPerClass[0].K, 2u);
+  EXPECT_EQ(D.MovedPerClass[0].U, 4u);
+  EXPECT_EQ(D.MovedPerClass[1].K, 1u);
+  EXPECT_EQ(D.MovedPerClass[1].U, 1u);
+  ASSERT_EQ(D.Promoted.size(), 3u);
+  EXPECT_EQ(D.Promoted[0], 0u);
+  EXPECT_EQ(D.Promoted[1], 2u);
+  EXPECT_EQ(D.Promoted[2], 4u);
+  EXPECT_DOUBLE_EQ(D.Before.t(), 12.0);
+  EXPECT_DOUBLE_EQ(D.After.t(), 7.0);
+}
+
+TEST_F(SAVIOClassifyInputTest, IsomorphicRecurrencesHaveOwnClasses) {
+  // Two independent copies of h = (h ^ v) * 5 in one block: each is a whole
+  // recurrence, a single instance (k in {0,1}), so the classes differ.
+  Function *F = parse(R"(
+    define i32 @f(ptr %b, ptr %c, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %h = phi i32 [ 1, %entry ], [ %hn, %loop ]
+      %g = phi i32 [ 1, %entry ], [ %gn, %loop ]
+      %pb = getelementptr inbounds i32, ptr %b, i64 %i
+      %pc = getelementptr inbounds i32, ptr %c, i64 %i
+      %v = load i32, ptr %pb
+      %w = load i32, ptr %pc
+      %x = xor i32 %h, %v
+      %hn = mul i32 %x, 5
+      %y = xor i32 %g, %w
+      %gn = mul i32 %y, 5
+      %i.next = add nuw i64 %i, 1
+      %cmp = icmp ult i64 %i.next, %n
+      br i1 %cmp, label %loop, label %exit
+    exit:
+      %s = or i32 %hn, %gn
+      ret i32 %s
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_GE(Regions.size(), 1u);
+  const Region &LR = Regions[0];
+  ASSERT_EQ(LR.Groups.size(), 2u);
+  EXPECT_TRUE(LR.Groups[0].Recurrence);
+  EXPECT_TRUE(LR.Groups[1].Recurrence);
+  EXPECT_NE(LR.Groups[0].SliceClass, LR.Groups[1].SliceClass);
 }
 
 } // namespace

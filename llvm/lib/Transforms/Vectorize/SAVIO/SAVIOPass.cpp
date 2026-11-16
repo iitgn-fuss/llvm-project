@@ -191,18 +191,18 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
     }
     std::string After = formatv("{0:F2}", D.After.t()).str();
     for (unsigned G : D.Promoted) {
-      unsigned Cls = Reg.Groups[G].SliceClass, U = 0, K = 0;
-      for (const Group &H : Reg.Groups)
-        U += H.SliceClass == Cls;
-      for (auto &P : D.MovedPerClass)
-        if (P.first == Cls)
-          K = P.second;
+      unsigned Cls = Reg.Groups[G].SliceClass, K = 0, U = 0;
+      for (const ClassMove &M : D.MovedPerClass)
+        if (M.Class == Cls) {
+          K = M.K;
+          U = M.U;
+        }
       ORE.emit([&] {
         return OptimizationRemark(DEBUG_TYPE, "Promoted",
                                   Reg.Groups[G].Ops[0])
                << "T " << Before << " -> " << After << " ("
-               << BoundName(D.Before.limiting()) << "), " << utostr(K) << "/" << utostr(U)
-               << " of slice " << utostr(Cls);
+               << BoundName(D.Before.limiting()) << "), " << utostr(K) << "/"
+               << utostr(U) << " of slice " << utostr(Cls);
       });
     }
     // The remarks above name operations the rewrite erases.
