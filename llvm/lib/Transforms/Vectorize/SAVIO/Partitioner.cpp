@@ -917,6 +917,14 @@ estimateAssignment(const Region &R, const RegionGraph &RG,
   E.TRes /= Copies;
   E.TRec /= Copies;
   E.TDisp /= Copies;
+  LLVM_DEBUG({
+    dbgs() << "savio: estimate (copies " << Copies << ", promoted";
+    for (unsigned I = 0; I != Promoted.size(); ++I)
+      if (Promoted[I])
+        dbgs() << ' ' << I;
+    dbgs() << "): TRes " << E.TRes << " (" << PD.className(E.BusiestClass)
+           << ") TRec " << E.TRec << " TDisp " << E.TDisp << "\n";
+  });
   return E;
 }
 
