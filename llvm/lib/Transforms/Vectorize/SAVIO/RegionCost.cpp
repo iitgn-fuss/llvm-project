@@ -8,7 +8,6 @@
 
 #include "llvm/Transforms/Vectorize/SAVIO/RegionCost.h"
 #include "llvm/ADT/DenseMap.h"
-#include <algorithm>
 #include "llvm/Support/Debug.h"
 #include <algorithm>
 #include <cassert>

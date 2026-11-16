@@ -369,6 +369,33 @@
       ],
       "source": "estimate",
       "evidence": "synthetic fixture: concurrency-aware sequence"
+    },
+    {
+      "key": "sv.urem v4i32",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 8
+        }
+      ],
+      "latency": 20,
+      "uops": 4,
+      "throughput_by_concurrency": [
+        [
+          1,
+          8
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          3
+        ]
+      ],
+      "source": "estimate",
+      "evidence": "synthetic fixture: concurrency-aware sequence whose per-instance cost falls steeply with m"
     }
   ]
 }

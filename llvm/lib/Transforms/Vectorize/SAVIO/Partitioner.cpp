@@ -631,6 +631,7 @@ public:
       assert(PredCur == RG.Preds[NI].size() &&
              CarriedCur == RG.Carried[NI].size() && "unconsumed graph edges");
       std::optional<OpCost> C;
+      const ConcurrencyTable *Conc = nullptr;
       if (InGroup) {
         std::string Key;
         if (P) {
@@ -647,11 +648,11 @@ public:
         C = PD.irOpCost(Key);
         if (!C && P)
           return false;
+        if (C && P)
+          Conc = PD.concurrency(Key);
       }
       N.Cost = C ? *C : Fallback(I);
-      if (C && InGroup && P)
-        N.Conc = PD.concurrency(("sv." + Twine(I.getOpcodeName()) +
-                                 " v4i32").str());
+      N.Conc = Conc;
       unsigned Me = Nodes.size();
       Nodes.push_back(std::move(N));
       NodeOf[&I] = Me;

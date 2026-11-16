@@ -276,6 +276,10 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
                                         "a non-empty array of [m, cycles], m "
                                         "strictly ascending and positive, "
                                         "cycles positive");
+          if (C.Uses.size() != 1)
+            return makeError(F, Where + " has 'throughput_by_concurrency' "
+                                        "and so needs exactly one 'uses' "
+                                        "entry (the saturating class)");
           Tables.try_emplace(*Key, std::move(T));
         }
         if (!Sequences.try_emplace(*Key, std::move(C)).second)

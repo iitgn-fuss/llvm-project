@@ -256,6 +256,22 @@ TEST(SAVIOPortDescription, BadConcurrencyTableIsError) {
   }
 }
 
+TEST(SAVIOPortDescription, ConcurrencyTableNeedsExactlyOneUse) {
+  for (const char *Uses :
+       {"[]", "[{\"class\": \"vector\", \"cycles\": 1}, "
+              "{\"class\": \"scalar\", \"cycles\": 1}]"}) {
+    std::string Root = copyFixture();
+    rewrite(Root, "ops.json", "\"ops\": [",
+            (Twine("\"sequences\": [{\"key\": \"sv.urem v4i32\", \"latency\": 1, "
+                   "\"uops\": 1, \"uses\": ") + Uses +
+             ", \"throughput_by_concurrency\": [[1, 8]], \"source\": "
+             "\"measured\", \"evidence\": \"x\"}],\n  \"ops\": [").str());
+    std::string Msg = loadError(Root);
+    EXPECT_NE(Msg.find("exactly one"), std::string::npos) << Uses << ": " << Msg;
+    sys::fs::remove_directories(Root);
+  }
+}
+
 TEST(SAVIOPortDescription, ArchDir) {
   EXPECT_EQ(archDirFor(Triple("arm64-apple-macos")), "AArch64");
   EXPECT_EQ(archDirFor(Triple("aarch64-linux-gnu")), "AArch64");
