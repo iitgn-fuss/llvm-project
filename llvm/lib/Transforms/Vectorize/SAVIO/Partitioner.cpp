@@ -9,6 +9,7 @@
 #include "llvm/Transforms/Vectorize/SAVIO/Partitioner.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
@@ -61,6 +62,28 @@ static bool isSimpleStoreOf(const User *U, const Value *V) {
          S->getPointerOperand() != V;
 }
 
+/// True if the value of \p I reaches an address (a GEP operand or an inttoptr)
+/// through casts and phis: addresses must stay in GPRs, so such an operation
+/// is not a candidate.
+static bool reachesAddress(const Instruction &I) {
+  SmallVector<const Instruction *, 8> Work{&I};
+  SmallPtrSet<const Instruction *, 8> Seen{&I};
+  while (!Work.empty()) {
+    const Instruction *Cur = Work.pop_back_val();
+    for (const User *U : Cur->users()) {
+      if (isa<GetElementPtrInst>(U) || isa<IntToPtrInst>(U))
+        return true;
+      if (isa<SExtInst>(U) || isa<ZExtInst>(U) || isa<TruncInst>(U) ||
+          isa<PHINode>(U)) {
+        auto *UI = cast<Instruction>(U);
+        if (Seen.insert(UI).second)
+          Work.push_back(UI);
+      }
+    }
+  }
+  return false;
+}
+
 namespace {
 
 /// Union-find over indices.
@@ -92,7 +115,7 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L) {
   DenseMap<const Instruction *, unsigned> Index;
   DisjointSets DS;
   for (Instruction &I : BB)
-    if (isCandidate(I)) {
+    if (isCandidate(I) && !reachesAddress(I)) {
       Index[&I] = DS.add();
       Cands.push_back(&I);
     }
