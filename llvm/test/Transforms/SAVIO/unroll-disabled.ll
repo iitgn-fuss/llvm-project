@@ -1,12 +1,11 @@
-; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s --implicit-check-not=.epil --implicit-check-not="unrolled by" --implicit-check-not=%i.next.1
 ; The adi-like loop with llvm.loop.unroll.disable (what
 ; `#pragma clang loop unroll(disable)` produces): SAVIO must not unroll it, so
 ; it decides on the two instances present and nothing is unrolled.
-; CHECK-NOT: unrolled by
-; CHECK-NOT: .epil
+; CHECK: remark: {{.*}}: T 4.00 -> 2.37 (resource), 1/2 of slice 0{{$}}
 ; CHECK: define void @f
 ; CHECK: loop:
-; CHECK-NOT: %i.next.1
+; CHECK: call <4 x i32> @llvm.savio.sv.udiv.v4i32
 target triple = "arm64-apple-macosx15.0.0"
 
 define void @f(ptr %a, ptr %b, ptr %c, ptr %d, ptr %x, ptr %y, i64 %n) "target-cpu"="apple-m4" {

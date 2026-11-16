@@ -9,12 +9,14 @@
 ; int_div); with one of the two moved it would be 2.37; unrolled by 4 there are
 ; 8 instances of the divide slice and moving 4 gives T 2.11 per original
 ; iteration (the remark reports T per original iteration), 11% better.
-; CHECK: remark: {{.*}}: T 4.00 -> 2.11 (resource), 4/8 of slice {{[0-9]+}}, unrolled by 4
+; CHECK: remark: {{.*}}: T 4.00 -> 2.11 (resource), 4/8 of slice {{[0-9]+}}, unrolled by 4 (estimated 4/8 T 2.11)
 ; CHECK: define void @f
 ; The remainder count is n mod 4.
 ; CHECK: and i64 %n, 3
 ; CHECK: loop:
 ; CHECK-COUNT-4: call <4 x i32> @llvm.savio.sv.udiv.v4i32
+; Exactly four: none between the fourth and the loop branch.
+; CHECK-NOT: call <4 x i32> @llvm.savio.sv.udiv.v4i32
 ; CHECK: br i1 %niter.ncmp.3, label %loop, label %exit.loopexit.unr-lcssa
 ; The remainder loop is the original scalar body.
 ; CHECK: loop.epil:

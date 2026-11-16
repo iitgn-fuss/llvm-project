@@ -57,6 +57,11 @@ static cl::opt<bool> SAVIONoUnroll(
     cl::desc("Never unroll a loop to reach a fraction (decide on the loop as "
              "it is)"));
 
+static cl::opt<double> SAVIORedecideMargin(
+    "savio-test-redecide-margin", cl::init(-1), cl::Hidden,
+    cl::desc("Margin for the decision on a loop SAVIO has just unrolled "
+             "(negative: the usual margin; for tests of the re-decision)"));
+
 static cl::opt<double> SAVIOColdFraction(
     "savio-cold-fraction", cl::init(0.01), cl::Hidden,
     cl::desc("Skip regions whose block frequency is below this fraction of "
@@ -243,15 +248,45 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
 
   // The unroller needs these; fetched only if a loop is a candidate.
   bool Changed = false;
-  auto Apply = [&](Region &Reg, const Decision &D, unsigned UnrolledBy) {
+  // k/U of the moved classes ("none" if nothing moves) and T per original
+  // iteration, as the remarks print them.
+  auto Fraction = [&](const Decision &D) {
+    std::string S;
+    for (const ClassMove &M : D.MovedPerClass)
+      S += (S.empty() ? "" : "+") + utostr(M.K) + "/" + utostr(M.U);
+    return S.empty() ? std::string("none") : S;
+  };
+  auto Time = [&](const Decision &D, unsigned Unrolled) {
+    return formatv("{0:F2}", D.After.t() / Unrolled).str();
+  };
+  // Applies the decision \p D made on the region as it is. \p UnrolledBy is
+  // the factor SAVIO unrolled the loop by (1 if it did not), and \p Est the
+  // decision on the virtually unrolled loop that led to it: the decision on the
+  // real loop can differ, and then the remark says both.
+  auto Apply = [&](Region &Reg, const Decision &D, unsigned UnrolledBy,
+                   const Decision *Est = nullptr) {
     // T per original iteration: the unrolled loop's T covers UnrolledBy of them.
     std::string Before = formatv("{0:F2}", D.Before.t() / UnrolledBy).str();
+    std::string Unrolled;
+    if (UnrolledBy > 1) {
+      Unrolled = ", unrolled by " + utostr(UnrolledBy);
+      if (Est) {
+        std::string E = Fraction(*Est) + " T " + Time(*Est, 1);
+        std::string A = D.Promoted.empty()
+                            ? std::string("none")
+                            : Fraction(D) + " T " + Time(D, UnrolledBy);
+        Unrolled += " (estimated " + E;
+        if (A != E)
+          Unrolled += ", applied " + A;
+        Unrolled += ")";
+      }
+    }
     if (D.Promoted.empty()) {
       ORE.emit([&] {
         return OptimizationRemarkMissed(DEBUG_TYPE, "NotProfitable",
                                         Reg.Groups[0].Ops[0])
-               << "T " << Before << " ("
-               << BoundName(D.Before.limiting()) << ")";
+               << "T " << Before << " (" << BoundName(D.Before.limiting())
+               << ")" << Unrolled;
       });
       return;
     }
@@ -268,8 +303,7 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
         Rm << "T " << Before << " -> " << After << " ("
            << BoundName(D.Before.limiting()) << "), " << utostr(K) << "/"
            << utostr(U) << " of slice " << utostr(Cls);
-        if (UnrolledBy > 1)
-          Rm << ", unrolled by " << utostr(UnrolledBy);
+        Rm << Unrolled;
         return Rm;
       });
     }
@@ -305,8 +339,12 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
       if (unrollWithRemainder(Reg.L, D.Unroll, LI, *SE, DT, AC, TTI, ORE)) {
         for (Region &New : formRegions(F, LI))
           if (New.BB == Header) {
-            Apply(New, decide(New, *R.PD, Fallback, SAVIOMargin, false),
-                  D.Unroll);
+            Apply(New,
+                  decide(New, *R.PD, Fallback,
+                         SAVIORedecideMargin >= 0 ? SAVIORedecideMargin
+                                                  : SAVIOMargin,
+                         false),
+                  D.Unroll, &D);
             break;
           }
         continue;

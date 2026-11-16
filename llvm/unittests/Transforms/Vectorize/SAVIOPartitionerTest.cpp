@@ -834,4 +834,72 @@ TEST_F(SAVIOClassifyInputTest, IsomorphicRecurrencesHaveOwnClasses) {
   EXPECT_NE(LR.Groups[0].SliceClass, LR.Groups[1].SliceClass);
 }
 
+TEST_F(SAVIOClassifyInputTest, VirtualUnrollKeepsRecurrenceOneInstance) {
+  // One slice instance (load, add 1, store) next to a distance-1 recurrence
+  // acc = acc * 3 whose value is used after the loop. Machine test1s1v-frac:
+  // scalar add 2 cycles on the one scalar unit, vector add 3 on the one vector
+  // unit, scalar and vector mul 1, free transfers. Without unrolling the
+  // recurrence moves (T 3 -> 2: scalar add 2, vector mul 1). Unrolled by 5 the
+  // slice has 5 instances while the recurrence stays ONE chain of 5 muls: with
+  // 3 of 5 adds on the vector unit and the chain on the scalar unit, scalar
+  // busy 2*2 + 5 = 9, vector 3*3 = 9, T = 9 per 5 iterations = 1.8 per original
+  // iteration, more than the margin better than the 2.0 without unrolling.
+  Function *F = parse(R"(
+    define i32 @f(ptr %b, ptr %o, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %acc = phi i32 [ 1, %entry ], [ %accn, %loop ]
+      %pb = getelementptr inbounds i32, ptr %b, i64 %i
+      %v = load i32, ptr %pb
+      %r = add i32 %v, 1
+      %po = getelementptr inbounds i32, ptr %o, i64 %i
+      store i32 %r, ptr %po
+      %accn = mul i32 %acc, 3
+      %i.next = add nuw i64 %i, 1
+      %cmp = icmp ult i64 %i.next, %n
+      br i1 %cmp, label %loop, label %exit
+    exit:
+      ret i32 %accn
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  const Region &R = Regions[0];
+  ASSERT_EQ(R.Groups.size(), 2u);
+  unsigned SliceIdx = R.Groups[0].Recurrence ? 1 : 0;
+  ASSERT_FALSE(R.Groups[SliceIdx].Recurrence);
+  ASSERT_TRUE(R.Groups[1 - SliceIdx].Recurrence);
+  SmallString<128> Root(SAVIO_TEST_INPUTS);
+  sys::path::append(Root, "port-info");
+  auto PDOrErr = PortDescription::load(Root, "AArch64", "test1s1v-frac");
+  ASSERT_TRUE(!!PDOrErr) << toString(PDOrErr.takeError());
+  auto Fallback = [](const Instruction &) {
+    OpCost C;
+    C.Latency = 1;
+    C.Uops = 1;
+    return C;
+  };
+  Decision Plain = decide(R, **PDOrErr, Fallback, 0.05);
+  EXPECT_EQ(Plain.Unroll, 1u);
+  EXPECT_DOUBLE_EQ(Plain.Before.t(), 3.0);
+  EXPECT_DOUBLE_EQ(Plain.After.t(), 2.0);
+
+  Decision D = decide(R, **PDOrErr, Fallback, 0.05, /*CanUnroll=*/true);
+  EXPECT_EQ(D.Unroll, 5u);
+  EXPECT_TRUE(D.Promoted.empty());
+  EXPECT_DOUBLE_EQ(D.Before.t(), 3.0);
+  EXPECT_DOUBLE_EQ(D.After.t(), 1.8); // Per original iteration.
+  // The slice moves 3 of its 5 instances; the recurrence is never counted as
+  // more than one instance.
+  ASSERT_EQ(D.MovedPerClass.size(), 1u);
+  EXPECT_EQ(D.MovedPerClass[0].Class, R.Groups[SliceIdx].SliceClass);
+  EXPECT_EQ(D.MovedPerClass[0].K, 3u);
+  EXPECT_EQ(D.MovedPerClass[0].U, 5u);
+  EXPECT_NE(D.MovedPerClass[0].Class, R.Groups[1 - SliceIdx].SliceClass);
+}
+
 } // namespace
