@@ -1,0 +1,27 @@
+{
+  "cpu": "test1s1v-frac",
+  "arch": "AArch64",
+  "complete": true,
+  "dispatch_width": 64,
+  "classes": {
+    "scalar": {
+      "units": 1
+    },
+    "vector": {
+      "units": 1
+    },
+    "int_div": {
+      "units": 1
+    },
+    "fp_div": {
+      "units": 1
+    }
+  },
+  "registers": {
+    "gpr": 31,
+    "vec": 32,
+    "vec_callee_saved": 8
+  },
+  "source": "estimate",
+  "evidence": "test fixture for the fraction search: 1 scalar unit, 1 vector unit; scalar add 2 cycles, vector add 3 cycles, free transfers, dispatch 64"
+}

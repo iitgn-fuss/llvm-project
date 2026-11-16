@@ -64,7 +64,12 @@ struct Region {
 
 struct Decision {
   RegionEstimate Before, After;
-  SmallVector<unsigned, 4> Promoted; // Indices into Region::Groups.
+  /// Indices into Region::Groups (of the region as it is now).
+  SmallVector<unsigned, 4> Promoted;
+  /// Extra unroll factor applied before Promoted (Task 5); 1 for now.
+  unsigned Unroll = 1;
+  /// (slice class, k of U instances) moved.
+  SmallVector<std::pair<unsigned, unsigned>, 2> MovedPerClass;
 };
 
 /// How an operand of a Singleton Vectorized group reaches it. The cost model

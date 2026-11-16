@@ -693,6 +693,19 @@ private:
 
 } // namespace
 
+static void recordMoved(const Region &R, Decision &D) {
+  SmallVector<std::pair<unsigned, unsigned>, 2> M;
+  for (unsigned G : D.Promoted) {
+    unsigned C = R.Groups[G].SliceClass;
+    auto *It = find_if(M, [&](auto &P) { return P.first == C; });
+    if (It == M.end())
+      M.push_back({C, 1});
+    else
+      ++It->second;
+  }
+  D.MovedPerClass = M;
+}
+
 Decision savio::decide(const Region &R, const PortDescription &PD,
                        FallbackCostFn Fallback, double Margin) {
   unsigned N = R.Groups.size();
@@ -724,6 +737,7 @@ Decision savio::decide(const Region &R, const PortDescription &PD,
         D.Promoted.push_back(G);
     }
     D.After = *Estimate();
+    recordMoved(R, D);
     return D;
   }
 
@@ -751,33 +765,63 @@ Decision savio::decide(const Region &R, const PortDescription &PD,
       ++Taken;
     }
     D.After = *Estimate();
+    recordMoved(R, D);
     return D;
   }
 
-  // Greedy: while the resource bound limits T, take the move that lowers T
-  // the most, if it lowers it by at least the margin.
-  while (D.After.limiting() == Bound::Resource) {
-    std::optional<RegionEstimate> Best;
-    unsigned BestG = 0;
-    for (unsigned G = 0; G != N; ++G) {
-      if (Promoted[G])
-        continue;
-      Promoted[G] = true;
-      std::optional<RegionEstimate> E = Estimate();
+  // Fraction search: per slice class, estimate every k of its U instances
+  // (spread evenly) with the other classes fixed; take the best if it beats
+  // the current T by the margin. Repeat over classes until nothing changes.
+  SmallVector<unsigned, 4> Classes;
+  DenseMap<unsigned, SmallVector<unsigned, 4>> Members;
+  for (unsigned G = 0; G != N; ++G) {
+    unsigned C = R.Groups[G].SliceClass;
+    if (Members[C].empty())
+      Classes.push_back(C);
+    Members[C].push_back(G);
+  }
+  DenseMap<unsigned, unsigned> Current;
+  auto Apply = [&](ArrayRef<unsigned> M, unsigned K) {
+    for (unsigned G : M)
       Promoted[G] = false;
-      if (E && (!Best || E->t() < Best->t())) {
-        Best = E;
-        BestG = G;
+    for (unsigned I = 0; I != K; ++I)
+      Promoted[M[size_t(I) * M.size() / K]] = true;
+  };
+  for (unsigned Round = 0; Round != 4; ++Round) {
+    bool Changed = false;
+    for (unsigned C : Classes) {
+      ArrayRef<unsigned> M = Members[C];
+      unsigned U = M.size(), Cur = Current[C];
+      std::optional<RegionEstimate> Best;
+      unsigned BestK = Cur;
+      for (unsigned K = 0; K <= U; ++K) {
+        if (K == Cur)
+          continue;
+        Apply(M, K);
+        std::optional<RegionEstimate> E = Estimate();
+        if (E && (!Best || E->t() < Best->t())) {
+          Best = E;
+          BestK = K;
+        }
+      }
+      if (Best && D.After.t() - Best->t() > 0 &&
+          D.After.t() - Best->t() >= Margin * D.After.t()) {
+        Apply(M, BestK);
+        Current[C] = BestK;
+        D.After = *Best;
+        Changed = true;
+      } else {
+        Apply(M, Cur);
       }
     }
-    if (!Best)
+    if (!Changed)
       break;
-    double Gain = D.After.t() - Best->t();
-    if (Gain <= 0 || Gain < Margin * D.After.t())
-      break;
-    Promoted[BestG] = true;
-    D.Promoted.push_back(BestG);
-    D.After = *Best;
   }
+  for (unsigned G = 0; G != N; ++G)
+    if (Promoted[G])
+      D.Promoted.push_back(G);
+  for (unsigned C : Classes)
+    if (Current[C])
+      D.MovedPerClass.push_back({C, Current[C]});
   return D;
 }

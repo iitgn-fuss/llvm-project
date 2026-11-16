@@ -618,4 +618,72 @@ TEST_F(SAVIOClassifyInputTest, PromotedLatchOnNonJoinedPhiCostsTransfers) {
   EXPECT_EQ(D.After.limiting(), Bound::Recurrence);
 }
 
+TEST_F(SAVIOClassifyInputTest, FractionPicksBalance) {
+  // Five instances of one slice (load, add 1, store). Machine test1s1v-frac:
+  // one scalar unit (add 2 cycles), one vector unit (add 3 cycles), free
+  // transfers. T(k) = max(2(5-k), 3k): 10, 8, 6, 9, 12, 15 -> k = 2.
+  Function *F = parse(R"(
+    define void @f(ptr %b, ptr %o, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %pb0 = getelementptr inbounds i32, ptr %b, i64 0
+      %b0 = load i32, ptr %pb0
+      %r0 = add i32 %b0, 1
+      %po0 = getelementptr inbounds i32, ptr %o, i64 0
+      store i32 %r0, ptr %po0
+      %pb1 = getelementptr inbounds i32, ptr %b, i64 1
+      %b1 = load i32, ptr %pb1
+      %r1 = add i32 %b1, 1
+      %po1 = getelementptr inbounds i32, ptr %o, i64 1
+      store i32 %r1, ptr %po1
+      %pb2 = getelementptr inbounds i32, ptr %b, i64 2
+      %b2 = load i32, ptr %pb2
+      %r2 = add i32 %b2, 1
+      %po2 = getelementptr inbounds i32, ptr %o, i64 2
+      store i32 %r2, ptr %po2
+      %pb3 = getelementptr inbounds i32, ptr %b, i64 3
+      %b3 = load i32, ptr %pb3
+      %r3 = add i32 %b3, 1
+      %po3 = getelementptr inbounds i32, ptr %o, i64 3
+      store i32 %r3, ptr %po3
+      %pb4 = getelementptr inbounds i32, ptr %b, i64 4
+      %b4 = load i32, ptr %pb4
+      %r4 = add i32 %b4, 1
+      %po4 = getelementptr inbounds i32, ptr %o, i64 4
+      store i32 %r4, ptr %po4
+      %i.next = add nuw i64 %i, 1
+      %cmp = icmp ult i64 %i.next, %n
+      br i1 %cmp, label %loop, label %exit
+    exit:
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  const Region &R = Regions[0];
+  ASSERT_EQ(R.Groups.size(), 5u);
+  SmallString<128> Root(SAVIO_TEST_INPUTS);
+  sys::path::append(Root, "port-info");
+  auto PDOrErr = PortDescription::load(Root, "AArch64", "test1s1v-frac");
+  ASSERT_TRUE(!!PDOrErr) << toString(PDOrErr.takeError());
+  auto Fallback = [](const Instruction &) {
+    OpCost C;
+    C.Latency = 1;
+    C.Uops = 1;
+    return C;
+  };
+  Decision D = decide(R, **PDOrErr, Fallback, 0.05);
+  ASSERT_EQ(D.MovedPerClass.size(), 1u);
+  EXPECT_EQ(D.MovedPerClass[0].first, R.Groups[0].SliceClass);
+  EXPECT_EQ(D.MovedPerClass[0].second, 2u);
+  EXPECT_EQ(D.Promoted.size(), 2u);
+  EXPECT_EQ(D.Unroll, 1u);
+  EXPECT_DOUBLE_EQ(D.Before.t(), 10.0);
+  EXPECT_DOUBLE_EQ(D.After.t(), 6.0);
+}
+
 } // namespace

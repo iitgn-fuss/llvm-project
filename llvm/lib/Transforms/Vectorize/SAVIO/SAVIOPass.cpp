@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Vectorize/SAVIO/SAVIOPass.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
@@ -189,13 +190,21 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
       continue;
     }
     std::string After = formatv("{0:F2}", D.After.t()).str();
-    for (unsigned G : D.Promoted)
+    for (unsigned G : D.Promoted) {
+      unsigned Cls = Reg.Groups[G].SliceClass, U = 0, K = 0;
+      for (const Group &H : Reg.Groups)
+        U += H.SliceClass == Cls;
+      for (auto &P : D.MovedPerClass)
+        if (P.first == Cls)
+          K = P.second;
       ORE.emit([&] {
         return OptimizationRemark(DEBUG_TYPE, "Promoted",
                                   Reg.Groups[G].Ops[0])
                << "T " << Before << " -> " << After << " ("
-               << BoundName(D.Before.limiting()) << ")";
+               << BoundName(D.Before.limiting()) << "), " << utostr(K) << "/" << utostr(U)
+               << " of slice " << utostr(Cls);
       });
+    }
     // The remarks above name operations the rewrite erases.
     for (unsigned G : D.Promoted) {
       rewriteSingletonVectorize(Reg.Groups[G], Reg.L);
