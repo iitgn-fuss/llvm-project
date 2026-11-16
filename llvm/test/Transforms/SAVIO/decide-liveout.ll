@@ -1,7 +1,14 @@
 ; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
 ; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -savio-force -pass-remarks=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=FORCE
 ; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -debug-only=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=DBG
+; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=NARROW
 ; REQUIRES: asserts
+; On the original test2s1v (dispatch width 4) the same loop is dispatch
+; bound and nothing is promoted: the loads, stores, address adds, compare and
+; branch now carry fallback micro-ops (33 in all, 8.25 cycles), far above the
+; resource bound (3.00), so the greedy search, which only acts while the
+; resource bound limits, stops. Before the whole-region model one group was
+; promoted (T 3.00 -> 2.50).
 ; Six adds in a loop, %s0 also used after the loop. Forced: all six, and the
 ; vector class carries six adds plus the one VecToGpr for %s0, so T = 7.
 ; Unforced: %s0 ties with the others for the first step (T 2.5: vector 2 with
@@ -11,6 +18,8 @@
 ; CHECK-NOT: remark:
 ; FORCE-COUNT-6: remark: {{.*}}T 3.00 -> 7.00 (resource)
 ; FORCE-NOT: remark:
+; NARROW: remark: {{.*}}T 8.25 (dispatch)
+; NARROW-NOT: remark:
 ; DBG: liveout: %s0
 target triple = "arm64-apple-macos"
 
