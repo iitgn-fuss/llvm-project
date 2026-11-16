@@ -951,8 +951,13 @@ Decision savio::decide(const Region &R, const PortDescription &PD,
         Copies = std::max(Copies, ++Count[G.SliceClass]);
     for (unsigned M = 2; Copies && M * Copies <= 8; ++M) {
       SearchResult S = searchFraction(R, RG, PD, Fallback, Margin, M);
+      // It must beat the unchanged loop by the margin and, if some fraction
+      // of the loop as it is already pays, that one too: code growth is only
+      // worth a real gain over not unrolling.
+      double Ref = Chosen ? Chosen->After.t() : Base.Before.t();
       if (S.any() && Base.Before.t() - S.After.t() > 0 &&
-          Base.Before.t() - S.After.t() >= Margin * Base.Before.t())
+          Base.Before.t() - S.After.t() >= Margin * Base.Before.t() &&
+          Ref - S.After.t() > 0 && Ref - S.After.t() >= Margin * Ref)
         Unrolled.push_back(std::move(S));
     }
   }

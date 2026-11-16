@@ -902,4 +902,59 @@ TEST_F(SAVIOClassifyInputTest, VirtualUnrollKeepsRecurrenceOneInstance) {
   EXPECT_NE(D.MovedPerClass[0].Class, R.Groups[1 - SliceIdx].SliceClass);
 }
 
+TEST_F(SAVIOClassifyInputTest, VirtualUnrollMustBeatNotUnrolling) {
+  // Same loop and machine as VirtualUnrollKeepsRecurrenceOneInstance: T per
+  // original iteration is 3.0 unchanged and 2.0 with the recurrence moved and
+  // no unrolling (the assignment already in hand); unrolled by 2, 3, 4 or 6 it
+  // is 2.0 too, by 5 it is 1.8, i.e. 10% better than 2.0. With margin 0.105 the
+  // unrolled-by-5 candidate beats the unchanged 3.0 by the margin and is the
+  // best, and the assignment in hand (2.0) is outside best * 1.105 = 1.989, so
+  // a selection that only compares with the unchanged loop picks the unroll
+  // by 5 for a 10% gain, below the 10.5% margin. Unrolling must beat not
+  // unrolling by the margin: the loop stays as it is.
+  Function *F = parse(R"(
+    define i32 @f(ptr %b, ptr %o, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %acc = phi i32 [ 1, %entry ], [ %accn, %loop ]
+      %pb = getelementptr inbounds i32, ptr %b, i64 %i
+      %v = load i32, ptr %pb
+      %r = add i32 %v, 1
+      %po = getelementptr inbounds i32, ptr %o, i64 %i
+      store i32 %r, ptr %po
+      %accn = mul i32 %acc, 3
+      %i.next = add nuw i64 %i, 1
+      %cmp = icmp ult i64 %i.next, %n
+      br i1 %cmp, label %loop, label %exit
+    exit:
+      ret i32 %accn
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  const Region &R = Regions[0];
+  ASSERT_EQ(R.Groups.size(), 2u);
+  SmallString<128> Root(SAVIO_TEST_INPUTS);
+  sys::path::append(Root, "port-info");
+  auto PDOrErr = PortDescription::load(Root, "AArch64", "test1s1v-frac");
+  ASSERT_TRUE(!!PDOrErr) << toString(PDOrErr.takeError());
+  auto Fallback = [](const Instruction &) {
+    OpCost C;
+    C.Latency = 1;
+    C.Uops = 1;
+    return C;
+  };
+  Decision Plain = decide(R, **PDOrErr, Fallback, 0.105);
+  EXPECT_EQ(Plain.Unroll, 1u);
+  EXPECT_DOUBLE_EQ(Plain.After.t(), 2.0);
+  Decision D = decide(R, **PDOrErr, Fallback, 0.105, /*CanUnroll=*/true);
+  EXPECT_EQ(D.Unroll, 1u);
+  EXPECT_DOUBLE_EQ(D.After.t(), 2.0);
+  EXPECT_FALSE(D.Promoted.empty());
+}
+
 } // namespace
