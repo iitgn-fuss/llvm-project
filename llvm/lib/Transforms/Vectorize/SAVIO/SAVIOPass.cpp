@@ -10,9 +10,12 @@
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -88,6 +91,25 @@ LoadResult loadPortInfo(StringRef Root, StringRef Arch, StringRef CPU) {
 PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
   if (F.isDeclaration())
     return PreservedAnalyses::all();
+
+  // The sv intrinsics are unsafe or unselectable here: optnone code must not be
+  // changed, the udiv/urem expansion raises FP exception flags (strictfp), and
+  // without vector registers the intrinsics cannot be selected.
+  if (F.hasOptNone() || F.hasFnAttribute(Attribute::StrictFP)) {
+    LLVM_DEBUG(dbgs() << "savio: skipping " << F.getName()
+                      << ": optnone or strictfp\n");
+    return PreservedAnalyses::all();
+  }
+  {
+    auto &TTI = FAM.getResult<TargetIRAnalysis>(F);
+    Type *VecTy = FixedVectorType::get(Type::getInt32Ty(F.getContext()), 4);
+    if (TTI.getNumberOfRegisters(TTI.getRegisterClassForType(true, VecTy)) ==
+        0) {
+      LLVM_DEBUG(dbgs() << "savio: skipping " << F.getName()
+                        << ": no vector registers\n");
+      return PreservedAnalyses::all();
+    }
+  }
 
   std::string CPU = SAVIOCPU;
   if (CPU.empty())
