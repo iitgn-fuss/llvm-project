@@ -1,6 +1,6 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -savio-force -pass-remarks=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=FORCE
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -debug-only=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=DBG
+; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -savio-force -pass-remarks=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=FORCE
+; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -debug-only=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=DBG
 ; REQUIRES: asserts
 ; Six adds in a loop, %s0 also used after the loop. Forced: all six, and the
 ; vector class carries six adds plus the one VecToGpr for %s0, so T = 7.

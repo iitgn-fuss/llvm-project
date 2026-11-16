@@ -15,6 +15,8 @@
 #ifndef LLVM_TRANSFORMS_VECTORIZE_SAVIO_PARTITIONER_H
 #define LLVM_TRANSFORMS_VECTORIZE_SAVIO_PARTITIONER_H
 
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Transforms/Vectorize/SAVIO/RegionCost.h"
@@ -79,9 +81,38 @@ bool liveOutNeedsGpr(const Group &G, const Instruction &I);
 /// and blocks outside loops. Blocks of other loops are not regions in v1.
 SmallVector<Region, 4> formRegions(Function &F, LoopInfo &LI);
 
-/// Chooses the groups of \p R to Singleton Vectorize. \p Margin is the
-/// relative improvement of T a step must reach to be taken.
-Decision decide(const Region &R, const PortDescription &PD, double Margin);
+/// Dependences between the instructions of a region's block, independent of
+/// costing. Every non-phi instruction (the terminator and the loop compare
+/// included) is a node, in program order, so node indices are topologically
+/// ordered for same-iteration edges. Header phis are not nodes: a phi becomes
+/// carried edges from its latch value to its users.
+struct RegionGraph {
+  SmallVector<const Instruction *, 32> Insts;
+  DenseMap<const Instruction *, unsigned> Index;
+  /// Same-iteration predecessors of each node (operands defined in the block).
+  SmallVector<SmallVector<unsigned, 2>, 32> Preds;
+  /// Loop-carried edges stored on the consumer, as in CostNode::Carried:
+  /// (producer node, distance >= 1). Empty outside loops.
+  SmallVector<SmallVector<std::pair<unsigned, unsigned>, 1>, 32> Carried;
+  /// For each header phi whose latch value is an instruction of the block:
+  /// that value's node and the distance (more than 1 through a phi of a phi).
+  DenseMap<const PHINode *, std::pair<unsigned, unsigned>> PhiLatch;
+};
+
+/// Builds the dependence graph of \p BB, the block of the loop \p L (or of no
+/// loop if null).
+RegionGraph buildRegionGraph(BasicBlock &BB, Loop *L);
+
+/// Cost of an instruction without a port-info entry: latency and micro-ops, no
+/// resource use.
+using FallbackCostFn = function_ref<OpCost(const Instruction &)>;
+
+/// Chooses the groups of \p R to Singleton Vectorize. \p Fallback costs the
+/// instructions that SAVIO does not model (loads, stores, calls, other types);
+/// they carry latency into the recurrence bound and micro-ops into dispatch.
+/// \p Margin is the relative improvement of T a step must reach to be taken.
+Decision decide(const Region &R, const PortDescription &PD,
+                FallbackCostFn Fallback, double Margin);
 
 } // end namespace savio
 } // end namespace llvm

@@ -1,0 +1,27 @@
+{
+  "cpu": "test2s1v-wide",
+  "arch": "AArch64",
+  "complete": true,
+  "dispatch_width": 64,
+  "classes": {
+    "scalar": {
+      "units": 2
+    },
+    "vector": {
+      "units": 1
+    },
+    "int_div": {
+      "units": 1
+    },
+    "fp_div": {
+      "units": 1
+    }
+  },
+  "registers": {
+    "gpr": 31,
+    "vec": 32,
+    "vec_callee_saved": 8
+  },
+  "source": "estimate",
+  "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+}

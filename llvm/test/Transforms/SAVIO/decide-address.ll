@@ -1,19 +1,21 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -debug-only=savio -disable-output %s 2>&1 | FileCheck %s
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -savio-force -pass-remarks=savio -debug-only=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=FORCE
+; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -pass-remarks=savio -pass-remarks-missed=savio -debug-only=savio -disable-output %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -savio-force -pass-remarks=savio -debug-only=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=FORCE
 ; REQUIRES: asserts
 ; Addresses stay in GPRs: an index computation and an induction increment whose
 ; phi reaches addressing (directly, or only through the in-scope mul in @g) are
 ; not candidates. Only %s (not feeding an address)
 ; forms a group, in @f; @g has no candidates at all and emits nothing.
+; T is 1.00 (recurrence): the induction increment is a cycle of latency 1, which
+; the whole-region model now sees; the verdict (not promoted) is unchanged.
 target triple = "arm64-apple-macos"
 
 ; CHECK-COUNT-1: savio: group of
 ; CHECK-NOT: savio: group of
-; CHECK: remark: {{.*}}T 0.50 (resource)
+; CHECK: remark: {{.*}}T 1.00 (recurrence)
 ; CHECK-NOT: remark:
 ; FORCE-COUNT-1: savio: group of
 ; FORCE-NOT: savio: group of
-; FORCE: remark: {{.*}}T 0.50 -> 1.00 (resource)
+; FORCE: remark: {{.*}}T 1.00 -> 1.00 (recurrence)
 ; FORCE-NOT: remark:
 define void @f(ptr %a, ptr %b, ptr %c) {
 entry:

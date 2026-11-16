@@ -247,31 +247,89 @@ bool savio::liveOutNeedsGpr(const Group &G, const Instruction &I) {
   });
 }
 
+RegionGraph savio::buildRegionGraph(BasicBlock &BB, Loop *L) {
+  RegionGraph G;
+  for (Instruction &I : BB)
+    if (!isa<PHINode>(I)) {
+      G.Index[&I] = G.Insts.size();
+      G.Insts.push_back(&I);
+    }
+  G.Preds.resize(G.Insts.size());
+  G.Carried.resize(G.Insts.size());
+  if (L) {
+    // The node and distance a header phi takes its value from, following a
+    // phi whose latch value is another header phi.
+    for (PHINode &Phi : BB.phis()) {
+      const PHINode *Cur = &Phi;
+      unsigned Dist = 0;
+      for (unsigned Step = 0; Step <= BB.size(); ++Step) {
+        int Idx = Cur->getBasicBlockIndex(&BB);
+        if (Idx < 0)
+          break;
+        ++Dist;
+        const Value *V = Cur->getIncomingValue(Idx);
+        if (auto *P = dyn_cast<PHINode>(V)) {
+          if (P->getParent() != &BB)
+            break;
+          Cur = P;
+          continue;
+        }
+        auto It = isa<Instruction>(V) ? G.Index.find(cast<Instruction>(V))
+                                      : G.Index.end();
+        if (It != G.Index.end())
+          G.PhiLatch[&Phi] = {It->second, Dist};
+        break;
+      }
+    }
+  }
+  for (unsigned N = 0; N != G.Insts.size(); ++N)
+    for (const Use &U : G.Insts[N]->operands()) {
+      auto *OpI = dyn_cast<Instruction>(U.get());
+      if (!OpI)
+        continue;
+      if (auto *Phi = dyn_cast<PHINode>(OpI)) {
+        auto It = G.PhiLatch.find(Phi);
+        if (It != G.PhiLatch.end())
+          G.Carried[N].push_back(It->second);
+        continue;
+      }
+      auto It = G.Index.find(OpI);
+      if (It != G.Index.end())
+        G.Preds[N].push_back(It->second);
+    }
+  return G;
+}
+
 namespace {
 
-/// Cost model nodes of a region for one assignment.
+/// Cost model nodes of a region for one assignment, one node per instruction
+/// of the region graph plus the transfers a Singleton Vectorized group needs.
 ///
-/// Only the in-scope operations of the region's groups (and the transfers a
-/// Singleton Vectorized group needs) are costed. Everything else in the block
-/// (loads, stores, address arithmetic, calls, other types) is not costed in
-/// v1, so T is an estimate of the contested resources, not of the whole block.
+/// In-scope operations of groups are priced from the port description (scalar
+/// or lane-0 vector form); every other instruction (loads, stores, address
+/// arithmetic, calls, compares, branches, other types) from the fallback, which
+/// gives it latency and micro-ops but no resource use. So a dependence through
+/// any instruction is kept, and T bounds the whole block.
 class NodeBuilder {
   const Region &R;
+  const RegionGraph &RG;
   const PortDescription &PD;
+  FallbackCostFn Fallback;
   ArrayRef<bool> Promoted;
 
   SmallVector<CostNode, 32> Nodes;
   DenseMap<const Instruction *, unsigned> NodeOf, OutNode;
   DenseMap<const Instruction *, unsigned> GroupOf;
   DenseMap<std::pair<unsigned, const Value *>, unsigned> InNode;
-  /// A loop-carried edge to add once all nodes exist: the value of Latch one
-  /// iteration earlier reaches node Dest. Through a phi kept in vector form
+  /// A loop-carried edge to add once all nodes exist: the value of Latch Dist
+  /// iterations earlier reaches node Dest. Through a phi kept in vector form
   /// (Joined) it stays in the vector domain; otherwise it is the scalar value,
   /// i.e. the VecToGpr node if the latch operation has one.
   struct CarriedEdge {
     unsigned Dest;
     const Instruction *Latch;
     bool Joined;
+    unsigned Dist;
   };
   SmallVector<CarriedEdge, 4> Pending;
 
@@ -288,9 +346,9 @@ class NodeBuilder {
   }
 
 public:
-  NodeBuilder(const Region &R, const PortDescription &PD,
-              ArrayRef<bool> Promoted)
-      : R(R), PD(PD), Promoted(Promoted) {
+  NodeBuilder(const Region &R, const RegionGraph &RG, const PortDescription &PD,
+              FallbackCostFn Fallback, ArrayRef<bool> Promoted)
+      : R(R), RG(RG), PD(PD), Fallback(Fallback), Promoted(Promoted) {
     for (unsigned G = 0; G != R.Groups.size(); ++G)
       for (Instruction *I : R.Groups[G].Ops)
         GroupOf[I] = G;
@@ -299,87 +357,95 @@ public:
   /// Fills the nodes; false if the assignment needs a cost the port
   /// description lacks.
   bool build() {
-    for (Instruction &I : *R.BB) {
+    for (const Instruction *IP : RG.Insts) {
+      const Instruction &I = *IP;
       auto GIt = GroupOf.find(&I);
-      if (GIt == GroupOf.end())
-        continue;
-      unsigned GIdx = GIt->second;
-      const Group &G = R.Groups[GIdx];
-      bool P = Promoted[GIdx];
+      bool InGroup = GIt != GroupOf.end();
+      unsigned GIdx = InGroup ? GIt->second : 0;
+      bool P = InGroup && Promoted[GIdx];
 
       CostNode N;
-      // Carried edges whose destination is this operation, resolved below.
+      // Carried edges whose destination is this instruction, resolved below.
       SmallVector<CarriedEdge, 2> OwnEdges;
-      for (Use &U : I.operands()) {
-        Value *V = U.get();
-        if (auto *OpI = dyn_cast<Instruction>(V)) {
-          auto It = NodeOf.find(OpI);
-          if (It != NodeOf.end()) {
-            N.Preds.push_back(It->second);
-            continue;
-          }
-        }
-        // A loop phi whose latch value is an in-scope operation closes a
-        // recurrence through this operand.
+      for (const Use &U : I.operands()) {
+        const Value *V = U.get();
         const Instruction *Latch = nullptr;
+        unsigned Dist = 1;
         bool Joined = false;
-        if (auto *Phi = dyn_cast<PHINode>(V))
-          if (R.L && Phi->getParent() == R.BB) {
-            auto *L = dyn_cast<Instruction>(Phi->getIncomingValueForBlock(R.BB));
-            if (L && GroupOf.count(L))
-              Latch = L;
-            Joined = is_contained(G.CarriedPhis, Phi);
+        const Instruction *Def = nullptr; // Operand defined in the block.
+        if (auto *Phi = dyn_cast<PHINode>(V)) {
+          // A loop phi closes a recurrence through this operand when its latch
+          // value is an instruction of the block.
+          auto It = RG.PhiLatch.find(Phi);
+          if (R.L && It != RG.PhiLatch.end()) {
+            Latch = RG.Insts[It->second.first];
+            Dist = It->second.second;
+            Joined = InGroup && is_contained(R.Groups[GIdx].CarriedPhis, Phi);
           }
+        } else if (auto *OpI = dyn_cast<Instruction>(V)) {
+          if (RG.Index.count(OpI))
+            Def = OpI;
+        }
+
         if (Joined) {
-          OwnEdges.push_back({0, Latch, true});
+          OwnEdges.push_back({0, Latch, true, Dist});
           continue;
         }
-        if (P) {
-          InputKind K = classifyInput(R.L, G, V);
-          if (K != InputKind::Free) {
-            auto Key = std::make_pair(GIdx, (const Value *)V);
-            auto It = InNode.find(Key);
-            unsigned T;
-            if (It != InNode.end()) {
-              T = It->second;
-            } else {
-              if (!addTransfer(K == InputKind::GprToVec
-                                   ? TransferKind::GprToVec
-                                   : TransferKind::LaneToLane0,
-                               {}, T))
-                return false;
-              InNode[Key] = T;
-              if (Latch)
-                Pending.push_back({T, Latch, false});
-            }
-            N.Preds.push_back(T);
-            continue;
+        // The operand's value in this instruction's domain: another
+        // instruction of the same group is read as is; anything else is the
+        // scalar value, i.e. through the VecToGpr node of a live-out.
+        bool SameGroup = Def && InGroup && GroupOf.count(Def) &&
+                         GroupOf.find(Def)->second == GIdx;
+        InputKind K = InputKind::Free;
+        if (P && !SameGroup)
+          K = classifyInput(R.L, R.Groups[GIdx], V);
+        if (P && !SameGroup && K != InputKind::Free) {
+          auto Key = std::make_pair(GIdx, V);
+          auto It = InNode.find(Key);
+          unsigned T;
+          if (It != InNode.end()) {
+            T = It->second;
+          } else {
+            SmallVector<unsigned, 1> TP;
+            if (Def)
+              TP.push_back(scalarNode(Def));
+            if (!addTransfer(K == InputKind::GprToVec
+                                 ? TransferKind::GprToVec
+                                 : TransferKind::LaneToLane0,
+                             TP, T))
+              return false;
+            InNode[Key] = T;
+            if (Latch)
+              Pending.push_back({T, Latch, false, Dist});
           }
+          N.Preds.push_back(T);
+          continue;
         }
-        if (Latch)
-          OwnEdges.push_back({0, Latch, false});
+        if (Def)
+          N.Preds.push_back(SameGroup ? NodeOf[Def] : scalarNode(Def));
+        else if (Latch)
+          OwnEdges.push_back({0, Latch, false, Dist});
       }
 
-      std::string Key;
-      if (P) {
-        bool Imm = isa<ConstantInt>(I.getOperand(1)) &&
-                   (I.getOpcode() == Instruction::Shl ||
-                    I.getOpcode() == Instruction::LShr ||
-                    I.getOpcode() == Instruction::AShr);
-        Key = ("sv." + Twine(I.getOpcodeName()) +
-               (Imm ? ".imm v4i32" : " v4i32"))
-                  .str();
-      } else {
-        Key = (Twine(I.getOpcodeName()) + " i32").str();
-      }
-      std::optional<OpCost> C = PD.irOpCost(Key);
-      if (!C) {
-        if (P)
+      std::optional<OpCost> C;
+      if (InGroup) {
+        std::string Key;
+        if (P) {
+          bool Imm = isa<ConstantInt>(I.getOperand(1)) &&
+                     (I.getOpcode() == Instruction::Shl ||
+                      I.getOpcode() == Instruction::LShr ||
+                      I.getOpcode() == Instruction::AShr);
+          Key = ("sv." + Twine(I.getOpcodeName()) +
+                 (Imm ? ".imm v4i32" : " v4i32"))
+                    .str();
+        } else {
+          Key = (Twine(I.getOpcodeName()) + " i32").str();
+        }
+        C = PD.irOpCost(Key);
+        if (!C && P)
           return false;
-        // A scalar form without a cost is not charged.
-        C = OpCost{{}, 0, 0};
       }
-      N.Cost = *C;
+      N.Cost = C ? *C : Fallback(I);
       unsigned Me = Nodes.size();
       Nodes.push_back(std::move(N));
       NodeOf[&I] = Me;
@@ -390,8 +456,8 @@ public:
 
       // Live-out of a Singleton Vectorized group: back to a GPR unless every
       // user outside the group is a store, which can store from the vector.
-      if (P && is_contained(G.LiveOuts, &I)) {
-        if (liveOutNeedsGpr(G, I)) {
+      if (P && is_contained(R.Groups[GIdx].LiveOuts, &I)) {
+        if (liveOutNeedsGpr(R.Groups[GIdx], I)) {
           unsigned T;
           if (!addTransfer(TransferKind::VecToGpr, {Me}, T))
             return false;
@@ -401,31 +467,35 @@ public:
     }
 
     for (const CarriedEdge &E : Pending) {
-      unsigned Src = NodeOf[E.Latch];
-      if (!E.Joined) {
-        auto It = OutNode.find(E.Latch);
-        if (It != OutNode.end())
-          Src = It->second;
-      }
-      Nodes[E.Dest].Carried.push_back({Src, 1});
+      unsigned Src = E.Joined ? NodeOf[E.Latch] : scalarNode(E.Latch);
+      Nodes[E.Dest].Carried.push_back({Src, E.Dist});
     }
     return true;
   }
 
   ArrayRef<CostNode> nodes() const { return Nodes; }
+
+private:
+  /// The node producing the scalar value of \p I: its VecToGpr node if it is a
+  /// Singleton Vectorized live-out, else its own.
+  unsigned scalarNode(const Instruction *I) const {
+    auto It = OutNode.find(I);
+    return It != OutNode.end() ? It->second : NodeOf.lookup(I);
+  }
 };
 
 } // namespace
 
 Decision savio::decide(const Region &R, const PortDescription &PD,
-                       double Margin) {
+                       FallbackCostFn Fallback, double Margin) {
   unsigned N = R.Groups.size();
   SmallVector<bool, 8> Promoted(N, false);
   bool IsLoop = R.L != nullptr;
+  RegionGraph RG = buildRegionGraph(*R.BB, R.L);
 
   // Estimate of the current assignment; nullopt if it needs a missing cost.
   auto Estimate = [&]() -> std::optional<RegionEstimate> {
-    NodeBuilder B(R, PD, Promoted);
+    NodeBuilder B(R, RG, PD, Fallback, Promoted);
     if (!B.build())
       return std::nullopt;
     return estimateRegion(B.nodes(), PD, IsLoop);

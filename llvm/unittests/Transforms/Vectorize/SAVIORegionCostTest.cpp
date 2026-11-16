@@ -128,6 +128,45 @@ TEST_F(SAVIORegionCostTest, RecurrenceSkipsUnrelatedNodes) {
   EXPECT_DOUBLE_EQ(estimateRegion(N, *PD, true).TRec, 18.0);
 }
 
+TEST_F(SAVIORegionCostTest, MultiPhiCycle) {
+  // a' = f(b), b' = g(a): two phis. A (latency 3) and B (latency 5) each take
+  // the other's value from the previous iteration; the cycle holds two
+  // distances, so the bound is (3 + 5) / 2, not 5 (the largest per-edge path).
+  SmallVector<CostNode> N;
+  N.push_back(CostNode{OpCost{{}, 3, 0}, {}, {}});
+  N.push_back(CostNode{OpCost{{}, 5, 0}, {}, {}});
+  N[0].Carried.push_back({1, 1}); // A reads B of the previous iteration.
+  N[1].Carried.push_back({0, 1}); // B reads A of the previous iteration.
+  RegionEstimate E = estimateRegion(N, *PD, /*IsLoop=*/true);
+  EXPECT_DOUBLE_EQ(E.TRec, 4.0);
+  EXPECT_EQ(E.limiting(), Bound::Recurrence);
+}
+
+TEST_F(SAVIORegionCostTest, UncostedNodeKeepsChain) {
+  // X has latency 2 and no resource use (a fallback-costed instruction); the
+  // cycle X -> Y -> X still counts its latency.
+  SmallVector<CostNode> N;
+  N.push_back(CostNode{OpCost{{}, 2, 0}, {}, {}});
+  N.push_back(node("add i32"));
+  N[1].Preds.push_back(0);
+  N[0].Carried.push_back({1, 1});
+  EXPECT_DOUBLE_EQ(estimateRegion(N, *PD, true).TRec, 3.0);
+}
+
+TEST_F(SAVIORegionCostTest, MaxRatioPicksWorstCycle) {
+  // Two disjoint cycles: latency 18 at distance 1 (ratio 18) and latency 36 at
+  // distance 3 (ratio 12). The larger ratio is the bound.
+  SmallVector<CostNode> N;
+  add(N, "udiv i32", 6);
+  N[1].Preds.push_back(0);
+  N[0].Carried.push_back({1, 1}); // cycle 0,1: 18 / 1
+  N[3].Preds.push_back(2);
+  N[4].Preds.push_back(3);
+  N[5].Preds.push_back(4);
+  N[2].Carried.push_back({5, 3}); // cycle 2..5: 36 / 3 = 12
+  EXPECT_DOUBLE_EQ(estimateRegion(N, *PD, true).TRec, 18.0);
+}
+
 TEST_F(SAVIORegionCostTest, LimitingTies) {
   // Single scalar add: TRes 0.5, TDisp 0.25, TRec 1 (latency) outside a loop.
   SmallVector<CostNode> N;

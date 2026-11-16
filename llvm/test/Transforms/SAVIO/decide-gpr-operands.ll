@@ -1,5 +1,5 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
-; The same adds, but operands come from opaque calls and results feed calls: each
+; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
+; The same adds, in a loop on the wide-dispatch fixture, but operands come from opaque calls and results feed calls: each
 ; group needs GprToVec and VecToGpr transfers, so nothing is promoted.
 ; CHECK: remark: {{.*}}T 3.00 (resource)
 ; CHECK-NOT: remark:
@@ -9,6 +9,11 @@ declare i32 @src()
 declare void @sink(i32)
 
 define void @f() {
+entry:
+  br label %loop
+
+loop:
+  %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
   %v0 = call i32 @src()
   %v1 = call i32 @src()
   %v2 = call i32 @src()
@@ -33,5 +38,10 @@ define void @f() {
   call void @sink(i32 %s4)
   %s5 = add i32 %v10, %v11
   call void @sink(i32 %s5)
+  %i.next = add nuw i64 %i, 1
+  %cmp = icmp ult i64 %i.next, 1024
+  br i1 %cmp, label %loop, label %exit
+
+exit:
   ret void
 }

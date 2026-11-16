@@ -157,12 +157,27 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
     llvm_unreachable("unknown bound");
   };
 
+  // Instructions without a port-info entry: TTI latency (1 if unknown) and one
+  // micro-op unless TTI says the instruction is free (folded casts, phis,
+  // debug intrinsics); no resource use.
+  auto &TTI = FAM.getResult<TargetIRAnalysis>(F);
+  auto Fallback = [&](const Instruction &I) {
+    OpCost C;
+    InstructionCost Lat =
+        TTI.getInstructionCost(&I, TargetTransformInfo::TCK_Latency);
+    C.Latency = Lat.isValid() ? std::max<int64_t>(Lat.getValue(), 0) : 1;
+    InstructionCost Size =
+        TTI.getInstructionCost(&I, TargetTransformInfo::TCK_SizeAndLatency);
+    C.Uops = Size.isValid() && Size.getValue() == 0 ? 0 : 1;
+    return C;
+  };
+
   bool Changed = false;
   for (Region &Reg : formRegions(F, LI)) {
     if (BFI.getBlockFreq(Reg.BB).getFrequency() <
         SAVIOColdFraction * EntryFreq)
       continue;
-    Decision D = decide(Reg, *R.PD, SAVIOMargin);
+    Decision D = decide(Reg, *R.PD, Fallback, SAVIOMargin);
     std::string Before = formatv("{0:F2}", D.Before.t()).str();
     if (D.Promoted.empty()) {
       ORE.emit([&] {

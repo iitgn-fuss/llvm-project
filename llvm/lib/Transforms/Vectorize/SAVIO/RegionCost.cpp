@@ -25,24 +25,83 @@ Bound RegionEstimate::limiting() const {
   return Bound::Dispatch;
 }
 
-/// Longest latency path from node \p From to node \p To (both included) along
-/// same-iteration edges, or 0 if \p To is not reachable from \p From.
-static double longestPath(ArrayRef<CostNode> Nodes, unsigned From,
-                          unsigned To) {
-  if (To < From)
-    return 0;
-  SmallVector<double, 16> Dist(To - From + 1, -1.0);
-  Dist[0] = Nodes[From].Cost.Latency;
-  for (unsigned I = From + 1; I <= To; ++I) {
-    double Best = -1.0;
-    for (unsigned P : Nodes[I].Preds)
-      if (P >= From && P < I && Dist[P - From] >= 0)
-        Best = std::max(Best, Dist[P - From]);
-    if (Best >= 0)
-      Dist[I - From] = Best + Nodes[I].Cost.Latency;
+namespace {
+
+/// An edge of the dependence graph of a loop: the value of node From, Dist
+/// iterations earlier, is an operand of node To. Its weight is the latency of
+/// From, so a cycle's weight is the sum of the latencies of its nodes.
+struct Edge {
+  unsigned From, To, Dist;
+};
+
+/// Looks for a cycle whose total latency exceeds Lambda times its total
+/// distance, by Bellman-Ford longest-path relaxation on the weights
+/// lat(From) - Lambda * Dist. Returns the cycle's ratio (latency over
+/// distance), which is greater than Lambda, or 0 if there is no such cycle.
+/// Edges are sorted by destination, and same-iteration edges go from lower to
+/// higher node indices, so one sweep settles all same-iteration paths.
+double betterCycleRatio(ArrayRef<CostNode> Nodes, ArrayRef<Edge> Edges,
+                        double Lambda) {
+  constexpr double Eps = 1e-9;
+  unsigned N = Nodes.size();
+  SmallVector<double, 32> Dist(N, 0.0);
+  SmallVector<int, 32> Via(N, -1); // Index in Edges of the edge that set Dist.
+  int Last = -1;
+  for (unsigned Round = 0; Round != N + 1; ++Round) {
+    Last = -1;
+    for (unsigned E = 0; E != Edges.size(); ++E) {
+      const Edge &Ed = Edges[E];
+      double W = Nodes[Ed.From].Cost.Latency - Lambda * Ed.Dist;
+      if (Dist[Ed.From] + W > Dist[Ed.To] + Eps) {
+        Dist[Ed.To] = Dist[Ed.From] + W;
+        Via[Ed.To] = E;
+        Last = Ed.To;
+      }
+    }
+    if (Last < 0)
+      return 0;
   }
-  return std::max(Dist[To - From], 0.0);
+  // Still relaxing after N rounds: a positive cycle exists. Walk back N steps
+  // to land inside it, then trace it.
+  unsigned X = Last;
+  for (unsigned I = 0; I != N; ++I) {
+    assert(Via[X] >= 0 && "a node on a positive cycle was relaxed");
+    X = Edges[Via[X]].From;
+  }
+  double Lat = 0;
+  unsigned D = 0;
+  unsigned Cur = X;
+  do {
+    const Edge &Ed = Edges[Via[Cur]];
+    Lat += Nodes[Ed.From].Cost.Latency;
+    D += Ed.Dist;
+    Cur = Ed.From;
+  } while (Cur != X);
+  return D ? Lat / D : 0;
 }
+
+/// The maximum over all cycles of the loop dependence graph of (sum of node
+/// latencies) / (sum of carried distances). Starting from lambda 0, each step
+/// finds a cycle that beats lambda and raises lambda to its ratio, so the
+/// result is exact and the loop ends after finitely many cycles.
+double maxCycleRatio(ArrayRef<CostNode> Nodes) {
+  SmallVector<Edge, 64> Edges;
+  for (unsigned V = 0; V != Nodes.size(); ++V) {
+    for (unsigned P : Nodes[V].Preds)
+      Edges.push_back({P, V, 0});
+    for (auto [U, D] : Nodes[V].Carried)
+      Edges.push_back({U, V, D});
+  }
+  double Lambda = 0;
+  while (double R = betterCycleRatio(Nodes, Edges, Lambda)) {
+    if (R <= Lambda)
+      break;
+    Lambda = R;
+  }
+  return Lambda;
+}
+
+} // namespace
 
 RegionEstimate savio::estimateRegion(ArrayRef<CostNode> Nodes,
                                      const PortDescription &PD, bool IsLoop) {
@@ -77,14 +136,10 @@ RegionEstimate savio::estimateRegion(ArrayRef<CostNode> Nodes,
   // Dispatch bound.
   E.TDisp = Uops / PD.dispatchWidth();
 
-  // Recurrence bound. Nodes are in topological order, so every same-iteration
-  // predecessor has a smaller index. Only cycles through a single carried edge
-  // are modeled in v1; a cycle that spans more than one carried edge is not.
+  // Recurrence bound. In a loop it is the maximum cycle ratio over every
+  // cycle of the dependence graph, however many carried edges it crosses.
   if (IsLoop) {
-    for (unsigned V = 0; V != Nodes.size(); ++V)
-      for (auto [U, Dist] : Nodes[V].Carried) {
-        E.TRec = std::max(E.TRec, longestPath(Nodes, V, U) / Dist);
-      }
+    E.TRec = maxCycleRatio(Nodes);
   } else {
     // Longest latency path in the region.
     SmallVector<double, 16> Dist(Nodes.size(), 0.0);

@@ -1,10 +1,17 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
-; Six independent adds from loads to stores: two are Singleton Vectorized.
+; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
+; Six independent adds from loads to stores, in a loop (so load latency is not a
+; critical path) on the wide-dispatch fixture (loads and stores count as
+; micro-ops): two are Singleton Vectorized.
 ; CHECK-COUNT-2: remark: {{.*}}T 3.00 -> 2.00 (resource)
 ; CHECK-NOT: remark:
 target triple = "arm64-apple-macos"
 
 define void @f(ptr %p, ptr %q) {
+entry:
+  br label %loop
+
+loop:
+  %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
   %p0 = getelementptr i32, ptr %p, i64 0
   %v0 = load i32, ptr %p0
   %p1 = getelementptr i32, ptr %p, i64 1
@@ -47,5 +54,10 @@ define void @f(ptr %p, ptr %q) {
   %s5 = add i32 %v10, %v11
   %q5 = getelementptr i32, ptr %q, i64 5
   store i32 %s5, ptr %q5
+  %i.next = add nuw i64 %i, 1
+  %cmp = icmp ult i64 %i.next, 1024
+  br i1 %cmp, label %loop, label %exit
+
+exit:
   ret void
 }
