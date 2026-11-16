@@ -53,9 +53,12 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/LowerIFunc.h"
 #include "llvm/Transforms/Vectorize/LoopIdiomVectorize.h"
+#include "llvm/Transforms/Vectorize/SAVIO/SAVIOPass.h"
 #include <memory>
 
 using namespace llvm;
+
+extern cl::opt<bool> EnableSAVIO;
 
 static cl::opt<bool> EnableCCMP("aarch64-enable-ccmp",
                                 cl::desc("Enable the CCMP formation pass"),
@@ -625,6 +628,12 @@ void AArch64TargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
       [=](LoopPassManager &LPM, OptimizationLevel Level) {
         if (Level != OptimizationLevel::O0)
           LPM.addPass(LoopIdiomVectorizePass());
+      });
+  PB.registerOptimizerLastEPCallback(
+      [](ModulePassManager &MPM, OptimizationLevel Level,
+         ThinOrFullLTOPhase) {
+        if (EnableSAVIO && Level != OptimizationLevel::O0)
+          MPM.addPass(createModuleToFunctionPassAdaptor(SAVIOPass()));
       });
   if (getTargetTriple().isOSWindows())
     PB.registerPipelineEarlySimplificationEPCallback(
