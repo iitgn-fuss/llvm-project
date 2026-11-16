@@ -139,7 +139,11 @@ public:
       Value *Args[2];
       for (unsigned I = 0; I != 2; ++I) {
         Value *V = Op->getOperand(I);
-        if (auto It = VecOf.find(V); It != VecOf.end() && isInGroup(G, dyn_cast<User>(V))) {
+        // Arguments and constants are never in the group; they may be cached
+        // in VecOf as inputs, which enter() reuses.
+        auto *VI = dyn_cast<Instruction>(V);
+        if (auto It = VecOf.find(V);
+            It != VecOf.end() && VI && isInGroup(G, VI)) {
           Args[I] = It->second;
         } else if (I == 1 && Op->isShift() && isa<ConstantInt>(V)) {
           // Constant shift count: a splat the backend matches to an immediate.
@@ -156,9 +160,14 @@ public:
       VecOf[Op] = B.CreateCall(Decl, Args, Op->getName() + ".sv");
     }
 
-    for (unsigned I = 0, E = G.CarriedPhis.size(); I != E; ++I)
-      VecPhis[I]->addIncoming(
-          VecOf[G.CarriedPhis[I]->getIncomingValueForBlock(BB)], BB);
+    // One incoming per edge from the latch: a switch may reach the header
+    // through several cases.
+    for (unsigned I = 0, E = G.CarriedPhis.size(); I != E; ++I) {
+      PHINode *Phi = G.CarriedPhis[I];
+      for (unsigned J = 0, N = Phi->getNumIncomingValues(); J != N; ++J)
+        if (Phi->getIncomingBlock(J) == BB)
+          VecPhis[I]->addIncoming(VecOf[Phi->getIncomingValue(J)], BB);
+    }
 
     for (Instruction *Op : G.LiveOuts)
       leave(Op);

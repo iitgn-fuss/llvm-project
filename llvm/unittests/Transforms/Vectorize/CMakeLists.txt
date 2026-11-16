@@ -15,6 +15,7 @@ add_llvm_unittest(VectorizeTests
   VPlanHCFGTest.cpp
   VPlanPatternMatchTest.cpp
   SAVIOPortDescriptionTest.cpp
+  SAVIOPartitionerTest.cpp
   SAVIORegionCostTest.cpp
   VPlanVerifierTest.cpp
   )

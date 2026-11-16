@@ -11,8 +11,10 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -55,6 +57,7 @@ struct LoadResult {
   std::shared_ptr<const PortDescription> PD;
   bool Missing = false; // The CPU has no port-info directory.
   std::string Error;    // Malformed port-info, naming file and key.
+  bool First = false;   // Returned by the call that did the loading.
 };
 
 /// Loads each (root, arch, CPU) once and caches the outcome, so a module with
@@ -83,7 +86,9 @@ LoadResult loadPortInfo(StringRef Root, StringRef Arch, StringRef CPU) {
         R.Error = E.message();
     });
   }
-  return Cache.try_emplace(Key, std::move(R)).first->second;
+  Cache.try_emplace(Key, R);
+  R.First = true;
+  return R;
 }
 
 } // namespace
@@ -119,7 +124,13 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
   LoadResult R = loadPortInfo(SAVIOPortInfo, Arch, CPU);
   auto &ORE = FAM.getResult<OptimizationRemarkEmitterAnalysis>(F);
   if (!R.PD) {
-    // Nothing to model against: change nothing, say why once per function.
+    // Nothing to model against: change nothing. A malformed directory is a
+    // user error, so it is also a warning, once per (root, arch, CPU).
+    if (!R.Error.empty() && R.First)
+      F.getContext().diagnose(DiagnosticInfoGeneric(
+          "savio: invalid port-info for CPU '" + CPU + "': " + R.Error,
+          DS_Warning));
+    // Say why once per function.
     ORE.emit([&] {
       if (R.Missing)
         return OptimizationRemarkMissed(DEBUG_TYPE, "NoPortInfo", &F)
