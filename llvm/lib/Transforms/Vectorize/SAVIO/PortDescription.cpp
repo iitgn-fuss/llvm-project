@@ -300,8 +300,8 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
         {"store_from_vec", TransferKind::StoreFromVec},
         {"lane_to_lane0", TransferKind::LaneToLane0}};
     for (const auto &[Key, Kind] : Kinds) {
-      Expected<OpCost> C =
-          costOfOpcodes("transfers.json", "key '" + Key + "'", T->get(Key), Ops);
+      Expected<OpCost> C = costOfOpcodes("transfers.json", "key '" + Key + "'",
+                                         T->get(Key), Ops);
       if (!C)
         return C.takeError();
       PD->Transfers[unsigned(Kind)] = std::move(*C);

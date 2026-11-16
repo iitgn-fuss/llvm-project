@@ -129,14 +129,29 @@ bool mayUnroll(const Loop &L, ScalarEvolution &SE) {
     return false;
   if (!SE.hasLoopInvariantBackedgeTakenCount(&L))
     return false;
+  // The unroller lowers the count to the maximum trip count and unrolls fully
+  // when the loop cannot run more often than the count: leave such loops
+  // alone. (A full unroll that still happens is handled by the caller.)
   unsigned TC = SE.getSmallConstantTripCount(&L);
-  return TC == 0 || TC > 8;
+  unsigned MaxTC = SE.getSmallConstantMaxTripCount(&L);
+  if (TC != 0 && TC <= 8)
+    return false;
+  if (MaxTC != 0 && MaxTC <= 8)
+    return false;
+  // The scalar remainder of a loop the vectorizer already vectorized runs
+  // fewer than VF times: unrolling it only adds dead code.
+  if (getBooleanLoopAttribute(&L, "llvm.loop.isvectorized") ||
+      findStringMetadataForLoop(&L, "llvm.loop.vectorize.epilogue") ||
+      findStringMetadataForLoop(&L, "llvm.loop.isvectorized"))
+    return false;
+  return true;
 }
 
 /// Unrolls \p L by \p Count with a remainder loop that keeps any trip count
-/// correct. False, with the IR unchanged apart from the loop-simplify and LCSSA
-/// canonicalization, if the loop cannot be unrolled.
-bool unrollWithRemainder(Loop *L, unsigned Count, LoopInfo &LI,
+/// correct. Unmodified, with the IR changed at most by the loop-simplify and
+/// LCSSA canonicalization, if the loop cannot be unrolled; FullyUnrolled if the
+/// unroller removed the loop (the Loop and its phis are then gone).
+LoopUnrollResult unrollWithRemainder(Loop *L, unsigned Count, LoopInfo &LI,
                          ScalarEvolution &SE, DominatorTree &DT,
                          AssumptionCache &AC, TargetTransformInfo &TTI,
                          OptimizationRemarkEmitter &ORE) {
@@ -150,7 +165,7 @@ bool unrollWithRemainder(Loop *L, unsigned Count, LoopInfo &LI,
   if (!L->isLoopSimplifyForm())
     simplifyLoop(L, &DT, &LI, &SE, &AC, nullptr, /*PreserveLCSSA=*/true);
   if (!L->isLoopSimplifyForm())
-    return false;
+    return LoopUnrollResult::Unmodified;
   UnrollLoopOptions ULO;
   ULO.Count = Count;
   ULO.Force = false; // Never without the remainder loop.
@@ -160,9 +175,8 @@ bool unrollWithRemainder(Loop *L, unsigned Count, LoopInfo &LI,
   ULO.ForgetAllSCEV = false;
   ULO.Heart = getLoopConvergenceHeart(L);
   ULO.SCEVExpansionBudget = SCEVCheapExpansionBudget;
-  LoopUnrollResult Res = UnrollLoop(L, ULO, &LI, &SE, &DT, &AC, &TTI, &ORE,
-                                    /*PreserveLCSSA=*/true);
-  return Res == LoopUnrollResult::PartiallyUnrolled;
+  return UnrollLoop(L, ULO, &LI, &SE, &DT, &AC, &TTI, &ORE,
+                    /*PreserveLCSSA=*/true);
 }
 
 } // namespace
@@ -265,7 +279,8 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
   // real loop can differ, and then the remark says both.
   auto Apply = [&](Region &Reg, const Decision &D, unsigned UnrolledBy,
                    const Decision *Est = nullptr) {
-    // T per original iteration: the unrolled loop's T covers UnrolledBy of them.
+    // T per original iteration: the unrolled loop's T covers UnrolledBy of
+    // them.
     std::string Before = formatv("{0:F2}", D.Before.t() / UnrolledBy).str();
     std::string Unrolled;
     if (UnrolledBy > 1) {
@@ -322,7 +337,8 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
         rewriteSingletonVectorize(Grp, Reg.L);
         continue;
       }
-      auto *It = find_if(Divides, [&](auto &P) { return P.first == Grp.Ops[0]; });
+      auto *It =
+          find_if(Divides, [&](auto &P) { return P.first == Grp.Ops[0]; });
       if (It == Divides.end())
         It = Divides.insert(Divides.end(), {Grp.Ops[0], 0u});
       It->second |= 1u << Grp.Pair;
@@ -355,7 +371,13 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
       auto &AC = FAM.getResult<AssumptionAnalysis>(F);
       BasicBlock *Header = Reg.BB;
       Changed = true;
-      if (unrollWithRemainder(Reg.L, D.Unroll, LI, *SE, DT, AC, TTI, ORE)) {
+      LoopUnrollResult UR =
+          unrollWithRemainder(Reg.L, D.Unroll, LI, *SE, DT, AC, TTI, ORE);
+      // A full unroll deleted the loop and this region's instructions: there
+      // is nothing left to decide on.
+      if (UR == LoopUnrollResult::FullyUnrolled)
+        continue;
+      if (UR == LoopUnrollResult::PartiallyUnrolled) {
         for (Region &New : formRegions(F, LI))
           if (New.BB == Header) {
             Apply(New,

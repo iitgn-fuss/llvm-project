@@ -1,4 +1,4 @@
-//===- Partitioner.cpp - SAVIO groups and the greedy split search ---------===//
+//===- Partitioner.cpp - SAVIO groups and the fraction search -------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -72,8 +72,8 @@ static bool isSimpleStoreOf(const User *U, const Value *V) {
 }
 
 /// True if the value of \p I reaches an address (a GEP operand or an inttoptr)
-/// through casts, phis and other in-scope operations: addresses must stay in GPRs, so such an operation
-/// is not a candidate.
+/// through casts, phis and other in-scope operations: addresses must stay in
+/// GPRs, so such an operation is not a candidate.
 static bool reachesAddress(const Instruction &I) {
   SmallVector<const Instruction *, 8> Work{&I};
   SmallPtrSet<const Instruction *, 8> Seen{&I};
@@ -276,7 +276,8 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
     if (!CompCycle[C])
       continue;
     // Whether the whole recurrence is in scope.
-    bool AllInScope = all_of(CompNodes[C], [&](unsigned I) { return InScope[I]; });
+    bool AllInScope =
+        all_of(CompNodes[C], [&](unsigned I) { return InScope[I]; });
     for (unsigned I : CompNodes[C]) {
       IsRec[I] = true;
       if (AllInScope)
@@ -661,8 +662,8 @@ private:
     SmallVector<CarriedEdge, 2> OwnEdges;
     for (const Use &U : I.operands()) {
       const Value *Op = U.get();
-      unsigned DefV = None;       // Same-iteration producer, as a virtual id.
-      unsigned LatchV = None;     // Carried producer (a phi wrapped past copy 0).
+      unsigned DefV = None;   // Same-iteration producer, as a virtual id.
+      unsigned LatchV = None; // Carried producer (a phi wrapped past copy 0).
       unsigned Dist = 1, SrcCopy = 0;
       bool Joined = false;
       if (auto *Phi = dyn_cast<PHINode>(Op)) {
@@ -790,9 +791,10 @@ private:
   /// backend's scalar split (key "<op> v4i32", half the resource use and
   /// micro-ops, the same latency); lanes {0,1} alone are the fpdiv2 sequence
   /// ("fpdiv2.<op> v4i32"), both pairs the fpdiv4 sequence ("fpdiv4.<op>
-  /// v4i32"); each at its measured whole-sequence cost, plus a concurrency table
-  /// if the entry has one. Without the split's cost the instruction costs what the fallback says, and cannot be moved. The
-  /// operands are vectors already: there is no transfer.
+  /// v4i32"); each at its measured whole-sequence cost, plus a concurrency
+  /// table if the entry has one. Without the split's cost the instruction costs
+  /// what the fallback says, and cannot be moved. The operands are vectors
+  /// already: there is no transfer.
   bool buildVectorDivide(unsigned J, unsigned NI,
                          std::pair<unsigned, unsigned> Groups, CostNode &Nd,
                          ArrayRef<CarriedEdge> OwnEdges) {

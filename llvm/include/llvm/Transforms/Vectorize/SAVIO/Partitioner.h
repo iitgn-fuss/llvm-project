@@ -1,4 +1,4 @@
-//===- Partitioner.h - SAVIO groups and the greedy split search -*- C++ -*-===//
+//===- Partitioner.h - SAVIO groups and the fraction search -*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,7 +8,8 @@
 //
 // Splits a function into regions, grows use-def groups of in-scope scalar
 // integer operations in each region, and decides which groups to Singleton
-// Vectorize by greedy search on the region cost model.
+// Vectorize by a search over fractions of each divide class and the unroll
+// factor on the region cost model.
 //
 //===----------------------------------------------------------------------===//
 
