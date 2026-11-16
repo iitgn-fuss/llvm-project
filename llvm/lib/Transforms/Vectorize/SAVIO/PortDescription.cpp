@@ -122,6 +122,17 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
     if (!W || *W <= 0)
       return makeError(F, "'dispatch_width' must be a positive integer");
     PD->DispatchWidth = *W;
+    if (const json::Value *WV = R->get("window_uops")) {
+      const json::Object *WO = WV->getAsObject();
+      if (!WO)
+        return makeError(F, "'window_uops' must be an object");
+      if (Error E = requireProvenance(F, *WO, "'window_uops'"))
+        return std::move(E);
+      std::optional<int64_t> V = WO->getInteger("value");
+      if (!V || *V <= 0)
+        return makeError(F, "'window_uops' needs a positive integer 'value'");
+      PD->WindowUops = *V;
+    }
     const json::Object *Classes = R->getObject("classes");
     if (!Classes || Classes->empty())
       return makeError(F, "'classes' must be a non-empty object");
@@ -200,6 +211,7 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
   // override the per-opcode sum for a probe key. Keys are validated against
   // probes.json below.
   StringMap<OpCost> Sequences;
+  StringMap<ConcurrencyTable> Tables;
   {
     Expected<json::Object> O = readObject(Dir, "ops.json");
     if (!O)
@@ -241,6 +253,30 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
             return makeError(F, Where + " uses unknown class '" + *Cls +
                                     "' (not in resources.json)");
           C.Uses.push_back({*Id, *Cyc});
+        }
+        if (const json::Value *TV = S->get("throughput_by_concurrency")) {
+          const json::Array *TA = TV->getAsArray();
+          ConcurrencyTable T;
+          bool Ok = TA && !TA->empty();
+          for (const json::Value &PV : TA ? *TA : json::Array()) {
+            const json::Array *P = PV.getAsArray();
+            std::optional<int64_t> M =
+                P && P->size() == 2 ? (*P)[0].getAsInteger() : std::nullopt;
+            std::optional<double> Cyc =
+                P && P->size() == 2 ? (*P)[1].getAsNumber() : std::nullopt;
+            if (!M || *M <= 0 || !Cyc || *Cyc <= 0 ||
+                (!T.Points.empty() && T.Points.back().first >= *M)) {
+              Ok = false;
+              break;
+            }
+            T.Points.emplace_back(unsigned(*M), *Cyc);
+          }
+          if (!Ok)
+            return makeError(F, Where + " 'throughput_by_concurrency' must be "
+                                        "a non-empty array of [m, cycles], m "
+                                        "strictly ascending and positive, "
+                                        "cycles positive");
+          Tables.try_emplace(*Key, std::move(T));
         }
         if (!Sequences.try_emplace(*Key, std::move(C)).second)
           return makeError(F, "duplicate " + Where);
@@ -294,6 +330,9 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
                                        "' names an unknown probe key "
                                        "(not in probes.json)");
     It->second = std::move(KV.second);
+    auto TIt = Tables.find(KV.first());
+    if (TIt != Tables.end())
+      PD->Concurrency.try_emplace(KV.first(), std::move(TIt->second));
   }
 
   return std::move(PD);
@@ -308,4 +347,26 @@ std::optional<OpCost> PortDescription::irOpCost(StringRef ProbeKey) const {
 
 std::optional<OpCost> PortDescription::transferCost(TransferKind K) const {
   return Transfers[unsigned(K)];
+}
+
+const ConcurrencyTable *
+PortDescription::concurrency(StringRef ProbeKey) const {
+  auto It = Concurrency.find(ProbeKey);
+  return It == Concurrency.end() ? nullptr : &It->second;
+}
+
+double ConcurrencyTable::at(double M) const {
+  assert(!Points.empty() && "empty concurrency table");
+  if (M <= Points.front().first)
+    return Points.front().second;
+  if (M >= Points.back().first)
+    return Points.back().second;
+  for (unsigned I = 1; I != Points.size(); ++I) {
+    if (M > Points[I].first)
+      continue;
+    auto [M0, C0] = Points[I - 1];
+    auto [M1, C1] = Points[I];
+    return C0 + (C1 - C0) * (M - M0) / double(M1 - M0);
+  }
+  return Points.back().second;
 }

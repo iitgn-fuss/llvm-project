@@ -649,6 +649,9 @@ public:
           return false;
       }
       N.Cost = C ? *C : Fallback(I);
+      if (C && InGroup && P)
+        N.Conc = PD.concurrency(("sv." + Twine(I.getOpcodeName()) +
+                                 " v4i32").str());
       unsigned Me = Nodes.size();
       Nodes.push_back(std::move(N));
       NodeOf[&I] = Me;
@@ -701,7 +704,10 @@ Decision savio::decide(const Region &R, const PortDescription &PD,
     NodeBuilder B(R, RG, PD, Fallback, Promoted);
     if (!B.build())
       return std::nullopt;
-    return estimateRegion(B.nodes(), PD, IsLoop);
+    // Second pass: sequence costs depend on how many instances are in flight.
+    SmallVector<CostNode, 32> Nodes(B.nodes().begin(), B.nodes().end());
+    applyConcurrency(Nodes, PD, IsLoop);
+    return estimateRegion(Nodes, PD, IsLoop);
   };
 
   Decision D;

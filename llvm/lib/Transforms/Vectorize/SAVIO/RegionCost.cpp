@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Vectorize/SAVIO/RegionCost.h"
+#include "llvm/ADT/DenseMap.h"
+#include <algorithm>
 #include "llvm/Support/Debug.h"
 #include <algorithm>
 #include <cassert>
@@ -102,6 +104,33 @@ double maxCycleRatio(ArrayRef<CostNode> Nodes) {
 }
 
 } // namespace
+
+double savio::effectiveConcurrency(unsigned NK, double UopsPerIter, unsigned W,
+                                   bool IsLoop) {
+  if (!IsLoop)
+    return NK;
+  double Overlap = 1.0;
+  if (W && UopsPerIter > 0)
+    Overlap = std::max(1.0, double(W) / UopsPerIter);
+  return std::min(8.0, NK * Overlap);
+}
+
+void savio::applyConcurrency(SmallVectorImpl<CostNode> &Nodes,
+                             const PortDescription &PD, bool IsLoop) {
+  DenseMap<const ConcurrencyTable *, unsigned> Count;
+  double Uops = 0;
+  for (const CostNode &N : Nodes) {
+    if (N.Conc)
+      ++Count[N.Conc];
+    Uops += N.Cost.Uops;
+  }
+  if (Count.empty())
+    return;
+  for (CostNode &N : Nodes)
+    if (N.Conc && !N.Cost.Uses.empty())
+      N.Cost.Uses[0].Cycles = N.Conc->at(
+          effectiveConcurrency(Count[N.Conc], Uops, PD.windowUops(), IsLoop));
+}
 
 RegionEstimate savio::estimateRegion(ArrayRef<CostNode> Nodes,
                                      const PortDescription &PD, bool IsLoop) {

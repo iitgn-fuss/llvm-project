@@ -215,6 +215,47 @@ TEST(SAVIOPortDescription, SequenceMissingEvidenceIsError) {
   sys::fs::remove_directories(Root);
 }
 
+TEST(SAVIOPortDescription, ConcurrencyTableInterpolatesAndClamps) {
+  auto PD = PortDescription::load(inputsRoot(), "AArch64", "test2s1vc");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  EXPECT_EQ((*PD)->windowUops(), 12u);
+  const ConcurrencyTable *T = (*PD)->concurrency("sv.udiv v4i32");
+  ASSERT_NE(T, nullptr);
+  EXPECT_DOUBLE_EQ(T->at(1), 8.0);
+  EXPECT_DOUBLE_EQ(T->at(2), 6.0);
+  EXPECT_DOUBLE_EQ(T->at(3), 5.0);    // midway between (2,6) and (4,4)
+  EXPECT_DOUBLE_EQ(T->at(1.5), 7.0);
+  EXPECT_DOUBLE_EQ(T->at(4), 4.0);
+  EXPECT_DOUBLE_EQ(T->at(0.25), 8.0); // clamped below
+  EXPECT_DOUBLE_EQ(T->at(100), 4.0);   // clamped above
+  // The entry's own cost is still its `uses` (the m = 1 value here).
+  EXPECT_EQ((*PD)->irOpCost("sv.udiv v4i32")->Uops, 4u);
+  EXPECT_EQ((*PD)->concurrency("sv.add v4i32"), nullptr);
+}
+
+TEST(SAVIOPortDescription, NoWindowOrTableInPart1Format) {
+  auto PD = PortDescription::load(inputsRoot(), "AArch64", "test2s1v");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  EXPECT_EQ((*PD)->windowUops(), 0u);
+  EXPECT_EQ((*PD)->concurrency("sv.udiv v4i32"), nullptr);
+}
+
+TEST(SAVIOPortDescription, BadConcurrencyTableIsError) {
+  for (const char *Bad : {"[[2, 6], [1, 8]]", "[[1, 8], [1, 7]]", "[[0, 8]]",
+                          "[[1, -1]]", "[]", "[[1]]"}) {
+    std::string Root = copyFixture();
+    rewrite(Root, "ops.json", "\"ops\": [",
+            (Twine("\"sequences\": [{\"key\": \"sv.urem v4i32\", \"latency\": 1, "
+                   "\"uops\": 1, \"uses\": [], \"throughput_by_concurrency\": ") +
+             Bad + ", \"source\": \"measured\", \"evidence\": \"x\"}],\n  "
+             "\"ops\": [").str());
+    std::string Msg = loadError(Root);
+    EXPECT_NE(Msg.find("throughput_by_concurrency"), std::string::npos)
+        << Bad << ": " << Msg;
+    sys::fs::remove_directories(Root);
+  }
+}
+
 TEST(SAVIOPortDescription, ArchDir) {
   EXPECT_EQ(archDirFor(Triple("arm64-apple-macos")), "AArch64");
   EXPECT_EQ(archDirFor(Triple("aarch64-linux-gnu")), "AArch64");

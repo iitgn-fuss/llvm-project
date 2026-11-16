@@ -3,7 +3,9 @@
 ; The xor is on the accumulator recurrence (through fshl, which has no port-info),
 ; so a group containing it would put a transfer on the cycle. No such group is
 ; promoted.
-; CHECK: remark: {{.*}}T {{[0-9.]+}} (recurrence)
+; The scalar urem (2.0 int_div cycles) and the recurrence (2.0) are within
+; noise of each other on apple-m4, so either bound may be reported.
+; CHECK: remark: {{.*}}T {{[0-9.]+}} ({{recurrence|resource}})
 ; CHECK-NOT: llvm.savio.sv.xor
 target triple = "arm64-apple-macosx15.0.0"
 

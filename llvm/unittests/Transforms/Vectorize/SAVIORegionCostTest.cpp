@@ -47,6 +47,71 @@ protected:
   std::unique_ptr<PortDescription> PD;
 };
 
+/// test2s1vc: window_uops 12; sv.udiv v4i32 is a 4-uop sequence using 8 vector
+/// cycles, with cycles per instance 8, 6, 4 at m = 1, 2, 4.
+class SAVIOConcurrencyTest : public testing::Test {
+protected:
+  void SetUp() override {
+    SmallString<128> Root(SAVIO_TEST_INPUTS);
+    sys::path::append(Root, "port-info");
+    auto PDOrErr = PortDescription::load(Root, "AArch64", "test2s1vc");
+    ASSERT_TRUE(!!PDOrErr) << toString(PDOrErr.takeError());
+    PD = std::move(*PDOrErr);
+  }
+  CostNode node(StringRef Key) {
+    CostNode N{*PD->irOpCost(Key), {}, {}};
+    N.Conc = PD->concurrency(Key);
+    return N;
+  }
+  /// Per-instance vector cycles of the sequence nodes after the pass.
+  double seqCycles(unsigned NSeq, unsigned NAdd, bool IsLoop) {
+    SmallVector<CostNode> N;
+    for (unsigned I = 0; I != NSeq; ++I)
+      N.push_back(node("sv.udiv v4i32"));
+    for (unsigned I = 0; I != NAdd; ++I)
+      N.push_back(node("add i32"));
+    applyConcurrency(N, *PD, IsLoop);
+    return N[0].Cost.Uses[0].Cycles;
+  }
+  std::unique_ptr<PortDescription> PD;
+};
+
+TEST_F(SAVIOConcurrencyTest, EffectiveConcurrency) {
+  // Loop: min(8, n * max(1, W / uops)); outside a loop: n.
+  EXPECT_DOUBLE_EQ(effectiveConcurrency(2, 12, 12, true), 2.0);
+  EXPECT_DOUBLE_EQ(effectiveConcurrency(2, 8, 12, true), 3.0);
+  EXPECT_DOUBLE_EQ(effectiveConcurrency(2, 100, 12, true), 2.0);  // max(1, .)
+  EXPECT_DOUBLE_EQ(effectiveConcurrency(3, 1, 12, true), 8.0);    // capped
+  EXPECT_DOUBLE_EQ(effectiveConcurrency(3, 1, 12, false), 3.0);
+  EXPECT_DOUBLE_EQ(effectiveConcurrency(2, 8, 0, true), 2.0);     // no window
+}
+
+TEST_F(SAVIOConcurrencyTest, LoopUsesWindow) {
+  // 2 sequence nodes (4 uops each) + 4 adds = 12 uops: m_eff = 2 -> 6.
+  EXPECT_DOUBLE_EQ(seqCycles(2, 4, true), 6.0);
+  // 2 sequence nodes alone = 8 uops: m_eff = 3 -> 5 (interpolated).
+  EXPECT_DOUBLE_EQ(seqCycles(2, 0, true), 5.0);
+  // 1 sequence node alone = 4 uops: m_eff = 3 -> 5.
+  EXPECT_DOUBLE_EQ(seqCycles(1, 0, true), 5.0);
+}
+
+TEST_F(SAVIOConcurrencyTest, StraightLineUsesCount) {
+  EXPECT_DOUBLE_EQ(seqCycles(2, 0, false), 6.0);
+  EXPECT_DOUBLE_EQ(seqCycles(2, 40, false), 6.0);  // uops do not matter
+  EXPECT_DOUBLE_EQ(seqCycles(1, 0, false), 8.0);
+  EXPECT_DOUBLE_EQ(seqCycles(9, 0, false), 4.0);   // clamped to the table
+}
+
+TEST_F(SAVIOConcurrencyTest, EntryWithoutTableUnchanged) {
+  SmallVector<CostNode> N;
+  N.push_back(node("sv.add v4i32"));
+  N.push_back(node("add i32"));
+  double Before = N[0].Cost.Uses[0].Cycles;
+  applyConcurrency(N, *PD, true);
+  EXPECT_DOUBLE_EQ(N[0].Cost.Uses[0].Cycles, Before);
+  EXPECT_EQ(N[0].Cost.Uops, 1u);
+}
+
 TEST_F(SAVIORegionCostTest, ScalarHeavy) {
   SmallVector<CostNode> N;
   add(N, "add i32", 6);

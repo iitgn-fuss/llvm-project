@@ -41,6 +41,15 @@ struct OpCost {
   unsigned Uops;
 };
 
+/// Cycles per instance of a sequence in its saturating class as a function of
+/// the number of independent instances in flight (ops.json
+/// "throughput_by_concurrency", m strictly ascending).
+struct ConcurrencyTable {
+  SmallVector<std::pair<unsigned, double>, 6> Points;
+  /// Piecewise-linear in \p M, clamped to the range of the table.
+  double at(double M) const;
+};
+
 /// Semantic data movements between the scalar and vector domains.
 enum class TransferKind {
   GprToVec,
@@ -69,6 +78,11 @@ public:
   /// machine opcodes listed for it in probes.json.
   std::optional<OpCost> irOpCost(StringRef ProbeKey) const;
   std::optional<OpCost> transferCost(TransferKind K) const;
+  /// The concurrency table of a sequence entry, or null.
+  const ConcurrencyTable *concurrency(StringRef ProbeKey) const;
+  /// Instruction-window size in micro-ops (resources.json "window_uops"), or 0
+  /// when absent.
+  unsigned windowUops() const { return WindowUops; }
 
 private:
   PortDescription() = default;
@@ -76,6 +90,8 @@ private:
   SmallVector<std::string, 8> ClassNames;
   SmallVector<unsigned, 8> ClassUnits;
   unsigned DispatchWidth = 0;
+  unsigned WindowUops = 0;
+  StringMap<ConcurrencyTable> Concurrency;
   StringMap<OpCost> Probes;
   std::optional<OpCost> Transfers[5];
 };
