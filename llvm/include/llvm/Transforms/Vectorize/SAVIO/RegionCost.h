@@ -29,7 +29,9 @@ struct CostNode {
   /// Same-iteration dependences, as indices of earlier nodes (the node array
   /// must be in topological order).
   SmallVector<unsigned, 2> Preds;
-  /// Loop-carried dependences as (predecessor index, distance >= 1).
+  /// Loop-carried dependences as (predecessor index, distance >= 1). The edge
+  /// is stored on the consumer: (u, d) on this node means the value of
+  /// Nodes[u] from d iterations earlier is an operand of this node.
   SmallVector<std::pair<unsigned, unsigned>, 1> Carried;
 };
 

@@ -48,6 +48,16 @@ RegionEstimate savio::estimateRegion(ArrayRef<CostNode> Nodes,
                                      const PortDescription &PD, bool IsLoop) {
   RegionEstimate E;
 
+#ifndef NDEBUG
+  // Input contract, for loop and non-loop regions alike.
+  for (unsigned I = 0; I != Nodes.size(); ++I) {
+    for (unsigned P : Nodes[I].Preds)
+      assert(P < I && "nodes must be in topological order");
+    for (auto [U, Dist] : Nodes[I].Carried)
+      assert(U < Nodes.size() && Dist >= 1 && "bad carried edge");
+  }
+#endif
+
   // Resource bound: the most loaded class, per unit.
   SmallVector<double, 8> Load(PD.numClasses(), 0.0);
   double Uops = 0;
@@ -73,7 +83,6 @@ RegionEstimate savio::estimateRegion(ArrayRef<CostNode> Nodes,
   if (IsLoop) {
     for (unsigned V = 0; V != Nodes.size(); ++V)
       for (auto [U, Dist] : Nodes[V].Carried) {
-        assert(Dist >= 1 && U < Nodes.size() && "bad carried edge");
         E.TRec = std::max(E.TRec, longestPath(Nodes, V, U) / Dist);
       }
   } else {
@@ -81,10 +90,8 @@ RegionEstimate savio::estimateRegion(ArrayRef<CostNode> Nodes,
     SmallVector<double, 16> Dist(Nodes.size(), 0.0);
     for (unsigned I = 0; I != Nodes.size(); ++I) {
       double Best = 0;
-      for (unsigned P : Nodes[I].Preds) {
-        assert(P < I && "nodes must be in topological order");
+      for (unsigned P : Nodes[I].Preds)
         Best = std::max(Best, Dist[P]);
-      }
       Dist[I] = Best + Nodes[I].Cost.Latency;
       E.TRec = std::max(E.TRec, Dist[I]);
     }

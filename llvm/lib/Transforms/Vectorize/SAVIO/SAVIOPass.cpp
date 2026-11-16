@@ -7,12 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Vectorize/SAVIO/SAVIOPass.h"
+#include "llvm/Analysis/BlockFrequencyInfo.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/Mutex.h"
+#include "llvm/Support/FormatVariadic.h"
+#include "llvm/Transforms/Vectorize/SAVIO/Partitioner.h"
 #include "llvm/Transforms/Vectorize/SAVIO/PortDescription.h"
 #include <map>
 
@@ -33,6 +37,11 @@ cl::opt<std::string>
 cl::opt<std::string>
     llvm::SAVIOCPU("savio-cpu", cl::init(""), cl::Hidden,
                    cl::desc("Override the CPU used to select SAVIO port-info"));
+
+static cl::opt<double> SAVIOColdFraction(
+    "savio-cold-fraction", cl::init(0.01), cl::Hidden,
+    cl::desc("Skip regions whose block frequency is below this fraction of "
+             "the entry block's"));
 
 namespace {
 
@@ -98,5 +107,46 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
     return PreservedAnalyses::all();
   }
 
+  auto &LI = FAM.getResult<LoopAnalysis>(F);
+  auto &BFI = FAM.getResult<BlockFrequencyAnalysis>(F);
+  double EntryFreq = BFI.getBlockFreq(&F.getEntryBlock()).getFrequency();
+
+  auto BoundName = [](Bound B) {
+    switch (B) {
+    case Bound::Resource:
+      return "resource";
+    case Bound::Recurrence:
+      return "recurrence";
+    case Bound::Dispatch:
+      return "dispatch";
+    }
+    llvm_unreachable("unknown bound");
+  };
+
+  // Decisions only: the IR is not rewritten yet.
+  for (Region &Reg : formRegions(F, LI)) {
+    if (BFI.getBlockFreq(Reg.BB).getFrequency() <
+        SAVIOColdFraction * EntryFreq)
+      continue;
+    Decision D = decide(Reg, *R.PD, SAVIOMargin);
+    std::string Before = formatv("{0:F2}", D.Before.t()).str();
+    if (D.Promoted.empty()) {
+      ORE.emit([&] {
+        return OptimizationRemarkMissed(DEBUG_TYPE, "NotProfitable",
+                                        Reg.Groups[0].Ops[0])
+               << "T " << Before << " ("
+               << BoundName(D.Before.limiting()) << ")";
+      });
+      continue;
+    }
+    std::string After = formatv("{0:F2}", D.After.t()).str();
+    for (unsigned G : D.Promoted)
+      ORE.emit([&] {
+        return OptimizationRemark(DEBUG_TYPE, "Promoted",
+                                  Reg.Groups[G].Ops[0])
+               << "T " << Before << " -> " << After << " ("
+               << BoundName(D.Before.limiting()) << ")";
+      });
+  }
   return PreservedAnalyses::all();
 }
