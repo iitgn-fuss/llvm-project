@@ -1,7 +1,9 @@
-; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -S %s | FileCheck %s
-; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -S %s | opt -passes=verify -disable-output
-; Default cost model (no -savio-force) on apple-m4: the divides are promoted,
-; and the argument %p, used by both, is a loop-invariant input used twice.
+; RUN: opt -passes=savio -savio-force -savio-port-info=%S/../../../../../src/port-info -S %s | FileCheck %s
+; RUN: opt -passes=savio -savio-force -savio-port-info=%S/../../../../../src/port-info -S %s | opt -passes=verify -disable-output
+; Forced on apple-m4 (the measured whole-sequence cost of a lane-0 urem, 3.8
+; cycles against 2.0 for the scalar one, makes the default model leave these
+; two divides alone): the argument %p, used by both, is a loop-invariant input
+; used twice.
 target triple = "arm64-apple-macosx15.0.0"
 
 define void @h(ptr %src, ptr %dst, i32 %p, i64 %n) #0 {

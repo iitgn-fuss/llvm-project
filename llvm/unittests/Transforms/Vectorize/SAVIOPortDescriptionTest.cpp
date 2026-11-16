@@ -154,6 +154,67 @@ TEST(SAVIOPortDescription, UnknownProbeOpcodeIsError) {
   sys::fs::remove_directories(Root);
 }
 
+const char *SeqJson =
+    "\"sequences\": [{\"key\": \"sv.urem v4i32\", \"latency\": 20, "
+    "\"uops\": 7, \"uses\": [{\"class\": \"vector\", \"cycles\": 12}], "
+    "\"source\": \"measured\", \"evidence\": \"unit test\"}],\n  \"ops\": [";
+
+TEST(SAVIOPortDescription, SequenceOverridesSum) {
+  std::string Root = copyFixture();
+  rewrite(Root, "ops.json", "\"ops\": [", SeqJson);
+  auto PD = PortDescription::load(Root, "AArch64", "test2s1v");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  std::optional<OpCost> C = (*PD)->irOpCost("sv.urem v4i32");
+  ASSERT_TRUE(C.has_value());
+  EXPECT_EQ(C->Latency, 20u);
+  EXPECT_EQ(C->Uops, 7u);
+  ASSERT_EQ(C->Uses.size(), 1u);
+  EXPECT_EQ(C->Uses[0].Class, *classId(**PD, "vector"));
+  EXPECT_EQ(C->Uses[0].Cycles, 12.0);
+  // Other keys still sum their opcodes.
+  EXPECT_EQ((*PD)->irOpCost("urem i32")->Latency, 10u);
+  sys::fs::remove_directories(Root);
+}
+
+TEST(SAVIOPortDescription, SequenceAbsentFallsBack) {
+  auto PD = PortDescription::load(inputsRoot(), "AArch64", "test2s1v");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  std::optional<OpCost> C = (*PD)->irOpCost("sv.urem v4i32");
+  ASSERT_TRUE(C.has_value());
+  // Part 1 format: the sum over the probe's opcodes (T_VUDIV_FP + T_VUDIV_FIX).
+  EXPECT_EQ(C->Latency, 14u);
+  EXPECT_EQ(C->Uops, 2u);
+  ASSERT_EQ(C->Uses.size(), 2u);
+  for (const ResourceUse &U : C->Uses) {
+    if (U.Class == *classId(**PD, "fp_div"))
+      EXPECT_EQ(U.Cycles, 4.0);
+    else {
+      EXPECT_EQ(U.Class, *classId(**PD, "vector"));
+      EXPECT_EQ(U.Cycles, 3.0);
+    }
+  }
+}
+
+TEST(SAVIOPortDescription, SequenceUnknownKeyIsError) {
+  std::string Root = copyFixture();
+  rewrite(Root, "ops.json", "\"ops\": [",
+          "\"sequences\": [{\"key\": \"nope v4i32\", \"latency\": 1, "
+          "\"uops\": 1, \"uses\": [], \"source\": \"measured\", "
+          "\"evidence\": \"x\"}],\n  \"ops\": [");
+  std::string Msg = loadError(Root);
+  EXPECT_NE(Msg.find("nope v4i32"), std::string::npos) << Msg;
+  sys::fs::remove_directories(Root);
+}
+
+TEST(SAVIOPortDescription, SequenceMissingEvidenceIsError) {
+  std::string Root = copyFixture();
+  rewrite(Root, "ops.json", "\"ops\": [", SeqJson);
+  rewrite(Root, "ops.json", "\"evidence\": \"unit test\"", "\"x\": 1");
+  std::string Msg = loadError(Root);
+  EXPECT_NE(Msg.find("evidence"), std::string::npos) << Msg;
+  sys::fs::remove_directories(Root);
+}
+
 TEST(SAVIOPortDescription, ArchDir) {
   EXPECT_EQ(archDirFor(Triple("arm64-apple-macos")), "AArch64");
   EXPECT_EQ(archDirFor(Triple("aarch64-linux-gnu")), "AArch64");

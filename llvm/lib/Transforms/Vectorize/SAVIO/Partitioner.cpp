@@ -35,6 +35,12 @@ cl::opt<bool> llvm::SAVIOForce(
     cl::desc("Singleton Vectorize every candidate group regardless of cost "
              "(for correctness tests only)"));
 
+cl::opt<int> llvm::SAVIOForceCount(
+    "savio-force-count", cl::init(-1), cl::Hidden,
+    cl::desc("Singleton Vectorize the first k instances (program order) of "
+             "the slice class with the most instances in each region, and "
+             "nothing else (-1 = off; for calibration sweeps)"));
+
 /// Operations in scope: i32 add sub mul and or xor shl lshr ashr udiv urem.
 static bool isCandidate(const Instruction &I) {
   if (!I.getType()->isIntegerTy(32))
@@ -709,6 +715,33 @@ Decision savio::decide(const Region &R, const PortDescription &PD,
         Promoted[G] = false;
       else
         D.Promoted.push_back(G);
+    }
+    D.After = *Estimate();
+    return D;
+  }
+
+  if (SAVIOForceCount >= 0) {
+    // The slice class with the most instances (the first one found on ties).
+    DenseMap<unsigned, unsigned> Count;
+    unsigned BestClass = 0, BestCount = 0;
+    for (const Group &G : R.Groups) {
+      unsigned C = ++Count[G.SliceClass];
+      if (C > BestCount) {
+        BestCount = C;
+        BestClass = G.SliceClass;
+      }
+    }
+    unsigned Taken = 0;
+    for (unsigned G = 0; G != N && Taken < unsigned(SAVIOForceCount); ++G) {
+      if (R.Groups[G].SliceClass != BestClass)
+        continue;
+      Promoted[G] = true;
+      if (!Estimate()) {
+        Promoted[G] = false;
+        continue;
+      }
+      D.Promoted.push_back(G);
+      ++Taken;
     }
     D.After = *Estimate();
     return D;

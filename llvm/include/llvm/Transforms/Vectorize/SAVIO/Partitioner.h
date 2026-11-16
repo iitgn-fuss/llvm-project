@@ -34,6 +34,7 @@ class Value;
 
 extern cl::opt<double> SAVIOMargin;
 extern cl::opt<bool> SAVIOForce;
+extern cl::opt<int> SAVIOForceCount;
 
 namespace savio {
 

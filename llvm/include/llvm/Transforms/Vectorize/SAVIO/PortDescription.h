@@ -64,8 +64,9 @@ public:
   unsigned dispatchWidth() const { return DispatchWidth; }
 
   /// Cost of an IR operation form, "<op> <type>" for scalar operations and
-  /// "sv.<op> v4i32" for lane-0 vector operations; the sum over the machine
-  /// opcodes listed for it in probes.json.
+  /// "sv.<op> v4i32" for lane-0 vector operations; the sequence entry for the
+  /// key in ops.json when one exists (measured whole), else the sum over the
+  /// machine opcodes listed for it in probes.json.
   std::optional<OpCost> irOpCost(StringRef ProbeKey) const;
   std::optional<OpCost> transferCost(TransferKind K) const;
 

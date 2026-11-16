@@ -196,6 +196,58 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
     }
   }
 
+  // ops.json "sequences" (optional): whole-sequence measurements that
+  // override the per-opcode sum for a probe key. Keys are validated against
+  // probes.json below.
+  StringMap<OpCost> Sequences;
+  {
+    Expected<json::Object> O = readObject(Dir, "ops.json");
+    if (!O)
+      return O.takeError();
+    constexpr StringLiteral F = "ops.json";
+    if (const json::Value *SV = O->get("sequences")) {
+      const json::Array *Seqs = SV->getAsArray();
+      if (!Seqs)
+        return makeError(F, "'sequences' must be an array");
+      for (const json::Value &E : *Seqs) {
+        const json::Object *S = E.getAsObject();
+        std::optional<StringRef> Key =
+            S ? S->getString("key") : std::nullopt;
+        if (!Key)
+          return makeError(F, "sequence entry without string key 'key'");
+        std::string Where = ("sequence '" + *Key + "'").str();
+        if (Error Err = requireProvenance(F, *S, Where))
+          return std::move(Err);
+        std::optional<int64_t> Lat = S->getInteger("latency");
+        std::optional<int64_t> Uops = S->getInteger("uops");
+        if (!Lat || *Lat < 0 || !Uops || *Uops < 0)
+          return makeError(F, Where + " needs non-negative integer "
+                                      "'latency' and 'uops'");
+        const json::Array *Uses = S->getArray("uses");
+        if (!Uses)
+          return makeError(F, Where + " is missing array key 'uses'");
+        OpCost C{{}, unsigned(*Lat), unsigned(*Uops)};
+        for (const json::Value &UV : *Uses) {
+          const json::Object *U = UV.getAsObject();
+          std::optional<StringRef> Cls =
+              U ? U->getString("class") : std::nullopt;
+          std::optional<double> Cyc =
+              U ? U->getNumber("cycles") : std::nullopt;
+          if (!Cls || !Cyc || *Cyc < 0)
+            return makeError(F, Where + " has a 'uses' entry without "
+                                        "'class' and non-negative 'cycles'");
+          std::optional<unsigned> Id = ClassId(*Cls);
+          if (!Id)
+            return makeError(F, Where + " uses unknown class '" + *Cls +
+                                    "' (not in resources.json)");
+          C.Uses.push_back({*Id, *Cyc});
+        }
+        if (!Sequences.try_emplace(*Key, std::move(C)).second)
+          return makeError(F, "duplicate " + Where);
+      }
+    }
+  }
+
   // transfers.json
   {
     Expected<json::Object> T = readObject(Dir, "transfers.json");
@@ -232,6 +284,16 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
         return C.takeError();
       PD->Probes.try_emplace(Key, std::move(*C));
     }
+  }
+
+  // A sequence entry replaces the opcode sum of its probe key.
+  for (auto &KV : Sequences) {
+    auto It = PD->Probes.find(KV.first());
+    if (It == PD->Probes.end())
+      return makeError("ops.json", "sequence '" + KV.first() +
+                                       "' names an unknown probe key "
+                                       "(not in probes.json)");
+    It->second = std::move(KV.second);
   }
 
   return std::move(PD);
