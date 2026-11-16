@@ -789,9 +789,9 @@ private:
   /// cost that stands for the instruction. A pair that stays is half of the
   /// backend's scalar split (key "<op> v4i32", half the resource use and
   /// micro-ops, the same latency); lanes {0,1} alone are the fpdiv2 sequence
-  /// ("fpdiv2.<op> v4i32"), both pairs the fpdiv4 sequence, each with its
-  /// concurrency table. Without the split's cost the
-  /// instruction costs what the fallback says, and cannot be moved. The
+  /// ("fpdiv2.<op> v4i32"), both pairs the fpdiv4 sequence ("fpdiv4.<op>
+  /// v4i32"); each at its measured whole-sequence cost, plus a concurrency table
+  /// if the entry has one. Without the split's cost the instruction costs what the fallback says, and cannot be moved. The
   /// operands are vectors already: there is no transfer.
   bool buildVectorDivide(unsigned J, unsigned NI,
                          std::pair<unsigned, unsigned> Groups, CostNode &Nd,

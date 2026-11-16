@@ -16,6 +16,7 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/ErrorHandling.h"
 
 using namespace llvm;
 using namespace llvm::savio;
@@ -266,7 +267,9 @@ void savio::rewriteVectorDivide(Instruction *I, unsigned PairMask) {
   }
   // Lanes {2,3} alone are never chosen: the cost model cannot price them (see
   // buildVectorDivide), so the decision never moves them without {0,1}.
-  assert(PairMask == 1 && "lanes {2,3} alone are not rewritten");
+  if (PairMask != 1)
+    report_fatal_error("savio: lanes {2,3} of a vector divide alone are not "
+                       "supported");
 
   // Lanes {0,1} divide the vector as it is (lanes 2 and 3 of the result are
   // poison).

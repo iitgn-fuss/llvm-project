@@ -25977,8 +25977,7 @@ divides.
 Lanes 0 and 1 of the result are `op i32 %a[i], %b[i]`; lanes 2 and 3 are
 `poison`, and the same lanes of the operands are ignored. The intrinsics never
 have undefined behavior: a zero divisor in lane 0 or 1 makes that lane of the
-result `poison`. Lanes 2 and 3 of the original operation are done by shuffling
-them to lanes 0 and 1 first.
+result `poison`.
 
 #### '`llvm.savio.fpdiv4.*.v4i32`' Intrinsics
 
