@@ -4,9 +4,10 @@
 ; contains fshl, which has no vector equivalent, so it is pinned scalar whole.
 ; Only the feeder b[i]*P2, a slice off the cycle, may move.
 ; CHECK-COUNT-1: call <4 x i32> @llvm.savio.sv.mul
-; CHECK-NOT: llvm.savio.sv
+; CHECK-NOT: call {{.*}}@llvm.savio.sv
 ; CHECK: add i32
 ; CHECK: mul i32
+; CHECK-NOT: call {{.*}}@llvm.savio.sv
 target triple = "arm64-apple-macos"
 
 declare i32 @llvm.fshl.i32(i32, i32, i32)

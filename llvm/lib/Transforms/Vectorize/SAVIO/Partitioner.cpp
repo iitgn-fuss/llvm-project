@@ -176,12 +176,16 @@ static SmallVector<unsigned, 32> computeSCCs(const RegionGraph &RG,
 
 /// A canonical description of the group: operations in program order as
 /// opcode(operand-refs), where an operand-ref is a position in the group, a
-/// constant's value or the kind of input, then the live-out positions.
-static std::string sliceKey(const Group &G, const Loop *L) {
+/// constant's value or the kind of input (numbered by first occurrence within
+/// the group, so `mul x,x` differs from `mul x,y`), then the live-out
+/// positions. The region is part of the key: slices of different regions are
+/// never instances of each other.
+static std::string sliceKey(const Group &G, const Loop *L, unsigned RegionNo) {
+  DenseMap<const Value *, unsigned> InNo;
   DenseMap<const Value *, unsigned> Pos;
   for (unsigned K = 0; K != G.Ops.size(); ++K)
     Pos[G.Ops[K]] = K;
-  std::string Key = G.Recurrence ? "R:" : "S:";
+  std::string Key = (Twine(RegionNo) + (G.Recurrence ? "R:" : "S:")).str();
   raw_string_ostream OS(Key);
   for (const Instruction *I : G.Ops) {
     OS << I->getOpcodeName() << '(';
@@ -191,16 +195,30 @@ static std::string sliceKey(const Group &G, const Loop *L) {
         OS << ',';
       First = false;
       auto It = Pos.find(V);
-      if (It != Pos.end())
+      if (It != Pos.end()) {
         OS << '#' << It->second;
-      else if (auto *C = dyn_cast<ConstantInt>(V))
+        continue;
+      }
+      if (auto *C = dyn_cast<ConstantInt>(V)) {
         OS << 'c' << C->getValue();
-      else if (isa<Constant>(V))
-        OS << "const";
-      else if (auto *P = dyn_cast<PHINode>(V);
-               P && is_contained(G.CarriedPhis, P))
-        OS << "phi";
-      else if (isa<Argument>(V))
+        continue;
+      }
+      if (auto *C = dyn_cast<Constant>(V)) {
+        OS << "const<";
+        C->print(OS, /*IsForDebug=*/false);
+        OS << '>';
+        continue;
+      }
+      if (auto *P = dyn_cast<PHINode>(V);
+          P && is_contained(G.CarriedPhis, P)) {
+        // The value the phi carries: the latch operation's position and the
+        // distance (a phi of a phi is never joined, so 1).
+        Value *Latch = P->getIncomingValueForBlock(P->getParent());
+        auto LIt = Pos.find(Latch);
+        OS << "phi@#" << (LIt != Pos.end() ? LIt->second : ~0u) << "/d1";
+        continue;
+      }
+      if (isa<Argument>(V))
         OS << "arg";
       else if (isa<LoadInst>(V))
         OS << "load";
@@ -208,6 +226,7 @@ static std::string sliceKey(const Group &G, const Loop *L) {
         OS << "invariant";
       else
         OS << "inst";
+      OS << ":in" << InNo.try_emplace(V, InNo.size()).first->second;
     }
     OS << ");";
   }
@@ -221,9 +240,11 @@ static std::string sliceKey(const Group &G, const Loop *L) {
 /// phis, kept in vector form), and the use-def connected slices of the
 /// candidates outside recurrences. Operations of a recurrence that has a member
 /// out of scope are not candidates, so no transfer lands on a cycle.
-/// \p Classes numbers the slice classes of the function.
+/// \p Classes numbers the slice classes of the function; \p RegionNo keeps the
+/// classes of different regions apart.
 static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
-                                        StringMap<unsigned> &Classes) {
+                                        StringMap<unsigned> &Classes,
+                                        unsigned RegionNo) {
   RegionGraph RG = buildRegionGraph(BB, L);
   unsigned N = RG.Insts.size();
   SmallVector<bool, 32> InScope(N, false);
@@ -290,9 +311,9 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
   }
 
   // The phis of a recurrence stay in vector form: every phi that closes the
-  // cycle joins its group. If such a phi has a user outside the group the
-  // value would have to leave the vector domain on the cycle, so the
-  // recurrence is not a group at all.
+  // cycle joins its group. If such a phi is also read outside the group the
+  // recurrence is not a group at all: a conservative v1 choice (a lane-0 read
+  // of the vector phi would be off the cycle, but it is not implemented).
   SmallVector<bool, 4> Drop(Groups.size(), false);
   if (L)
     for (PHINode &Phi : BB.phis()) {
@@ -340,7 +361,7 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
         Grp.LiveOuts.push_back(I);
     }
     Grp.SliceClass =
-        Classes.try_emplace(sliceKey(Grp, L), Classes.size()).first->second;
+        Classes.try_emplace(sliceKey(Grp, L, RegionNo), Classes.size()).first->second;
     LLVM_DEBUG({
       dbgs() << "savio: group of " << Grp.Ops.size() << " ops ("
              << (Grp.Recurrence ? "recurrence" : "slice") << ", class "
@@ -360,12 +381,13 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
 SmallVector<Region, 4> savio::formRegions(Function &F, LoopInfo &LI) {
   SmallVector<Region, 4> Regions;
   StringMap<unsigned> Classes;
+  unsigned RegionNo = 0;
   for (BasicBlock &BB : F) {
     Loop *L = LI.getLoopFor(&BB);
     // v1: innermost single-block loops, and blocks outside any loop.
     if (L && !(L->isInnermost() && L->getNumBlocks() == 1))
       continue;
-    SmallVector<Group, 4> Groups = formGroups(BB, L, Classes);
+    SmallVector<Group, 4> Groups = formGroups(BB, L, Classes, RegionNo++);
     if (!Groups.empty())
       Regions.push_back({&BB, L, std::move(Groups)});
   }

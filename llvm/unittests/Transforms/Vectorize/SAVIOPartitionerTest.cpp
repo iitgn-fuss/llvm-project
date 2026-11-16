@@ -14,6 +14,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 #include "gtest/gtest.h"
 
@@ -346,6 +347,275 @@ TEST_F(SAVIOClassifyInputTest, SliceClassDiffersByOpcodeOrConstant) {
   EXPECT_EQ(R.Groups[0].SliceClass, R.Groups[1].SliceClass);
   EXPECT_EQ(R.Groups[0].SliceClass, R.Groups[3].SliceClass);
   EXPECT_NE(R.Groups[0].SliceClass, R.Groups[2].SliceClass);
+}
+
+TEST_F(SAVIOClassifyInputTest, SliceClassDiffersByOpcode) {
+  // Same shape, but the second slice divides instead of taking the remainder.
+  Function *F = parse(R"(
+    define void @f(ptr %o, i32 %a, i32 %b) {
+      %x = urem i32 %a, %b
+      %y = udiv i32 %a, %b
+      store i32 %x, ptr %o
+      %q = getelementptr i32, ptr %o, i64 1
+      store i32 %y, ptr %q
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  ASSERT_EQ(Regions[0].Groups.size(), 2u);
+  EXPECT_NE(Regions[0].Groups[0].SliceClass, Regions[0].Groups[1].SliceClass);
+}
+
+TEST_F(SAVIOClassifyInputTest, SliceClassInputIdentity) {
+  // mul x,x differs from mul x,y; mul y,y equals mul x,x.
+  Function *F = parse(R"(
+    define void @f(ptr %o, i32 %x, i32 %y) {
+      %g0 = mul i32 %x, %x
+      %g1 = mul i32 %x, %y
+      %g2 = mul i32 %y, %y
+      store i32 %g0, ptr %o
+      %q1 = getelementptr i32, ptr %o, i64 1
+      store i32 %g1, ptr %q1
+      %q2 = getelementptr i32, ptr %o, i64 2
+      store i32 %g2, ptr %q2
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  const Region &R = Regions[0];
+  ASSERT_EQ(R.Groups.size(), 3u);
+  EXPECT_NE(R.Groups[0].SliceClass, R.Groups[1].SliceClass);
+  EXPECT_EQ(R.Groups[0].SliceClass, R.Groups[2].SliceClass);
+}
+
+TEST_F(SAVIOClassifyInputTest, SliceClassDiffersAcrossRegions) {
+  // Two identical loops: their slices are not instances of each other.
+  Function *F = parse(R"(
+    define void @f(ptr %b, ptr %c, i64 %n) {
+    entry:
+      br label %l1
+    l1:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %l1 ]
+      %pb = getelementptr inbounds i32, ptr %b, i64 %i
+      %v = load i32, ptr %pb
+      %m = mul i32 %v, 3
+      store i32 %m, ptr %pb
+      %i.next = add nuw i64 %i, 1
+      %cmp = icmp ult i64 %i.next, %n
+      br i1 %cmp, label %l1, label %mid
+    mid:
+      br label %l2
+    l2:
+      %j = phi i64 [ 0, %mid ], [ %j.next, %l2 ]
+      %pc = getelementptr inbounds i32, ptr %c, i64 %j
+      %w = load i32, ptr %pc
+      %k = mul i32 %w, 3
+      store i32 %k, ptr %pc
+      %j.next = add nuw i64 %j, 1
+      %cmp2 = icmp ult i64 %j.next, %n
+      br i1 %cmp2, label %l2, label %exit
+    exit:
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 2u);
+  ASSERT_EQ(Regions[0].Groups.size(), 1u);
+  ASSERT_EQ(Regions[1].Groups.size(), 1u);
+  EXPECT_NE(Regions[0].Groups[0].SliceClass, Regions[1].Groups[0].SliceClass);
+}
+
+TEST_F(SAVIOClassifyInputTest, RecurrenceAllInScope) {
+  // h = (h ^ v) * 5: every member in scope, one phi: one Recurrence group.
+  Function *F = parse(R"(
+    declare i32 @llvm.fshl.i32(i32, i32, i32)
+    define i32 @f(ptr %b, ptr %p, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %h = phi i32 [ 1, %entry ], [ %hn, %loop ]
+      %pb = getelementptr inbounds i32, ptr %b, i64 %i
+      %v = load i32, ptr %pb
+      %x = xor i32 %h, %v
+      %hn = mul i32 %x, 5
+      %i.next = add nuw i64 %i, 1
+      %cmp = icmp ult i64 %i.next, %n
+      br i1 %cmp, label %loop, label %exit
+    exit:
+      ret i32 %hn
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  ASSERT_EQ(Regions[0].Groups.size(), 1u);
+  const Group &G = Regions[0].Groups[0];
+  EXPECT_TRUE(G.Recurrence);
+  EXPECT_EQ(G.Ops.size(), 2u);
+  ASSERT_EQ(G.CarriedPhis.size(), 1u);
+  EXPECT_EQ(G.CarriedPhis[0]->getName(), "h");
+}
+
+TEST_F(SAVIOClassifyInputTest, RecurrenceThroughPhiOfPhiDropped) {
+  // a takes b's latch value, b takes x: x reads a two iterations back. The
+  // phi of a phi is not joined, so the recurrence is not a group.
+  Function *F = parse(R"(
+    declare i32 @llvm.fshl.i32(i32, i32, i32)
+    define i32 @f(ptr %b, ptr %p, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %a = phi i32 [ 1, %entry ], [ %b2, %loop ]
+      %b2 = phi i32 [ 2, %entry ], [ %x, %loop ]
+      %pb = getelementptr inbounds i32, ptr %b, i64 %i
+      %v = load i32, ptr %pb
+      %x = add i32 %a, %v
+      %i.next = add nuw i64 %i, 1
+      %cmp = icmp ult i64 %i.next, %n
+      br i1 %cmp, label %loop, label %exit
+    exit:
+      ret i32 %x
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  EXPECT_TRUE(Regions.empty());
+}
+
+TEST_F(SAVIOClassifyInputTest, RecurrenceWithOutsideReaderOfPhiDropped) {
+  // The phi h is read by the recurrence and also by a store outside it: the
+  // recurrence is dropped (conservative v1 choice), no group at all.
+  Function *F = parse(R"(
+    declare i32 @llvm.fshl.i32(i32, i32, i32)
+    define i32 @f(ptr %b, ptr %p, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %h = phi i32 [ 1, %entry ], [ %hn, %loop ]
+      %pb = getelementptr inbounds i32, ptr %b, i64 %i
+      %v = load i32, ptr %pb
+      store i32 %h, ptr %p
+      %x = xor i32 %h, %v
+      %hn = mul i32 %x, 5
+      %i.next = add nuw i64 %i, 1
+      %cmp = icmp ult i64 %i.next, %n
+      br i1 %cmp, label %loop, label %exit
+    exit:
+      ret i32 %hn
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  EXPECT_TRUE(Regions.empty());
+}
+
+TEST_F(SAVIOClassifyInputTest, RecurrenceWithOutOfScopeMemberNextToSlice) {
+  // acc = fshl(acc ^ (v * 7), 13) * 5: the recurrence has an out-of-scope
+  // member (fshl), so none of its operations is a candidate; the feeder v * 7
+  // is a slice off the cycle and survives.
+  Function *F = parse(R"(
+    declare i32 @llvm.fshl.i32(i32, i32, i32)
+    define i32 @f(ptr %b, ptr %p, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %acc = phi i32 [ 0, %entry ], [ %an, %loop ]
+      %pb = getelementptr inbounds i32, ptr %b, i64 %i
+      %v = load i32, ptr %pb
+      %m = mul i32 %v, 7
+      %s = xor i32 %acc, %m
+      %r = call i32 @llvm.fshl.i32(i32 %s, i32 %s, i32 13)
+      %an = mul i32 %r, 5
+      %i.next = add nuw i64 %i, 1
+      %cmp = icmp ult i64 %i.next, %n
+      br i1 %cmp, label %loop, label %exit
+    exit:
+      ret i32 %an
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  ASSERT_EQ(Regions[0].Groups.size(), 1u);
+  const Group &G = Regions[0].Groups[0];
+  EXPECT_FALSE(G.Recurrence);
+  EXPECT_TRUE(G.CarriedPhis.empty());
+  ASSERT_EQ(G.Ops.size(), 1u);
+  EXPECT_EQ(G.Ops[0]->getName(), "m");
+}
+
+TEST_F(SAVIOClassifyInputTest, PromotedLatchOnNonJoinedPhiCostsTransfers) {
+  // acc = fshl(acc, 5) ^ v with the xor Singleton Vectorized by hand and its
+  // phi not joined: GprToVec (rot) and VecToGpr (xor) lie on the cycle, so T
+  // goes from fshl + xor = 2 to 1 + 1 + 1 + 1 = 4 (the Part 1 numbers).
+  Function *F = parse(R"(
+    declare i32 @llvm.fshl.i32(i32, i32, i32)
+    define i32 @f(ptr %b, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %acc = phi i32 [ 0, %entry ], [ %x, %loop ]
+      %pb = getelementptr inbounds i32, ptr %b, i64 %i
+      %v = load i32, ptr %pb
+      %rot = call i32 @llvm.fshl.i32(i32 %acc, i32 %acc, i32 5)
+      %x = xor i32 %rot, %v
+      %i.next = add nuw i64 %i, 1
+      %cmp = icmp ult i64 %i.next, %n
+      br i1 %cmp, label %loop, label %exit
+    exit:
+      ret i32 %x
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  BasicBlock *BB = find(*F, "x")->getParent();
+  Loop *L = LI.getLoopFor(BB);
+  ASSERT_TRUE(L);
+  SmallString<128> Root(SAVIO_TEST_INPUTS);
+  sys::path::append(Root, "port-info");
+  auto PDOrErr = PortDescription::load(Root, "AArch64", "test2s1v-wide");
+  ASSERT_TRUE(!!PDOrErr) << toString(PDOrErr.takeError());
+  Region R;
+  R.BB = BB;
+  R.L = L;
+  Group G;
+  Instruction *X = find(*F, "x");
+  G.Ops.push_back(X);
+  G.Inputs.push_back(&X->getOperandUse(0));
+  G.Inputs.push_back(&X->getOperandUse(1));
+  G.LiveOuts.push_back(X);
+  R.Groups.push_back(G);
+  auto Fallback = [](const Instruction &) {
+    OpCost C;
+    C.Latency = 1;
+    C.Uops = 1;
+    return C;
+  };
+  bool Saved = SAVIOForce;
+  SAVIOForce = true;
+  Decision D = decide(R, **PDOrErr, Fallback, 0.05);
+  SAVIOForce = Saved;
+  ASSERT_EQ(D.Promoted.size(), 1u);
+  EXPECT_DOUBLE_EQ(D.Before.t(), 2.0);
+  EXPECT_DOUBLE_EQ(D.After.t(), 4.0);
+  EXPECT_EQ(D.After.limiting(), Bound::Recurrence);
 }
 
 } // namespace

@@ -5,6 +5,7 @@
 ; test used to force exactly that, T 2.00 -> 4.00 in Part 1).
 ; CHECK-NOT: llvm.savio.sv
 ; CHECK: xor i32
+; CHECK-NOT: llvm.savio.sv
 target triple = "arm64-apple-macos"
 
 declare i32 @llvm.fshl.i32(i32, i32, i32)
