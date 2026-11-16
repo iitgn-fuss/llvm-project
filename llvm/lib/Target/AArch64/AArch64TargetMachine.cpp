@@ -258,6 +258,7 @@ LLVMInitializeAArch64Target() {
   initializeAArch64ConditionOptimizerLegacyPass(PR);
   initializeAArch64DeadRegisterDefinitionsLegacyPass(PR);
   initializeAArch64ExpandPseudoLegacyPass(PR);
+  initializeAArch64SAVIOExpandLegacyPass(PR);
   initializeAArch64LoadStoreOptLegacyPass(PR);
   initializeAArch64MIPeepholeOptLegacyPass(PR);
   initializeAArch64SIMDInstrOptLegacyPass(PR);
@@ -865,6 +866,10 @@ bool AArch64PassConfig::addILPOpts() {
 }
 
 void AArch64PassConfig::addPreRegAlloc() {
+  // Expand the llvm.savio.sv.* pseudos (SSA form). Present at every opt level:
+  // the pseudos exist whenever the intrinsics are selected.
+  addPass(createAArch64SAVIOExpandPass());
+
   if (TM->getOptLevel() == CodeGenOptLevel::None)
     addPass(createMachineSMEABIPass(CodeGenOptLevel::None));
 

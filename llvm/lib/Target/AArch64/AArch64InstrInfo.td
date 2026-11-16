@@ -11988,6 +11988,7 @@ let Predicates = [HasTEV] in {
 }
 
 include "AArch64InstrAtomics.td"
+include "AArch64SAVIOInstrInfo.td"
 include "AArch64SVEInstrInfo.td"
 include "AArch64SMEInstrInfo.td"
 include "AArch64InstrGISel.td"

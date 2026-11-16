@@ -45,6 +45,7 @@ class InstructionSelector;
 class ModulePass;
 
 FunctionPass *createAArch64DeadRegisterDefinitions();
+FunctionPass *createAArch64SAVIOExpandPass();
 FunctionPass *createAArch64RedundantCopyEliminationPass();
 FunctionPass *createAArch64RedundantCondBranchPass();
 FunctionPass *createAArch64CondBrTuning();
@@ -177,6 +178,7 @@ void initializeAArch64ConditionalComparesLegacyPass(PassRegistry &);
 void initializeAArch64DAGToDAGISelLegacyPass(PassRegistry &);
 void initializeAArch64DeadRegisterDefinitionsLegacyPass(PassRegistry &);
 void initializeAArch64ExpandPseudoLegacyPass(PassRegistry &);
+void initializeAArch64SAVIOExpandLegacyPass(PassRegistry &);
 void initializeAArch64LoadStoreOptLegacyPass(PassRegistry &);
 void initializeAArch64LowerHomogeneousPrologEpilogLegacyPass(PassRegistry &);
 void initializeAArch64CodeLayoutOptPass(PassRegistry &);
@@ -287,6 +289,13 @@ public:
 
 class AArch64DeadRegisterDefinitionsPass
     : public OptionalPassInfoMixin<AArch64DeadRegisterDefinitionsPass> {
+public:
+  PreservedAnalyses run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM);
+};
+
+class AArch64SAVIOExpandPass
+    : public OptionalPassInfoMixin<AArch64SAVIOExpandPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);

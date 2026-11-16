@@ -9,6 +9,7 @@
 #include "llvm/Transforms/Vectorize/SAVIO/PortDescription.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/IOSandbox.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -99,6 +100,9 @@ std::string llvm::savio::archDirFor(const Triple &T) {
 
 Expected<std::unique_ptr<PortDescription>>
 PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
+  // Reading the port-info files from inside the optimizer is intended (clang
+  // enables the IO sandbox around the pipeline).
+  auto BypassSandbox = sys::sandbox::scopedDisable();
   SmallString<128> Dir(Root);
   sys::path::append(Dir, Arch, CPU);
   if (!sys::fs::is_directory(Dir))
