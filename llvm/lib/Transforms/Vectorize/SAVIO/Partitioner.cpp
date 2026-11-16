@@ -63,7 +63,7 @@ static bool isSimpleStoreOf(const User *U, const Value *V) {
 }
 
 /// True if the value of \p I reaches an address (a GEP operand or an inttoptr)
-/// through casts and phis: addresses must stay in GPRs, so such an operation
+/// through casts, phis and other in-scope operations: addresses must stay in GPRs, so such an operation
 /// is not a candidate.
 static bool reachesAddress(const Instruction &I) {
   SmallVector<const Instruction *, 8> Work{&I};
@@ -74,7 +74,7 @@ static bool reachesAddress(const Instruction &I) {
       if (isa<GetElementPtrInst>(U) || isa<IntToPtrInst>(U))
         return true;
       if (isa<SExtInst>(U) || isa<ZExtInst>(U) || isa<TruncInst>(U) ||
-          isa<PHINode>(U)) {
+          isa<PHINode>(U) || isCandidate(*cast<Instruction>(U))) {
         auto *UI = cast<Instruction>(U);
         if (Seen.insert(UI).second)
           Work.push_back(UI);

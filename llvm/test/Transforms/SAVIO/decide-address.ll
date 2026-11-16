@@ -2,7 +2,8 @@
 ; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -savio-force -pass-remarks=savio -debug-only=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=FORCE
 ; REQUIRES: asserts
 ; Addresses stay in GPRs: an index computation and an induction increment whose
-; phi feeds addressing are not candidates. Only %s (not feeding an address)
+; phi reaches addressing (directly, or only through the in-scope mul in @g) are
+; not candidates. Only %s (not feeding an address)
 ; forms a group, in @f; @g has no candidates at all and emits nothing.
 target triple = "arm64-apple-macos"
 
@@ -47,9 +48,6 @@ loop:
   %kx = zext i32 %k to i64
   %pa = getelementptr i32, ptr %a, i64 %kx
   store i32 0, ptr %pa
-  %ix = zext i32 %i to i64
-  %pi = getelementptr i32, ptr %a, i64 %ix
-  store i32 1, ptr %pi
   %i.next = add i32 %i, 1
   %cmp = icmp ult i32 %i.next, 1024
   br i1 %cmp, label %loop, label %exit
