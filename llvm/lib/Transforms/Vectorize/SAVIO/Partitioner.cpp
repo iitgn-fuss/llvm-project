@@ -220,11 +220,16 @@ InputKind savio::classifyInput(const Loop *L, const Group &G,
           return is_contained(G.Ops, dyn_cast<Instruction>(U));
         }))
       return InputKind::Free;
-  // In a loop the transfer of an invariant value is hoisted out of it.
-  if (L && L->isLoopInvariant(V))
+  // In a loop the transfer of an invariant value is hoisted to the
+  // preheader; without one it stays in the loop.
+  if (L && L->getLoopPreheader() && L->isLoopInvariant(V))
     return InputKind::Free;
-  if (isa<ExtractElementInst>(V))
-    return InputKind::LaneToLane0;
+  // A constant in-range lane of a fixed vector moves to lane 0 with a shuffle.
+  if (auto *EE = dyn_cast<ExtractElementInst>(V))
+    if (auto *VT = dyn_cast<FixedVectorType>(EE->getVectorOperand()->getType()))
+      if (auto *Idx = dyn_cast<ConstantInt>(EE->getIndexOperand()))
+        if (Idx->getValue().ult(VT->getNumElements()))
+          return InputKind::LaneToLane0;
   return InputKind::GprToVec;
 }
 

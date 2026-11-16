@@ -8,6 +8,7 @@
 
 #include "llvm/Transforms/Vectorize/SAVIO/SingletonVectorize.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
@@ -82,11 +83,10 @@ class Rewriter {
       // Invariant: the transfer is done once, in the preheader.
       B.SetInsertPoint(Preheader->getTerminator());
       Vec = insertLane0(V);
-    } else if (auto *EE = dyn_cast<ExtractElementInst>(V);
-               K == InputKind::LaneToLane0 && EE &&
-               isa<FixedVectorType>(EE->getVectorOperand()->getType()) &&
-               isa<ConstantInt>(EE->getIndexOperand())) {
-      // The lane moves to lane 0 with a shuffle.
+    } else if (K == InputKind::LaneToLane0) {
+      // The lane moves to lane 0 with a shuffle; classifyInput guarantees a
+      // constant in-range lane of a fixed vector.
+      auto *EE = cast<ExtractElementInst>(V);
       B.SetInsertPoint(Op);
       uint64_t Idx = cast<ConstantInt>(EE->getIndexOperand())->getZExtValue();
       int Mask[4] = {int(Idx), PoisonMaskElem, PoisonMaskElem, PoisonMaskElem};
@@ -168,11 +168,11 @@ public:
       Phi->replaceAllUsesWith(PoisonValue::get(Phi->getType()));
     for (Instruction *Op : G.Ops)
       Op->replaceAllUsesWith(PoisonValue::get(Op->getType()));
-    SmallVector<ExtractElementInst *, 2> Extracts;
+    SmallSetVector<ExtractElementInst *, 2> Extracts;
     for (Instruction *Op : G.Ops)
       for (Value *V : Op->operands())
         if (auto *EE = dyn_cast<ExtractElementInst>(V))
-          Extracts.push_back(EE);
+          Extracts.insert(EE);
     for (Instruction *Op : G.Ops)
       Op->eraseFromParent();
     for (PHINode *Phi : G.CarriedPhis)
