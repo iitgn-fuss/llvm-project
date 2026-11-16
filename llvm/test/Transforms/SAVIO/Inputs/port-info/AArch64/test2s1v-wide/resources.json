@@ -23,5 +23,5 @@
     "vec_callee_saved": 8
   },
   "source": "estimate",
-  "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+  "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
 }

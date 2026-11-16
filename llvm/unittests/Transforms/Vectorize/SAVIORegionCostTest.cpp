@@ -167,6 +167,20 @@ TEST_F(SAVIORegionCostTest, MaxRatioPicksWorstCycle) {
   EXPECT_DOUBLE_EQ(estimateRegion(N, *PD, true).TRec, 18.0);
 }
 
+TEST_F(SAVIORegionCostTest, OverlappingCyclesNeedSeveralSteps) {
+  // A chain 0 -> 1 -> 2 -> 3 of latency 9 each. Cycle P closes through all four
+  // nodes at distance 4 (36 / 4 = 9) and has the larger total latency, which
+  // the first search at lambda 0 finds; cycle Q, nodes 0 and 1 at distance 1
+  // (18 / 1 = 18), overlaps it and beats it, so a second step is needed.
+  SmallVector<CostNode> N;
+  add(N, "udiv i32", 4);
+  for (unsigned I = 1; I != 4; ++I)
+    N[I].Preds.push_back(I - 1);
+  N[0].Carried.push_back({3, 4}); // P
+  N[0].Carried.push_back({1, 1}); // Q
+  EXPECT_DOUBLE_EQ(estimateRegion(N, *PD, true).TRec, 18.0);
+}
+
 TEST_F(SAVIORegionCostTest, LimitingTies) {
   // Single scalar add: TRes 0.5, TDisp 0.25, TRec 1 (latency) outside a loop.
   SmallVector<CostNode> N;

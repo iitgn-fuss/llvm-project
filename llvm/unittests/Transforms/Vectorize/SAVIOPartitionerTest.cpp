@@ -162,4 +162,51 @@ TEST_F(SAVIOClassifyInputTest, InvariantWithoutPreheader) {
   EXPECT_EQ(classifyInput(L, G, F->getArg(0)), InputKind::GprToVec);
 }
 
+TEST_F(SAVIOClassifyInputTest, RegionGraphPhiOfPhi) {
+  // %a takes the latch value of %b, which takes %x: %x reaches %a's user (%x
+  // itself) two iterations later.
+  Function *F = parse(R"(
+    define i32 @f(i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %a = phi i32 [ 1, %entry ], [ %b, %loop ]
+      %b = phi i32 [ 2, %entry ], [ %x, %loop ]
+      %x = add i32 %a, 3
+      %i.next = add i64 %i, 1
+      %c = icmp ult i64 %i.next, %n
+      br i1 %c, label %loop, label %exit
+    exit:
+      ret i32 %x
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  BasicBlock *BB = find(*F, "x")->getParent();
+  Loop *L = LI.getLoopFor(BB);
+  ASSERT_TRUE(L);
+  RegionGraph G = buildRegionGraph(*BB, L);
+  unsigned X = G.Index.lookup(find(*F, "x"));
+  ASSERT_EQ(G.Carried[X].size(), 1u);
+  EXPECT_EQ(G.Carried[X][0], std::make_pair(X, 2u));
+  // %i.next reads %i one iteration back; the branch is a node in a loop.
+  unsigned IN = G.Index.lookup(find(*F, "i.next"));
+  ASSERT_EQ(G.Carried[IN].size(), 1u);
+  EXPECT_EQ(G.Carried[IN][0], std::make_pair(IN, 1u));
+  EXPECT_EQ(G.Insts.back(), BB->getTerminator());
+}
+
+TEST_F(SAVIOClassifyInputTest, RegionGraphNoTerminatorOutsideLoop) {
+  Function *F = parse(R"(
+    define i32 @f(i32 %a) {
+      %g = add i32 %a, 7
+      ret i32 %g
+    })");
+  ASSERT_TRUE(F);
+  RegionGraph G = buildRegionGraph(F->getEntryBlock(), nullptr);
+  ASSERT_EQ(G.Insts.size(), 1u);
+  EXPECT_EQ(G.Insts[0], find(*F, "g"));
+}
+
 } // namespace

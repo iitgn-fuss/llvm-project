@@ -250,7 +250,9 @@ bool savio::liveOutNeedsGpr(const Group &G, const Instruction &I) {
 RegionGraph savio::buildRegionGraph(BasicBlock &BB, Loop *L) {
   RegionGraph G;
   for (Instruction &I : BB)
-    if (!isa<PHINode>(I)) {
+    // Outside a loop the terminator is not a node; in a loop region the
+    // terminator is the loop-control branch.
+    if (!isa<PHINode>(I) && (L || !I.isTerminator())) {
       G.Index[&I] = G.Insts.size();
       G.Insts.push_back(&I);
     }

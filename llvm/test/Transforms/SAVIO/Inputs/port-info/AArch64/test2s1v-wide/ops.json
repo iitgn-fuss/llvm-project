@@ -11,7 +11,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_VADD",
@@ -24,7 +24,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_SUB",
@@ -37,7 +37,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_VSUB",
@@ -50,7 +50,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_MUL",
@@ -63,7 +63,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_VMUL",
@@ -76,7 +76,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_AND",
@@ -89,7 +89,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_VAND",
@@ -102,7 +102,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_OR",
@@ -115,7 +115,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_VOR",
@@ -128,7 +128,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_XOR",
@@ -141,7 +141,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_VXOR",
@@ -154,7 +154,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_SHL",
@@ -167,7 +167,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_VSHL",
@@ -180,7 +180,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_LSHR",
@@ -193,7 +193,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_VLSHR",
@@ -206,7 +206,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_ASHR",
@@ -219,7 +219,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_VASHR",
@@ -232,7 +232,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_UDIV",
@@ -245,7 +245,7 @@
       "latency": 9,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_MSUB",
@@ -258,7 +258,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_VUDIV_FP",
@@ -271,7 +271,7 @@
       "latency": 11,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_VUDIV_FIX",
@@ -284,7 +284,7 @@
       "latency": 3,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_GPR_TO_VEC",
@@ -297,7 +297,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_VEC_TO_GPR",
@@ -310,7 +310,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_LANE0",
@@ -323,7 +323,7 @@
       "latency": 1,
       "uops": 1,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_LD_VEC",
@@ -331,7 +331,7 @@
       "latency": 0,
       "uops": 0,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     },
     {
       "opcode": "T_ST_VEC",
@@ -339,7 +339,7 @@
       "latency": 0,
       "uops": 0,
       "source": "estimate",
-      "evidence": "synthetic fixture machine from the SAVIO design spec worked example"
+      "evidence": "test variant of the fixture machine test2s1v with dispatch width 64, so the dispatch bound never limits and tests isolate the resource and recurrence bounds; numbers otherwise as in test2s1v"
     }
   ]
 }

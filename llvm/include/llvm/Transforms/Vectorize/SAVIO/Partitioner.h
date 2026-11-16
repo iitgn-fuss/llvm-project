@@ -82,10 +82,10 @@ bool liveOutNeedsGpr(const Group &G, const Instruction &I);
 SmallVector<Region, 4> formRegions(Function &F, LoopInfo &LI);
 
 /// Dependences between the instructions of a region's block, independent of
-/// costing. Every non-phi instruction (the terminator and the loop compare
-/// included) is a node, in program order, so node indices are topologically
-/// ordered for same-iteration edges. Header phis are not nodes: a phi becomes
-/// carried edges from its latch value to its users.
+/// costing. Every non-phi instruction is a node, in program order, so node
+/// indices are topologically ordered for same-iteration edges; the terminator
+/// (the loop-control branch) is a node only in a loop region. Header phis are
+/// not nodes: a phi becomes carried edges from its latch value to its users.
 struct RegionGraph {
   SmallVector<const Instruction *, 32> Insts;
   DenseMap<const Instruction *, unsigned> Index;
