@@ -72,7 +72,9 @@ struct Decision {
   RegionEstimate Before, After;
   /// Indices into Region::Groups (of the region as it is now).
   SmallVector<unsigned, 4> Promoted;
-  /// Extra unroll factor applied before Promoted (Task 5); 1 for now.
+  /// Unroll factor to apply before the instances are moved; with more than 1,
+  /// Promoted is empty and MovedPerClass counts instances of the unrolled
+  /// loop. Before/After are per original iteration either way.
   unsigned Unroll = 1;
   /// Classes with at least one instance moved.
   SmallVector<ClassMove, 2> MovedPerClass;
@@ -129,8 +131,12 @@ using FallbackCostFn = function_ref<OpCost(const Instruction &)>;
 /// instructions that SAVIO does not model (loads, stores, calls, other types);
 /// they carry latency into the recurrence bound and micro-ops into dispatch.
 /// \p Margin is the relative improvement of T a step must reach to be taken.
+/// With \p CanUnroll the loop of \p R may be virtually unrolled to reach a
+/// better fraction (the caller has checked that it can be unrolled for real);
+/// the result then has Unroll > 1 and no Promoted: unroll, re-form the
+/// regions, and decide again on the unrolled loop.
 Decision decide(const Region &R, const PortDescription &PD,
-                FallbackCostFn Fallback, double Margin);
+                FallbackCostFn Fallback, double Margin, bool CanUnroll = false);
 
 } // end namespace savio
 } // end namespace llvm

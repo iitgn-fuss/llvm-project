@@ -8,11 +8,14 @@
 
 #include "llvm/Transforms/Vectorize/SAVIO/SAVIOPass.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
+#include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/DiagnosticInfo.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/LLVMContext.h"
@@ -22,6 +25,10 @@
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Transforms/Utils/LoopSimplify.h"
+#include "llvm/Transforms/Utils/LoopUtils.h"
+#include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
+#include "llvm/Transforms/Utils/UnrollLoop.h"
 #include "llvm/Transforms/Vectorize/SAVIO/Partitioner.h"
 #include "llvm/Transforms/Vectorize/SAVIO/PortDescription.h"
 #include "llvm/Transforms/Vectorize/SAVIO/SingletonVectorize.h"
@@ -44,6 +51,11 @@ cl::opt<std::string>
 cl::opt<std::string>
     llvm::SAVIOCPU("savio-cpu", cl::init(""), cl::Hidden,
                    cl::desc("Override the CPU used to select SAVIO port-info"));
+
+static cl::opt<bool> SAVIONoUnroll(
+    "savio-no-unroll", cl::init(false), cl::Hidden,
+    cl::desc("Never unroll a loop to reach a fraction (decide on the loop as "
+             "it is)"));
 
 static cl::opt<double> SAVIOColdFraction(
     "savio-cold-fraction", cl::init(0.01), cl::Hidden,
@@ -90,6 +102,62 @@ LoadResult loadPortInfo(StringRef Root, StringRef Arch, StringRef CPU) {
   Cache.try_emplace(Key, R);
   R.First = true;
   return R;
+}
+
+/// Most instructions in a loop body SAVIO will unroll.
+constexpr unsigned MaxUnrollBodySize = 64;
+
+/// True if SAVIO may unroll the single-block innermost loop \p L: a small
+/// body, no explicit unroll request or prohibition in its metadata, and a trip
+/// count ScalarEvolution can express (a loop that runs at most 8 times is left
+/// alone: unrolling it would be full unrolling).
+bool mayUnroll(const Loop &L, ScalarEvolution &SE) {
+  if (!L.isInnermost() || L.getNumBlocks() != 1 ||
+      L.getHeader()->size() > MaxUnrollBodySize)
+    return false;
+  for (StringRef Name :
+       {"llvm.loop.unroll.disable", "llvm.loop.unroll.runtime.disable",
+        "llvm.loop.unroll.full", "llvm.loop.unroll.enable"})
+    if (getBooleanLoopAttribute(&L, Name))
+      return false;
+  if (findStringMetadataForLoop(&L, "llvm.loop.unroll.count"))
+    return false;
+  if (!SE.hasLoopInvariantBackedgeTakenCount(&L))
+    return false;
+  unsigned TC = SE.getSmallConstantTripCount(&L);
+  return TC == 0 || TC > 8;
+}
+
+/// Unrolls \p L by \p Count with a remainder loop that keeps any trip count
+/// correct. False, with the IR unchanged apart from the loop-simplify and LCSSA
+/// canonicalization, if the loop cannot be unrolled.
+bool unrollWithRemainder(Loop *L, unsigned Count, LoopInfo &LI,
+                         ScalarEvolution &SE, DominatorTree &DT,
+                         AssumptionCache &AC, TargetTransformInfo &TTI,
+                         OptimizationRemarkEmitter &ORE) {
+  // LCSSA first: simplifyLoop below preserves it, so it must hold. The unroller
+  // keeps LCSSA only of a nest that has it: the whole nest.
+  Loop *Outermost = L;
+  while (Outermost->getParentLoop())
+    Outermost = Outermost->getParentLoop();
+  if (!Outermost->isRecursivelyLCSSAForm(DT, LI))
+    formLCSSARecursively(*Outermost, DT, &LI, &SE);
+  if (!L->isLoopSimplifyForm())
+    simplifyLoop(L, &DT, &LI, &SE, &AC, nullptr, /*PreserveLCSSA=*/true);
+  if (!L->isLoopSimplifyForm())
+    return false;
+  UnrollLoopOptions ULO;
+  ULO.Count = Count;
+  ULO.Force = false; // Never without the remainder loop.
+  ULO.Runtime = true;
+  ULO.AllowExpensiveTripCount = false;
+  ULO.UnrollRemainder = false;
+  ULO.ForgetAllSCEV = false;
+  ULO.Heart = getLoopConvergenceHeart(L);
+  ULO.SCEVExpansionBudget = SCEVCheapExpansionBudget;
+  LoopUnrollResult Res = UnrollLoop(L, ULO, &LI, &SE, &DT, &AC, &TTI, &ORE,
+                                    /*PreserveLCSSA=*/true);
+  return Res == LoopUnrollResult::PartiallyUnrolled;
 }
 
 } // namespace
@@ -173,13 +241,11 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
     return C;
   };
 
+  // The unroller needs these; fetched only if a loop is a candidate.
   bool Changed = false;
-  for (Region &Reg : formRegions(F, LI)) {
-    if (BFI.getBlockFreq(Reg.BB).getFrequency() <
-        SAVIOColdFraction * EntryFreq)
-      continue;
-    Decision D = decide(Reg, *R.PD, Fallback, SAVIOMargin);
-    std::string Before = formatv("{0:F2}", D.Before.t()).str();
+  auto Apply = [&](Region &Reg, const Decision &D, unsigned UnrolledBy) {
+    // T per original iteration: the unrolled loop's T covers UnrolledBy of them.
+    std::string Before = formatv("{0:F2}", D.Before.t() / UnrolledBy).str();
     if (D.Promoted.empty()) {
       ORE.emit([&] {
         return OptimizationRemarkMissed(DEBUG_TYPE, "NotProfitable",
@@ -187,9 +253,9 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
                << "T " << Before << " ("
                << BoundName(D.Before.limiting()) << ")";
       });
-      continue;
+      return;
     }
-    std::string After = formatv("{0:F2}", D.After.t()).str();
+    std::string After = formatv("{0:F2}", D.After.t() / UnrolledBy).str();
     for (unsigned G : D.Promoted) {
       unsigned Cls = Reg.Groups[G].SliceClass, K = 0, U = 0;
       for (const ClassMove &M : D.MovedPerClass)
@@ -198,18 +264,56 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
           U = M.U;
         }
       ORE.emit([&] {
-        return OptimizationRemark(DEBUG_TYPE, "Promoted",
-                                  Reg.Groups[G].Ops[0])
-               << "T " << Before << " -> " << After << " ("
-               << BoundName(D.Before.limiting()) << "), " << utostr(K) << "/"
-               << utostr(U) << " of slice " << utostr(Cls);
+        OptimizationRemark Rm(DEBUG_TYPE, "Promoted", Reg.Groups[G].Ops[0]);
+        Rm << "T " << Before << " -> " << After << " ("
+           << BoundName(D.Before.limiting()) << "), " << utostr(K) << "/"
+           << utostr(U) << " of slice " << utostr(Cls);
+        if (UnrolledBy > 1)
+          Rm << ", unrolled by " << utostr(UnrolledBy);
+        return Rm;
       });
     }
     // The remarks above name operations the rewrite erases.
-    for (unsigned G : D.Promoted) {
+    for (unsigned G : D.Promoted)
       rewriteSingletonVectorize(Reg.Groups[G], Reg.L);
-      Changed = true;
+    Changed = true;
+  };
+
+  bool Forced = SAVIOForce || SAVIOForceCount >= 0 || SAVIONoUnroll;
+  for (Region &Reg : formRegions(F, LI)) {
+    if (BFI.getBlockFreq(Reg.BB).getFrequency() <
+        SAVIOColdFraction * EntryFreq)
+      continue;
+    // Unrolling is only for the cost-driven search; the force flags act on
+    // the region as it is.
+    ScalarEvolution *SE = nullptr;
+    bool CanUnroll = false;
+    if (!Forced && Reg.L) {
+      SE = &FAM.getResult<ScalarEvolutionAnalysis>(F);
+      CanUnroll = mayUnroll(*Reg.L, *SE);
     }
+    Decision D = decide(Reg, *R.PD, Fallback, SAVIOMargin, CanUnroll);
+    if (D.Unroll > 1) {
+      // Unroll to the decided factor, form the regions of the unrolled loop
+      // again and decide on it as it is now: its copies of a slice are
+      // instances of one class. If the loop cannot be unrolled, decide again
+      // without it.
+      auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+      auto &AC = FAM.getResult<AssumptionAnalysis>(F);
+      BasicBlock *Header = Reg.BB;
+      Changed = true;
+      if (unrollWithRemainder(Reg.L, D.Unroll, LI, *SE, DT, AC, TTI, ORE)) {
+        for (Region &New : formRegions(F, LI))
+          if (New.BB == Header) {
+            Apply(New, decide(New, *R.PD, Fallback, SAVIOMargin, false),
+                  D.Unroll);
+            break;
+          }
+        continue;
+      }
+      D = decide(Reg, *R.PD, Fallback, SAVIOMargin, false);
+    }
+    Apply(Reg, D, 1);
   }
   return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }

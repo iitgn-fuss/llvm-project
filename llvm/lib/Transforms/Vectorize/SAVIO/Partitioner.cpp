@@ -18,6 +18,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include <optional>
+#include <tuple>
 #include <string>
 #include <utility>
 
@@ -505,24 +506,41 @@ namespace {
 /// arithmetic, calls, compares, branches, other types) from the fallback, which
 /// gives it latency and micro-ops but no resource use. So a dependence through
 /// any instruction is kept, and T bounds the whole block.
+///
+/// The builder can also model the region unrolled \p Copies times without
+/// touching the IR ("virtual unroll"): the body is laid out Copies times, the
+/// carried edge of distance d from copy j goes to copy j-d (a same-iteration
+/// edge) or, past the first copy, wraps to the last copies with a distance in
+/// unrolled iterations; the loop-control branch and the compare that only
+/// feeds it appear once, in the last copy. Groups of a copy are separate
+/// instances (virtual group j * NumGroups + g), except a recurrence, which is
+/// one chain through all copies and keeps the virtual group g.
 class NodeBuilder {
   const Region &R;
   const RegionGraph &RG;
   const PortDescription &PD;
   FallbackCostFn Fallback;
-  ArrayRef<bool> Promoted;
+  ArrayRef<bool> Promoted; // Indexed by virtual group.
+  unsigned Copies;
+  unsigned N;  // Nodes of the region graph.
+  unsigned NG; // Groups of the region.
 
   SmallVector<CostNode, 32> Nodes;
-  DenseMap<const Instruction *, unsigned> NodeOf, OutNode;
-  DenseMap<const Instruction *, unsigned> GroupOf;
-  DenseMap<std::pair<unsigned, const Value *>, unsigned> InNode;
-  /// A loop-carried edge to add once all nodes exist: the value of Latch Dist
-  /// iterations earlier reaches node Dest. Through a phi kept in vector form
-  /// (Joined) it stays in the vector domain; otherwise it is the scalar value,
-  /// i.e. the VecToGpr node if the latch operation has one.
+  /// Node of each virtual instruction (copy * N + graph node), or None.
+  SmallVector<unsigned, 32> NodeOf, OutNode;
+  /// Group of each graph node, or None.
+  SmallVector<unsigned, 32> GroupOfNode;
+  SmallVector<bool, 32> ControlOnly;
+  DenseMap<std::tuple<unsigned, const Value *, unsigned>, unsigned> InNode;
+  static constexpr unsigned None = ~0u;
+  /// A loop-carried edge to add once all nodes exist: the value of virtual
+  /// instruction Latch, Dist unrolled iterations earlier, reaches node Dest.
+  /// Through a phi kept in vector form (Joined) it stays in the vector domain;
+  /// otherwise it is the scalar value, i.e. the VecToGpr node if the latch
+  /// operation has one.
   struct CarriedEdge {
     unsigned Dest;
-    const Instruction *Latch;
+    unsigned Latch;
     bool Joined;
     unsigned Dist;
   };
@@ -532,148 +550,49 @@ class NodeBuilder {
     std::optional<OpCost> C = PD.transferCost(K);
     if (!C)
       return false;
-    CostNode N;
-    N.Cost = *C;
-    N.Preds.assign(Preds.begin(), Preds.end());
+    CostNode Nd;
+    Nd.Cost = *C;
+    Nd.Preds.assign(Preds.begin(), Preds.end());
     Out = Nodes.size();
-    Nodes.push_back(std::move(N));
+    Nodes.push_back(std::move(Nd));
     return true;
   }
 
 public:
   NodeBuilder(const Region &R, const RegionGraph &RG, const PortDescription &PD,
-              FallbackCostFn Fallback, ArrayRef<bool> Promoted)
-      : R(R), RG(RG), PD(PD), Fallback(Fallback), Promoted(Promoted) {
-    for (unsigned G = 0; G != R.Groups.size(); ++G)
+              FallbackCostFn Fallback, ArrayRef<bool> Promoted,
+              unsigned Copies = 1)
+      : R(R), RG(RG), PD(PD), Fallback(Fallback), Promoted(Promoted),
+        Copies(Copies), N(RG.Insts.size()), NG(R.Groups.size()),
+        NodeOf(size_t(Copies) * N, None), OutNode(size_t(Copies) * N, None),
+        GroupOfNode(N, None), ControlOnly(N, false) {
+    for (unsigned G = 0; G != NG; ++G)
       for (Instruction *I : R.Groups[G].Ops)
-        GroupOf[I] = G;
+        GroupOfNode[RG.Index.lookup(I)] = G;
+    // In a loop, the terminator and what only feeds it (the exit test).
+    if (R.L)
+      for (unsigned I = 0; I != N; ++I) {
+        const Instruction *In = RG.Insts[I];
+        ControlOnly[I] = In->isTerminator() ||
+                         (!In->use_empty() &&
+                          all_of(In->users(), [](const User *U) {
+                            return cast<Instruction>(U)->isTerminator();
+                          }));
+      }
+  }
+
+  /// The virtual group of group \p G in copy \p J.
+  unsigned virtualGroup(unsigned G, unsigned J) const {
+    return R.Groups[G].Recurrence ? G : J * NG + G;
   }
 
   /// Fills the nodes; false if the assignment needs a cost the port
   /// description lacks.
   bool build() {
-    for (unsigned NI = 0; NI != RG.Insts.size(); ++NI) {
-      const Instruction &I = *RG.Insts[NI];
-      // The region graph holds one edge per operand defined in the block, in
-      // operand order: same-iteration in Preds, through a header phi in
-      // Carried.
-      unsigned PredCur = 0, CarriedCur = 0;
-      auto GIt = GroupOf.find(&I);
-      bool InGroup = GIt != GroupOf.end();
-      unsigned GIdx = InGroup ? GIt->second : 0;
-      bool P = InGroup && Promoted[GIdx];
-
-      CostNode N;
-      // Carried edges whose destination is this instruction, resolved below.
-      SmallVector<CarriedEdge, 2> OwnEdges;
-      for (const Use &U : I.operands()) {
-        const Value *V = U.get();
-        const Instruction *Latch = nullptr;
-        unsigned Dist = 1;
-        bool Joined = false;
-        const Instruction *Def = nullptr; // Operand defined in the block.
-        if (auto *Phi = dyn_cast<PHINode>(V)) {
-          // A loop phi closes a recurrence through this operand when its latch
-          // value is an instruction of the block: a carried edge.
-          if (RG.PhiLatch.count(Phi)) {
-            assert(CarriedCur < RG.Carried[NI].size() && "missing carried edge");
-            auto [LatchNode, D] = RG.Carried[NI][CarriedCur++];
-            Latch = RG.Insts[LatchNode];
-            Dist = D;
-            Joined = InGroup && is_contained(R.Groups[GIdx].CarriedPhis, Phi);
-          }
-        } else if (auto *OpI = dyn_cast<Instruction>(V)) {
-          if (RG.Index.count(OpI)) {
-            assert(PredCur < RG.Preds[NI].size() && "missing pred edge");
-            Def = RG.Insts[RG.Preds[NI][PredCur++]];
-            assert(Def == OpI && "region graph edge order differs");
-          }
-        }
-
-        if (Joined) {
-          OwnEdges.push_back({0, Latch, true, Dist});
-          continue;
-        }
-        // The operand's value in this instruction's domain: another
-        // instruction of the same group is read as is; anything else is the
-        // scalar value, i.e. through the VecToGpr node of a live-out.
-        bool SameGroup = Def && InGroup && GroupOf.count(Def) &&
-                         GroupOf.find(Def)->second == GIdx;
-        InputKind K = InputKind::Free;
-        if (P && !SameGroup)
-          K = classifyInput(R.L, R.Groups[GIdx], V);
-        if (P && !SameGroup && K != InputKind::Free) {
-          auto Key = std::make_pair(GIdx, V);
-          auto It = InNode.find(Key);
-          unsigned T;
-          if (It != InNode.end()) {
-            T = It->second;
-          } else {
-            SmallVector<unsigned, 1> TP;
-            if (Def)
-              TP.push_back(scalarNode(Def));
-            if (!addTransfer(K == InputKind::GprToVec
-                                 ? TransferKind::GprToVec
-                                 : TransferKind::LaneToLane0,
-                             TP, T))
-              return false;
-            InNode[Key] = T;
-            if (Latch)
-              Pending.push_back({T, Latch, false, Dist});
-          }
-          N.Preds.push_back(T);
-          continue;
-        }
-        if (Def)
-          N.Preds.push_back(SameGroup ? NodeOf[Def] : scalarNode(Def));
-        else if (Latch)
-          OwnEdges.push_back({0, Latch, false, Dist});
-      }
-
-      assert(PredCur == RG.Preds[NI].size() &&
-             CarriedCur == RG.Carried[NI].size() && "unconsumed graph edges");
-      std::optional<OpCost> C;
-      const ConcurrencyTable *Conc = nullptr;
-      if (InGroup) {
-        std::string Key;
-        if (P) {
-          bool Imm = isa<ConstantInt>(I.getOperand(1)) &&
-                     (I.getOpcode() == Instruction::Shl ||
-                      I.getOpcode() == Instruction::LShr ||
-                      I.getOpcode() == Instruction::AShr);
-          Key = ("sv." + Twine(I.getOpcodeName()) +
-                 (Imm ? ".imm v4i32" : " v4i32"))
-                    .str();
-        } else {
-          Key = (Twine(I.getOpcodeName()) + " i32").str();
-        }
-        C = PD.irOpCost(Key);
-        if (!C && P)
+    for (unsigned J = 0; J != Copies; ++J)
+      for (unsigned NI = 0; NI != N; ++NI)
+        if ((J + 1 == Copies || !ControlOnly[NI]) && !buildNode(J, NI))
           return false;
-        if (C && P)
-          Conc = PD.concurrency(Key);
-      }
-      N.Cost = C ? *C : Fallback(I);
-      N.Conc = Conc;
-      unsigned Me = Nodes.size();
-      Nodes.push_back(std::move(N));
-      NodeOf[&I] = Me;
-      for (CarriedEdge &E : OwnEdges) {
-        E.Dest = Me;
-        Pending.push_back(E);
-      }
-
-      // Live-out of a Singleton Vectorized group: back to a GPR unless every
-      // user outside the group is a store, which can store from the vector.
-      if (P && is_contained(R.Groups[GIdx].LiveOuts, &I)) {
-        if (liveOutNeedsGpr(R.Groups[GIdx], I)) {
-          unsigned T;
-          if (!addTransfer(TransferKind::VecToGpr, {Me}, T))
-            return false;
-          OutNode[&I] = T;
-        }
-      }
-    }
 
     for (const CarriedEdge &E : Pending) {
       unsigned Src = E.Joined ? NodeOf[E.Latch] : scalarNode(E.Latch);
@@ -685,11 +604,149 @@ public:
   ArrayRef<CostNode> nodes() const { return Nodes; }
 
 private:
-  /// The node producing the scalar value of \p I: its VecToGpr node if it is a
-  /// Singleton Vectorized live-out, else its own.
-  unsigned scalarNode(const Instruction *I) const {
-    auto It = OutNode.find(I);
-    return It != OutNode.end() ? It->second : NodeOf.lookup(I);
+  bool buildNode(unsigned J, unsigned NI) {
+    const Instruction &I = *RG.Insts[NI];
+    unsigned V = J * N + NI;
+    // The region graph holds one edge per operand defined in the block, in
+    // operand order: same-iteration in Preds, through a header phi in
+    // Carried.
+    unsigned PredCur = 0, CarriedCur = 0;
+    bool InGroup = GroupOfNode[NI] != None;
+    unsigned GIdx = InGroup ? GroupOfNode[NI] : 0;
+    unsigned VG = virtualGroup(GIdx, J);
+    bool P = InGroup && Promoted[VG];
+
+    CostNode Nd;
+    // Carried edges whose destination is this instruction, resolved below.
+    SmallVector<CarriedEdge, 2> OwnEdges;
+    for (const Use &U : I.operands()) {
+      const Value *Op = U.get();
+      unsigned DefV = None;       // Same-iteration producer, as a virtual id.
+      unsigned LatchV = None;     // Carried producer (a phi wrapped past copy 0).
+      unsigned Dist = 1, SrcCopy = 0;
+      bool Joined = false;
+      if (auto *Phi = dyn_cast<PHINode>(Op)) {
+        // A loop phi closes a recurrence through this operand when its latch
+        // value is an instruction of the block: a carried edge.
+        if (RG.PhiLatch.count(Phi)) {
+          assert(CarriedCur < RG.Carried[NI].size() && "missing carried edge");
+          auto [LatchNode, D] = RG.Carried[NI][CarriedCur++];
+          if (J >= D) {
+            // The value of an earlier copy of this unrolled iteration.
+            SrcCopy = J - D;
+            DefV = SrcCopy * N + LatchNode;
+            Op = RG.Insts[LatchNode];
+          } else {
+            SrcCopy = ((int(J) - int(D)) % int(Copies) + int(Copies)) %
+                      int(Copies);
+            LatchV = SrcCopy * N + LatchNode;
+            Dist = (D - J + Copies - 1) / Copies;
+            Joined = InGroup && is_contained(R.Groups[GIdx].CarriedPhis, Phi);
+          }
+        }
+      } else if (auto *OpI = dyn_cast<Instruction>(Op)) {
+        if (RG.Index.count(OpI)) {
+          assert(PredCur < RG.Preds[NI].size() && "missing pred edge");
+          unsigned DefNode = RG.Preds[NI][PredCur++];
+          assert(RG.Insts[DefNode] == OpI && "region graph edge order differs");
+          SrcCopy = J;
+          DefV = J * N + DefNode;
+        }
+      }
+
+      if (Joined) {
+        OwnEdges.push_back({0, LatchV, true, Dist});
+        continue;
+      }
+      // The operand's value in this instruction's domain: another
+      // instruction of the same group is read as is; anything else is the
+      // scalar value, i.e. through the VecToGpr node of a live-out.
+      bool SameGroup = false;
+      if (DefV != None && InGroup) {
+        unsigned DG = GroupOfNode[DefV % N];
+        SameGroup = DG != None && DG == GIdx &&
+                    virtualGroup(DG, DefV / N) == VG;
+      }
+      InputKind K = InputKind::Free;
+      if (P && !SameGroup)
+        K = classifyInput(R.L, R.Groups[GIdx], Op);
+      if (P && !SameGroup && K != InputKind::Free) {
+        auto Key = std::make_tuple(VG, Op, SrcCopy);
+        auto It = InNode.find(Key);
+        unsigned T;
+        if (It != InNode.end()) {
+          T = It->second;
+        } else {
+          SmallVector<unsigned, 1> TP;
+          if (DefV != None)
+            TP.push_back(scalarNode(DefV));
+          if (!addTransfer(K == InputKind::GprToVec ? TransferKind::GprToVec
+                                                    : TransferKind::LaneToLane0,
+                           TP, T))
+            return false;
+          InNode[Key] = T;
+          if (LatchV != None)
+            Pending.push_back({T, LatchV, false, Dist});
+        }
+        Nd.Preds.push_back(T);
+        continue;
+      }
+      if (DefV != None)
+        Nd.Preds.push_back(SameGroup ? NodeOf[DefV] : scalarNode(DefV));
+      else if (LatchV != None)
+        OwnEdges.push_back({0, LatchV, false, Dist});
+    }
+
+    assert(PredCur == RG.Preds[NI].size() &&
+           CarriedCur == RG.Carried[NI].size() && "unconsumed graph edges");
+    std::optional<OpCost> C;
+    const ConcurrencyTable *Conc = nullptr;
+    if (InGroup) {
+      std::string Key;
+      if (P) {
+        bool Imm = isa<ConstantInt>(I.getOperand(1)) &&
+                   (I.getOpcode() == Instruction::Shl ||
+                    I.getOpcode() == Instruction::LShr ||
+                    I.getOpcode() == Instruction::AShr);
+        Key = ("sv." + Twine(I.getOpcodeName()) +
+               (Imm ? ".imm v4i32" : " v4i32"))
+                  .str();
+      } else {
+        Key = (Twine(I.getOpcodeName()) + " i32").str();
+      }
+      C = PD.irOpCost(Key);
+      if (!C && P)
+        return false;
+      if (C && P)
+        Conc = PD.concurrency(Key);
+    }
+    Nd.Cost = C ? *C : Fallback(I);
+    Nd.Conc = Conc;
+    unsigned Me = Nodes.size();
+    Nodes.push_back(std::move(Nd));
+    NodeOf[V] = Me;
+    for (CarriedEdge &E : OwnEdges) {
+      E.Dest = Me;
+      Pending.push_back(E);
+    }
+
+    // Live-out of a Singleton Vectorized group: back to a GPR unless every
+    // user outside the group is a store, which can store from the vector.
+    if (P && is_contained(R.Groups[GIdx].LiveOuts, &I)) {
+      if (liveOutNeedsGpr(R.Groups[GIdx], I)) {
+        unsigned T;
+        if (!addTransfer(TransferKind::VecToGpr, {Me}, T))
+          return false;
+        OutNode[V] = T;
+      }
+    }
+    return true;
+  }
+
+  /// The node producing the scalar value of virtual instruction \p V: its
+  /// VecToGpr node if it is a Singleton Vectorized live-out, else its own.
+  unsigned scalarNode(unsigned V) const {
+    return OutNode[V] != None ? OutNode[V] : NodeOf[V];
   }
 };
 
@@ -711,22 +768,125 @@ static void recordMoved(const Region &R, Decision &D) {
   D.MovedPerClass = M;
 }
 
+namespace {
+
+/// Outcome of the fraction search on the region unrolled \p Copies times.
+struct SearchResult {
+  unsigned Copies = 1;
+  RegionEstimate Before, After; // Per original iteration.
+  SmallVector<bool, 8> Promoted;  // By virtual group.
+  SmallVector<ClassMove, 2> Moves;
+  bool any() const { return !Moves.empty(); }
+};
+
+} // namespace
+
+/// Estimate of an assignment on the region unrolled \p Copies times, per
+/// original iteration; nullopt if it needs a missing cost.
+static std::optional<RegionEstimate>
+estimateAssignment(const Region &R, const RegionGraph &RG,
+                   const PortDescription &PD, FallbackCostFn Fallback,
+                   ArrayRef<bool> Promoted, unsigned Copies) {
+  NodeBuilder B(R, RG, PD, Fallback, Promoted, Copies);
+  if (!B.build())
+    return std::nullopt;
+  // Second pass: sequence costs depend on how many instances are in flight.
+  SmallVector<CostNode, 32> Nodes(B.nodes().begin(), B.nodes().end());
+  applyConcurrency(Nodes, PD, R.L != nullptr);
+  RegionEstimate E = estimateRegion(Nodes, PD, R.L != nullptr);
+  E.TRes /= Copies;
+  E.TRec /= Copies;
+  E.TDisp /= Copies;
+  return E;
+}
+
+/// Fraction search. Unlike the greedy loop it replaces, there is no "only
+/// while the resource bound limits" precondition: any bound may be lowered,
+/// guarded by the margin. Per slice class, estimate every k of its U instances
+/// (spread evenly) with the other classes fixed; take the best if it beats
+/// the current T by the margin. Repeat over classes until nothing changes.
+/// With \p Copies > 1 the region is the loop unrolled that many times (not
+/// done in the IR); a recurrence stays one instance through all copies.
+static SearchResult searchFraction(const Region &R, const RegionGraph &RG,
+                                   const PortDescription &PD,
+                                   FallbackCostFn Fallback, double Margin,
+                                   unsigned Copies) {
+  unsigned NG = R.Groups.size();
+  SearchResult Res;
+  Res.Copies = Copies;
+  Res.Promoted.assign(size_t(Copies) * NG, false);
+  SmallVector<bool, 8> &Promoted = Res.Promoted;
+  auto Estimate = [&] {
+    return estimateAssignment(R, RG, PD, Fallback, Promoted, Copies);
+  };
+  Res.Before = Res.After = *Estimate();
+
+  // The movable instances of each class, as virtual groups in program order of
+  // the unrolled body.
+  SmallVector<unsigned, 4> Classes;
+  DenseMap<unsigned, SmallVector<unsigned, 4>> Members;
+  for (unsigned J = 0; J != Copies; ++J)
+    for (unsigned G = 0; G != NG; ++G) {
+      const Group &Grp = R.Groups[G];
+      if (Grp.Recurrence && J != 0)
+        continue;
+      unsigned C = Grp.SliceClass;
+      if (Members[C].empty())
+        Classes.push_back(C);
+      Members[C].push_back(Grp.Recurrence ? G : J * NG + G);
+    }
+  DenseMap<unsigned, unsigned> Current;
+  auto Apply = [&](ArrayRef<unsigned> M, unsigned K) {
+    for (unsigned G : M)
+      Promoted[G] = false;
+    for (unsigned I = 0; I != K; ++I)
+      Promoted[M[size_t(I) * M.size() / K]] = true;
+  };
+  for (unsigned Round = 0; Round != 4; ++Round) {
+    bool Changed = false;
+    for (unsigned C : Classes) {
+      ArrayRef<unsigned> M = Members[C];
+      unsigned U = M.size(), Cur = Current[C];
+      std::optional<RegionEstimate> Best;
+      unsigned BestK = Cur;
+      for (unsigned K = 0; K <= U; ++K) {
+        if (K == Cur)
+          continue;
+        Apply(M, K);
+        std::optional<RegionEstimate> E = Estimate();
+        if (E && (!Best || E->t() < Best->t())) {
+          Best = E;
+          BestK = K;
+        }
+      }
+      if (Best && Res.After.t() - Best->t() > 0 &&
+          Res.After.t() - Best->t() >= Margin * Res.After.t()) {
+        Apply(M, BestK);
+        Current[C] = BestK;
+        Res.After = *Best;
+        Changed = true;
+      } else {
+        Apply(M, Cur);
+      }
+    }
+    if (!Changed)
+      break;
+  }
+  for (unsigned C : Classes)
+    if (Current[C])
+      Res.Moves.push_back({C, Current[C], unsigned(Members[C].size())});
+  return Res;
+}
+
 Decision savio::decide(const Region &R, const PortDescription &PD,
-                       FallbackCostFn Fallback, double Margin) {
+                       FallbackCostFn Fallback, double Margin,
+                       bool CanUnroll) {
   unsigned N = R.Groups.size();
   SmallVector<bool, 8> Promoted(N, false);
-  bool IsLoop = R.L != nullptr;
   RegionGraph RG = buildRegionGraph(*R.BB, R.L);
 
-  // Estimate of the current assignment; nullopt if it needs a missing cost.
   auto Estimate = [&]() -> std::optional<RegionEstimate> {
-    NodeBuilder B(R, RG, PD, Fallback, Promoted);
-    if (!B.build())
-      return std::nullopt;
-    // Second pass: sequence costs depend on how many instances are in flight.
-    SmallVector<CostNode, 32> Nodes(B.nodes().begin(), B.nodes().end());
-    applyConcurrency(Nodes, PD, IsLoop);
-    return estimateRegion(Nodes, PD, IsLoop);
+    return estimateAssignment(R, RG, PD, Fallback, Promoted, 1);
   };
 
   Decision D;
@@ -774,61 +934,49 @@ Decision savio::decide(const Region &R, const PortDescription &PD,
     return D;
   }
 
-  // Fraction search. Unlike the greedy loop it replaces, there is no "only
-  // while the resource bound limits" precondition: any bound may be lowered,
-  // guarded by the margin. Per slice class, estimate every k of its U instances
-  // (spread evenly) with the other classes fixed; take the best if it beats
-  // the current T by the margin. Repeat over classes until nothing changes.
-  SmallVector<unsigned, 4> Classes;
-  DenseMap<unsigned, SmallVector<unsigned, 4>> Members;
-  for (unsigned G = 0; G != N; ++G) {
-    unsigned C = R.Groups[G].SliceClass;
-    if (Members[C].empty())
-      Classes.push_back(C);
-    Members[C].push_back(G);
-  }
-  DenseMap<unsigned, unsigned> Current;
-  auto Apply = [&](ArrayRef<unsigned> M, unsigned K) {
-    for (unsigned G : M)
-      Promoted[G] = false;
-    for (unsigned I = 0; I != K; ++I)
-      Promoted[M[size_t(I) * M.size() / K]] = true;
-  };
-  for (unsigned Round = 0; Round != 4; ++Round) {
-    bool Changed = false;
-    for (unsigned C : Classes) {
-      ArrayRef<unsigned> M = Members[C];
-      unsigned U = M.size(), Cur = Current[C];
-      std::optional<RegionEstimate> Best;
-      unsigned BestK = Cur;
-      for (unsigned K = 0; K <= U; ++K) {
-        if (K == Cur)
-          continue;
-        Apply(M, K);
-        std::optional<RegionEstimate> E = Estimate();
-        if (E && (!Best || E->t() < Best->t())) {
-          Best = E;
-          BestK = K;
-        }
-      }
-      if (Best && D.After.t() - Best->t() > 0 &&
-          D.After.t() - Best->t() >= Margin * D.After.t()) {
-        Apply(M, BestK);
-        Current[C] = BestK;
-        D.After = *Best;
-        Changed = true;
-      } else {
-        Apply(M, Cur);
-      }
+  SearchResult Base = searchFraction(R, RG, PD, Fallback, Margin, 1);
+  const SearchResult *Chosen = Base.any() ? &Base : nullptr;
+
+  // Unrolling to reach a better fraction: U instances of the most numerous
+  // acyclic slice class are present now (copies); try U = 2*copies, ... <= 8,
+  // every candidate searched as a whole. A candidate is taken if it moves
+  // something and beats the unchanged loop by the margin; among those the
+  // smallest unroll within the margin of the best wins (less code growth).
+  SmallVector<SearchResult, 4> Unrolled;
+  if (CanUnroll) {
+    DenseMap<unsigned, unsigned> Count;
+    unsigned Copies = 0;
+    for (const Group &G : R.Groups)
+      if (!G.Recurrence)
+        Copies = std::max(Copies, ++Count[G.SliceClass]);
+    for (unsigned M = 2; Copies && M * Copies <= 8; ++M) {
+      SearchResult S = searchFraction(R, RG, PD, Fallback, Margin, M);
+      if (S.any() && Base.Before.t() - S.After.t() > 0 &&
+          Base.Before.t() - S.After.t() >= Margin * Base.Before.t())
+        Unrolled.push_back(std::move(S));
     }
-    if (!Changed)
-      break;
   }
-  for (unsigned G = 0; G != N; ++G)
-    if (Promoted[G])
-      D.Promoted.push_back(G);
-  for (unsigned C : Classes)
-    if (Current[C])
-      D.MovedPerClass.push_back({C, Current[C], unsigned(Members[C].size())});
+  if (!Unrolled.empty()) {
+    double Best = Chosen ? Chosen->After.t() : Unrolled[0].After.t();
+    for (const SearchResult &S : Unrolled)
+      Best = std::min(Best, S.After.t());
+    const SearchResult *Pick = nullptr;
+    if (Chosen && Chosen->After.t() <= Best * (1 + Margin))
+      Pick = Chosen;
+    for (const SearchResult &S : Unrolled)
+      if (!Pick && S.After.t() <= Best * (1 + Margin))
+        Pick = &S;
+    Chosen = Pick;
+  }
+
+  if (!Chosen)
+    return D;
+  D.After = Chosen->After;
+  D.Unroll = Chosen->Copies;
+  D.MovedPerClass = Chosen->Moves;
+  if (D.Unroll == 1)
+    for (unsigned G = 0; G != N; ++G)
+      if (Chosen->Promoted[G])
+        D.Promoted.push_back(G);
   return D;
 }
