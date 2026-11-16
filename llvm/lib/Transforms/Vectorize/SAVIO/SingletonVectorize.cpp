@@ -253,33 +253,27 @@ void savio::rewriteVectorDivide(Instruction *I, unsigned PairMask) {
   IRBuilder<> B(I);
   B.SetCurrentDebugLocation(I->getDebugLoc());
   Value *A = I->getOperand(0), *D = I->getOperand(1);
+
+  // Both pairs: one four-lane form, no shuffles.
+  if (PairMask == 3) {
+    Function *D4 = Intrinsic::getOrInsertDeclaration(
+        M, Rem ? Intrinsic::savio_fpdiv4_urem_v4i32
+               : Intrinsic::savio_fpdiv4_udiv_v4i32);
+    Value *R = B.CreateCall(D4, {A, D}, I->getName() + ".fp4");
+    I->replaceAllUsesWith(R);
+    I->eraseFromParent();
+    return;
+  }
+  // Lanes {2,3} alone are never chosen: the cost model cannot price them (see
+  // buildVectorDivide), so the decision never moves them without {0,1}.
+  assert(PairMask == 1 && "lanes {2,3} alone are not rewritten");
+
+  // Lanes {0,1} divide the vector as it is (lanes 2 and 3 of the result are
+  // poison).
   Function *Decl = Intrinsic::getOrInsertDeclaration(
       M, Rem ? Intrinsic::savio_fpdiv2_urem_v4i32
              : Intrinsic::savio_fpdiv2_udiv_v4i32);
-  Value *Poison = PoisonValue::get(A->getType());
-
-  // Pair 0 divides the vector as it is (lanes 2 and 3 of the result are
-  // poison); pair 1 first moves its lanes down.
-  Value *R0 = nullptr, *R1 = nullptr;
-  if (PairMask & 1)
-    R0 = B.CreateCall(Decl, {A, D}, I->getName() + ".fp0");
-  if (PairMask & 2) {
-    int Hi[4] = {2, 3, PoisonMaskElem, PoisonMaskElem};
-    Value *A2 = B.CreateShuffleVector(A, Poison, Hi);
-    Value *D2 = B.CreateShuffleVector(D, Poison, Hi);
-    R1 = B.CreateCall(Decl, {A2, D2}, I->getName() + ".fp1");
-  }
-
-  Value *Res;
-  if (R0 && R1) {
-    int Join[4] = {0, 1, 4, 5};
-    Res = B.CreateShuffleVector(R0, R1, Join);
-  } else if (R0) {
-    Res = R0;
-  } else {
-    int Up[4] = {PoisonMaskElem, PoisonMaskElem, 0, 1};
-    Res = B.CreateShuffleVector(R1, Poison, Up);
-  }
+  Value *Res = B.CreateCall(Decl, {A, D}, I->getName() + ".fp0");
   // The lanes not sent through fdiv stay on the integer divider.
   for (unsigned Lane = 0; Lane != 4; ++Lane) {
     if (PairMask & (1u << (Lane / 2)))

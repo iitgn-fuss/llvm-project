@@ -28,9 +28,10 @@ namespace savio {
 void rewriteSingletonVectorize(const Group &G, Loop *L);
 
 /// Sends the lane pairs of \p I, a `udiv` or `urem <4 x i32>`, selected by
-/// \p PairMask (bit 0: lanes {0,1}, bit 1: lanes {2,3}) through
-/// llvm.savio.fpdiv2.*; the other lanes stay `udiv`/`urem` on scalars. \p I is
-/// replaced and erased.
+/// \p PairMask through the floating-point divider: 3 (both pairs) is one
+/// llvm.savio.fpdiv4.*; 1 (lanes {0,1}) is llvm.savio.fpdiv2.* and the other
+/// lanes stay `udiv`/`urem` on scalars. Lanes {2,3} alone (2) are not supported:
+/// the decision never chooses them. \p I is replaced and erased.
 void rewriteVectorDivide(Instruction *I, unsigned PairMask);
 
 } // end namespace savio

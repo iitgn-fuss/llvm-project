@@ -16,6 +16,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include <optional>
 #include <tuple>
@@ -787,8 +788,9 @@ private:
   /// A `udiv`/`urem <4 x i32>`: one node per lane pair, joined by a node of no
   /// cost that stands for the instruction. A pair that stays is half of the
   /// backend's scalar split (key "<op> v4i32", half the resource use and
-  /// micro-ops, the same latency); a moved pair is the fpdiv2 sequence ("fpdiv2.
-  /// <op> v4i32") with its concurrency table. Without the split's cost the
+  /// micro-ops, the same latency); lanes {0,1} alone are the fpdiv2 sequence
+  /// ("fpdiv2.<op> v4i32"), both pairs the fpdiv4 sequence, each with its
+  /// concurrency table. Without the split's cost the
   /// instruction costs what the fallback says, and cannot be moved. The
   /// operands are vectors already: there is no transfer.
   bool buildVectorDivide(unsigned J, unsigned NI,
@@ -811,22 +813,42 @@ private:
         Pending.push_back({Me, E.Latch, E.Joined, E.Dist});
       return true;
     }
-    std::string FpKey = "fpdiv2." + Op;
+    // Lanes {2,3} alone would need operand and result shuffles that no
+    // sequence prices: not an assignment the model can cost, so never chosen.
+    if (!Pr[0] && Pr[1])
+      return false;
     SmallVector<unsigned, 2> PairNodes;
     for (unsigned P = 0; P != 2; ++P) {
       CostNode PN;
       PN.Preds = Nd.Preds;
-      if (Pr[P]) {
-        std::optional<OpCost> C = PD.irOpCost(FpKey);
+      if (Pr[0] && Pr[1]) {
+        // Both pairs: one four-lane sequence, carried by the node of pair 0;
+        // the node of pair 1 costs nothing.
+        if (P == 0) {
+          std::string Key = "fpdiv4." + Op;
+          std::optional<OpCost> C = PD.irOpCost(Key);
+          if (!C)
+            return false;
+          PN.Cost = *C;
+          PN.Conc = PD.concurrency(Key);
+        } else {
+          PN.Cost = OpCost{{}, 0, 0};
+        }
+      } else if (Pr[P]) {
+        std::string Key = "fpdiv2." + Op;
+        std::optional<OpCost> C = PD.irOpCost(Key);
         if (!C)
           return false;
         PN.Cost = *C;
-        PN.Conc = PD.concurrency(FpKey);
+        PN.Conc = PD.concurrency(Key);
       } else {
+        // A pair that stays: half the split's resource use and micro-ops (the
+        // odd micro-op goes to pair 0). The latency stays that of the whole
+        // split, which is pessimistic for a two-lane remainder.
         PN.Cost = *Base;
         for (ResourceUse &U : PN.Cost.Uses)
           U.Cycles /= 2;
-        PN.Cost.Uops = (PN.Cost.Uops + 1) / 2;
+        PN.Cost.Uops = P == 0 ? (PN.Cost.Uops + 1) / 2 : PN.Cost.Uops / 2;
       }
       PairNodes.push_back(Nodes.size());
       Nodes.push_back(std::move(PN));
@@ -1019,8 +1041,12 @@ Decision savio::decide(const Region &R, const PortDescription &PD,
     unsigned Limit = SAVIOForceCount;
     if (any_of(R.Groups, [&](const Group &G) {
           return G.SliceClass == BestClass && G.VectorDivide;
-        }))
+        })) {
+      if (Limit % 2)
+        report_fatal_error("savio-force-count: a vector divide moves lane "
+                           "pairs, so the count of lanes must be even");
       Limit /= 2;
+    }
     unsigned Taken = 0;
     for (unsigned G = 0; G != N && Taken < Limit; ++G) {
       if (R.Groups[G].SliceClass != BestClass)

@@ -101,6 +101,16 @@
     "fpdiv2.urem v4i32": [
       "T_VUDIV_FP",
       "T_VUDIV_FIX"
+    ],
+    "fpdiv4.udiv v4i32": [
+      "T_VUDIV_FP",
+      "T_VUDIV_FP",
+      "T_VUDIV_FIX"
+    ],
+    "fpdiv4.urem v4i32": [
+      "T_VUDIV_FP",
+      "T_VUDIV_FP",
+      "T_VUDIV_FIX"
     ]
   }
 }

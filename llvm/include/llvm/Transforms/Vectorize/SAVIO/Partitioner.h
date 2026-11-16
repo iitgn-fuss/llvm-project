@@ -35,7 +35,8 @@ class Value;
 extern cl::opt<double> SAVIOMargin;
 extern cl::opt<bool> SAVIOForce;
 /// With -savio-force-count=n the first n instances of the largest slice class
-/// move; for the lane pairs of a vector divide n counts lanes (2 per pair).
+/// move; for the lane pairs of a vector divide n counts lanes (2 per pair), so
+/// an odd n is a fatal error there.
 extern cl::opt<int> SAVIOForceCount;
 
 namespace savio {

@@ -40,18 +40,31 @@ define <4 x i32> @f_urem(<4 x i32> %a, <4 x i32> %b) {
   ret <4 x i32> %r
 }
 
-; All four lanes: lanes {0,1} and {2,3} (the second pair moved to the low lanes
-; first), recombined. No integer divide remains.
+declare <4 x i32> @llvm.savio.fpdiv4.udiv.v4i32(<4 x i32>, <4 x i32>)
+declare <4 x i32> @llvm.savio.fpdiv4.urem.v4i32(<4 x i32>, <4 x i32>)
+
+; All four lanes: the high pair widens with ushll2 (no lane move), two fdiv.2d,
+; one uzp1 narrows both quotients, urem adds one mls.4s. No integer divide.
 ; CHECK-LABEL: f_urem4:
 ; CHECK-NOT: udiv w
 ; CHECK: fdiv.2d
 ; CHECK: fdiv.2d
+; CHECK: uzp1.4s
+; CHECK: mls.4s
 ; CHECK-NOT: udiv w
+; CHECK-NOT: SAVIO_
 define <4 x i32> @f_urem4(<4 x i32> %a, <4 x i32> %b) {
-  %lo = call <4 x i32> @llvm.savio.fpdiv2.urem.v4i32(<4 x i32> %a, <4 x i32> %b)
-  %a2 = shufflevector <4 x i32> %a, <4 x i32> poison, <4 x i32> <i32 2, i32 3, i32 poison, i32 poison>
-  %b2 = shufflevector <4 x i32> %b, <4 x i32> poison, <4 x i32> <i32 2, i32 3, i32 poison, i32 poison>
-  %hi = call <4 x i32> @llvm.savio.fpdiv2.urem.v4i32(<4 x i32> %a2, <4 x i32> %b2)
-  %r = shufflevector <4 x i32> %lo, <4 x i32> %hi, <4 x i32> <i32 0, i32 1, i32 4, i32 5>
+  %r = call <4 x i32> @llvm.savio.fpdiv4.urem.v4i32(<4 x i32> %a, <4 x i32> %b)
+  ret <4 x i32> %r
+}
+
+; CHECK-LABEL: f_udiv4:
+; CHECK: ushll2.2d
+; CHECK: fdiv.2d
+; CHECK: uzp1.4s
+; CHECK-NOT: mls
+; CHECK-NOT: udiv w
+define <4 x i32> @f_udiv4(<4 x i32> %a, <4 x i32> %b) {
+  %r = call <4 x i32> @llvm.savio.fpdiv4.udiv.v4i32(<4 x i32> %a, <4 x i32> %b)
   ret <4 x i32> %r
 }

@@ -4,6 +4,7 @@
 ; RUN: opt -passes=savio -savio-force-count=2 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
 ; RUN: opt -passes=savio -savio-force-count=4 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
 ; RUN: opt -passes=savio -savio-force-count=2 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s -pass-remarks=savio 2>&1 | FileCheck %s --check-prefix=REM
+; RUN: not --crash opt -passes=savio -savio-force-count=3 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s 2>&1 | FileCheck %s --check-prefix=ODD
 ; The lanes of a urem <4 x i32> are two instances (lane pairs {0,1} and {2,3})
 ; of one slice class; -savio-force-count counts lanes for such a class.
 ;
@@ -19,18 +20,16 @@
 ; K2: urem i32
 ; K2: insertelement <4 x i32> %{{.*}}, i32 %{{.*}}, i32 3
 ; K2-NOT: urem <4 x i32>
-; Four lanes: two fpdiv2, the second on lanes 2 and 3 shuffled down, and a
-; shuffle that joins the halves; no scalar urem.
+; Four lanes: both pairs are one fpdiv4; no shuffle, no scalar urem.
 ; K4-LABEL: define void @f(
-; K4: call <4 x i32> @llvm.savio.fpdiv2.urem.v4i32
-; K4: shufflevector <4 x i32> %{{.*}}, <4 x i32> poison, <4 x i32> <i32 2, i32 3, i32 poison, i32 poison>
-; K4: shufflevector <4 x i32> %{{.*}}, <4 x i32> poison, <4 x i32> <i32 2, i32 3, i32 poison, i32 poison>
-; K4: call <4 x i32> @llvm.savio.fpdiv2.urem.v4i32
-; K4: shufflevector <4 x i32> %{{.*}}, <4 x i32> %{{.*}}, <4 x i32> <i32 0, i32 1, i32 4, i32 5>
+; K4: call <4 x i32> @llvm.savio.fpdiv4.urem.v4i32(<4 x i32> %{{.*}}, <4 x i32> %{{.*}})
+; K4-NOT: shufflevector
 ; K4-NOT: urem i32
 ; K4-NOT: urem <4 x i32>
+; K4-NOT: llvm.savio.fpdiv2
 ; K0-NOT: llvm.savio
 ; K0: urem <4 x i32>
+; ODD: LLVM ERROR: savio-force-count: a vector divide moves lane pairs, so the count of lanes must be even
 ; REM: remark: {{.*}}2/4 of slice
 target triple = "arm64-apple-macos"
 

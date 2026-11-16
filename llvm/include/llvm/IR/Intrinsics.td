@@ -3227,6 +3227,16 @@ foreach Op = ["udiv", "urem"] in
                               [llvm_v4i32_ty, llvm_v4i32_ty],
                               [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
+// All four lanes of the result are the exact unsigned quotient (udiv) or
+// remainder (urem) of the operand lanes. A zero divisor in a lane makes that
+// lane poison, never undefined behavior. On AArch64 the lanes go through the
+// floating-point divider two at a time (two fdiv .2d) and are narrowed together.
+foreach Op = ["udiv", "urem"] in
+  def int_savio_fpdiv4_#Op#_v4i32
+      : DefaultAttrsIntrinsic<[llvm_v4i32_ty],
+                              [llvm_v4i32_ty, llvm_v4i32_ty],
+                              [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
 //===----------------------------------------------------------------------===//
 // Target-specific intrinsics
 //===----------------------------------------------------------------------===//

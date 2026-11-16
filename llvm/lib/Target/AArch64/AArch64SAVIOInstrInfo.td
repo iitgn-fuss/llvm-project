@@ -35,6 +35,10 @@ let isPseudo = 1, hasSideEffects = 0, hasNoSchedulingInfo = 1 in {
   def SAVIO_FPDIV2_UDIV_V4I32 : Pseudo<(outs V128:$dst), (ins V128:$a, V128:$b), []>;
   def SAVIO_FPDIV2_UREM_V4I32 : Pseudo<(outs V128:$dst), (ins V128:$a, V128:$b), []>;
 
+  // All four lanes through two fdiv .2d.
+  def SAVIO_FPDIV4_UDIV_V4I32 : Pseudo<(outs V128:$dst), (ins V128:$a, V128:$b), []>;
+  def SAVIO_FPDIV4_UREM_V4I32 : Pseudo<(outs V128:$dst), (ins V128:$a, V128:$b), []>;
+
   // Shifts by a constant count (1..31).
   def SAVIO_SV_SHL_IMM_V4I32  : Pseudo<(outs V128:$dst), (ins V128:$a, i32imm:$n), []>;
   def SAVIO_SV_LSHR_IMM_V4I32 : Pseudo<(outs V128:$dst), (ins V128:$a, i32imm:$n), []>;
@@ -74,3 +78,8 @@ def : Pat<(v4i32 (int_savio_fpdiv2_udiv_v4i32 (v4i32 V128:$a), (v4i32 V128:$b)))
           (SAVIO_FPDIV2_UDIV_V4I32 V128:$a, V128:$b)>;
 def : Pat<(v4i32 (int_savio_fpdiv2_urem_v4i32 (v4i32 V128:$a), (v4i32 V128:$b))),
           (SAVIO_FPDIV2_UREM_V4I32 V128:$a, V128:$b)>;
+
+def : Pat<(v4i32 (int_savio_fpdiv4_udiv_v4i32 (v4i32 V128:$a), (v4i32 V128:$b))),
+          (SAVIO_FPDIV4_UDIV_V4I32 V128:$a, V128:$b)>;
+def : Pat<(v4i32 (int_savio_fpdiv4_urem_v4i32 (v4i32 V128:$a), (v4i32 V128:$b))),
+          (SAVIO_FPDIV4_UREM_V4I32 V128:$a, V128:$b)>;
