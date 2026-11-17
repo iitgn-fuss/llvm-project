@@ -1208,9 +1208,7 @@ TEST_F(SAVIOClassifyInputTest, ScalarizeCostFusedShift) {
   SmallVector<Region, 4> Regions;
   Decision D = decideForcedOn(F, PD, Dummy, Regions, LI);
   ASSERT_EQ(D.Promoted.size(), 1u);
-  // 10.5: the loop's own add (the induction increment) outside the group is
-  // charged by the out-of-group charge (it was latency-only before: 10.0).
-  EXPECT_DOUBLE_EQ(D.After.t(), 10.5);
+  EXPECT_DOUBLE_EQ(D.After.t(), 10.0);
   EXPECT_EQ(PD->className(D.After.BusiestClass), "scalar");
 }
 

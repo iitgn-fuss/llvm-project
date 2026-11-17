@@ -1252,7 +1252,7 @@ private:
       if (C && P)
         Conc = PD.concurrency(Key);
     }
-    if (!C && !InGroup)
+    if (!C && !InGroup && PD.chargeOutOfGroup())
       C = outOfGroupOpCost(PD, I);
     Nd.Cost = C ? *C : Fallback(I);
     Nd.Conc = Conc;

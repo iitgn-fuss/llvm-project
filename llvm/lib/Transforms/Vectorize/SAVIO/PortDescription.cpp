@@ -208,6 +208,17 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
       PD->IndirectAccess = {*L, *S, uint64_t(*B)};
       PD->HasIndirectAccess = true;
     }
+    if (const json::Value *CV = R->get("charge_out_of_group")) {
+      const json::Object *CO = CV->getAsObject();
+      if (!CO)
+        return makeError(F, "'charge_out_of_group' must be an object");
+      if (Error E = requireProvenance(F, *CO, "'charge_out_of_group'"))
+        return std::move(E);
+      std::optional<bool> B = CO->getBoolean("value");
+      if (!B)
+        return makeError(F, "'charge_out_of_group' needs a boolean 'value'");
+      PD->ChargeOutOfGroup = *B;
+    }
     const json::Object *Classes = R->getObject("classes");
     if (!Classes || Classes->empty())
       return makeError(F, "'classes' must be a non-empty object");

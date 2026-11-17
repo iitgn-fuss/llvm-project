@@ -139,6 +139,11 @@ public:
     return HasIndirectAccess ? &IndirectAccess : nullptr;
   }
 
+  /// True when resources.json has "charge_out_of_group": {value: true, ...}:
+  /// instructions outside every group are charged their port-info cost (a
+  /// description calibrated without that accounting leaves it off).
+  bool chargeOutOfGroup() const { return ChargeOutOfGroup; }
+
 private:
   PortDescription() = default;
 
@@ -151,6 +156,7 @@ private:
   unsigned WindowUops = 0;
   IndirectAccessCost IndirectAccess;
   bool HasIndirectAccess = false;
+  bool ChargeOutOfGroup = false;
   StringMap<ConcurrencyTable> Concurrency;
   StringMap<OpCost> Probes;
   std::optional<OpCost> Transfers[NumTransferKinds];

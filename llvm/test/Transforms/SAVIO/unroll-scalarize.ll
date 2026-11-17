@@ -5,7 +5,7 @@
 ; regions of the unrolled loop again, decides again and applies the decision: the first copy becomes four scalar loads,
 ; per-lane operations and four scalar stores, the other two copies stay vectors, and the remainder loop is the
 ; original vector body.
-; CHECK: remark: {{.*}}: T 10.00 -> 7.33 (resource), 1/3 of slice {{[0-9]+}}, unrolled by 3 (estimated 1/3 T 8.50, applied 1/3 T 7.33)
+; CHECK: remark: {{.*}}: T 10.00 -> 6.67 (resource), 1/3 of slice {{[0-9]+}}, unrolled by 3 (estimated 1/3 T 8.00, applied 1/3 T 6.67)
 ; CHECK: loop:
 ; CHECK-COUNT-4: load i32
 ; CHECK-NOT: load

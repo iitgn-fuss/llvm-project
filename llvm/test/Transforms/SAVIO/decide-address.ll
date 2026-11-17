@@ -5,21 +5,17 @@
 ; phi reaches addressing (directly, or only through the in-scope mul in @g) are
 ; not candidates. Only %s (not feeding an address)
 ; forms a group, in @f; @g has no candidates at all and emits nothing.
-; The induction increment is a cycle of latency 1 (recurrence bound 1.00); the
-; loop's `mul` and `add` outside the group are charged since the out-of-group
-; charge (the test port-info has no load or store keys: those are logged and keep
-; the latency-only fallback), so the resource bound is 1.50 and the group moves.
+; T is 1.00 (recurrence): the induction increment is a cycle of latency 1, which
+; the whole-region model now sees; the verdict (not promoted) is unchanged.
 target triple = "arm64-apple-macos"
 
 ; CHECK-COUNT-1: savio: group of
 ; CHECK-NOT: savio: group of
-; CHECK: savio: no port-info cost for out-of-group {{.*}}load i32
-; CHECK: savio: out-of-group charge: {{.*}}mul i32
-; CHECK: remark: {{.*}}T 1.50 -> 1.00 (resource), 1/1 of slice 0
+; CHECK: remark: {{.*}}T 1.00 (recurrence)
 ; CHECK-NOT: remark:
 ; FORCE-COUNT-1: savio: group of
 ; FORCE-NOT: savio: group of
-; FORCE: remark: {{.*}}T 1.50 -> 1.00 (resource), 1/1 of slice 0
+; FORCE: remark: {{.*}}T 1.00 -> 1.00 (recurrence)
 ; FORCE-NOT: remark:
 define void @f(ptr %a, ptr %b, ptr %c) {
 entry:
