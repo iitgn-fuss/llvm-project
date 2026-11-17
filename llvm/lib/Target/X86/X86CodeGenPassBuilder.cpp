@@ -26,6 +26,7 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Transforms/CFGuard.h"
+#include "llvm/Transforms/Vectorize/SAVIO/SAVIOPipeline.h"
 
 using namespace llvm;
 
@@ -278,6 +279,9 @@ void X86CodeGenPassBuilder::addAsmPrinterEnd(PassManagerWrapper &PMW) const {
 void X86TargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
 #define GET_PASS_REGISTRY "X86PassRegistry.def"
 #include "llvm/Passes/TargetPassRegistry.inc"
+
+  registerSAVIOIRCallbacks(PB);
+
   // TODO(boomanaiden154): Move this into the base CodeGenPassBuilder once all
   // targets that currently implement it have a ported asm-printer pass.
   if (PIC) {

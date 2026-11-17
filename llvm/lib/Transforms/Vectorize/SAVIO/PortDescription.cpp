@@ -96,7 +96,11 @@ Expected<OpCost> costOfOpcodes(StringRef File, const Twine &Where,
 } // namespace
 
 std::string llvm::savio::archDirFor(const Triple &T) {
-  return T.isAArch64() ? "AArch64" : "";
+  if (T.isAArch64())
+    return "AArch64";
+  if (T.getArch() == Triple::x86_64)
+    return "x86";
+  return "";
 }
 
 Expected<std::unique_ptr<PortDescription>>

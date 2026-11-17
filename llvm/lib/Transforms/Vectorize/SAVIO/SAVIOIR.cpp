@@ -221,6 +221,12 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
           DS_Warning));
     // Say why once per function.
     ORE.emit([&] {
+      if (Arch.empty())
+        return OptimizationRemarkMissed(DEBUG_TYPE, "NoPortInfo", &F)
+               << "no port-info for architecture '"
+               << Triple::getArchTypeName(
+                      F.getParent()->getTargetTriple().getArch())
+               << "'";
       if (R.Missing)
         return OptimizationRemarkMissed(DEBUG_TYPE, "NoPortInfo", &F)
                << "no port-info for CPU '" << CPU << "'";

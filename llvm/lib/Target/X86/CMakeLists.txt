@@ -119,6 +119,7 @@ add_llvm_target(X86CodeGen ${sources}
   Target
   TargetParser
   TransformUtils
+  Vectorize
   X86Desc
   X86Info
 

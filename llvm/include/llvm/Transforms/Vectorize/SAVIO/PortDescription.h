@@ -106,7 +106,7 @@ private:
   std::optional<OpCost> Transfers[NumTransferKinds];
 };
 
-/// Port-info directory name for a target triple: "AArch64" or "".
+/// Port-info directory name for a target triple: "AArch64", "x86" or "".
 std::string archDirFor(const Triple &T);
 
 } // end namespace savio

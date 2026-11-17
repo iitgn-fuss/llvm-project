@@ -1,0 +1,17 @@
+{
+  "gpr_to_vec": [
+    "VMOVDI2PDIrr"
+  ],
+  "vec_to_gpr": [
+    "VMOVPDI2DIrr"
+  ],
+  "load_to_vec": [
+    "VMOVDQUrm"
+  ],
+  "store_from_vec": [
+    "VMOVDQUmr"
+  ],
+  "lane_to_lane0": [
+    "VPSHUFDri"
+  ]
+}

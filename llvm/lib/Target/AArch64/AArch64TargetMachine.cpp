@@ -54,6 +54,7 @@
 #include "llvm/Transforms/Utils/LowerIFunc.h"
 #include "llvm/Transforms/Vectorize/LoopIdiomVectorize.h"
 #include "llvm/Transforms/Vectorize/SAVIO/SAVIOIR.h"
+#include "llvm/Transforms/Vectorize/SAVIO/SAVIOPipeline.h"
 #include <memory>
 
 using namespace llvm;
@@ -628,16 +629,7 @@ void AArch64TargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
         if (Level != OptimizationLevel::O0)
           LPM.addPass(LoopIdiomVectorizePass());
       });
-  PB.registerOptimizerLastEPCallback(
-      [](ModulePassManager &MPM, OptimizationLevel Level,
-         ThinOrFullLTOPhase Phase) {
-        // Run once, in the final optimization pipeline.
-        if (Phase == ThinOrFullLTOPhase::ThinLTOPreLink ||
-            Phase == ThinOrFullLTOPhase::FullLTOPreLink)
-          return;
-        if (EnableSAVIO && Level != OptimizationLevel::O0)
-          MPM.addPass(createModuleToFunctionPassAdaptor(SAVIOIRPass()));
-      });
+  registerSAVIOIRCallbacks(PB);
   if (getTargetTriple().isOSWindows())
     PB.registerPipelineEarlySimplificationEPCallback(
         [](ModulePassManager &PM, OptimizationLevel, ThinOrFullLTOPhase) {

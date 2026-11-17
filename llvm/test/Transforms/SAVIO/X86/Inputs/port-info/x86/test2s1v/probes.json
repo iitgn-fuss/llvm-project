@@ -1,0 +1,116 @@
+{
+  "probes": {
+    "add i32": [
+      "ADD32rr"
+    ],
+    "sv.add v4i32": [
+      "VPADDDrr"
+    ],
+    "sub i32": [
+      "SUB32rr"
+    ],
+    "sv.sub v4i32": [
+      "VPSUBDrr"
+    ],
+    "mul i32": [
+      "IMUL32rr"
+    ],
+    "sv.mul v4i32": [
+      "VPMULLDrr"
+    ],
+    "and i32": [
+      "AND32rr"
+    ],
+    "sv.and v4i32": [
+      "VPANDrr"
+    ],
+    "or i32": [
+      "OR32rr"
+    ],
+    "sv.or v4i32": [
+      "VPORrr"
+    ],
+    "xor i32": [
+      "XOR32rr"
+    ],
+    "sv.xor v4i32": [
+      "VPXORrr"
+    ],
+    "shl i32": [
+      "SHL32rCL"
+    ],
+    "sv.shl v4i32": [
+      "VPSLLVDrr"
+    ],
+    "sv.shl.imm v4i32": [
+      "VPSLLVDrr"
+    ],
+    "lshr i32": [
+      "SHR32rCL"
+    ],
+    "sv.lshr v4i32": [
+      "VPSRLVDrr"
+    ],
+    "sv.lshr.imm v4i32": [
+      "VPSRLVDrr"
+    ],
+    "ashr i32": [
+      "SAR32rCL"
+    ],
+    "sv.ashr v4i32": [
+      "VPSRAVDrr"
+    ],
+    "sv.ashr.imm v4i32": [
+      "VPSRAVDrr"
+    ],
+    "udiv i32": [
+      "DIV32r"
+    ],
+    "urem i32": [
+      "DIV32r",
+      "IMUL32rri"
+    ],
+    "sv.udiv v4i32": [
+      "VDIVPDrr",
+      "VCVTDQ2PDYrr"
+    ],
+    "sv.urem v4i32": [
+      "VDIVPDrr",
+      "VCVTDQ2PDYrr"
+    ],
+    "udiv v4i32": [
+      "DIV32r",
+      "DIV32r",
+      "DIV32r",
+      "DIV32r"
+    ],
+    "urem v4i32": [
+      "DIV32r",
+      "IMUL32rri",
+      "DIV32r",
+      "IMUL32rri",
+      "DIV32r",
+      "IMUL32rri",
+      "DIV32r",
+      "IMUL32rri"
+    ],
+    "fpdiv2.udiv v4i32": [
+      "VDIVPDrr",
+      "VCVTDQ2PDYrr"
+    ],
+    "fpdiv2.urem v4i32": [
+      "VDIVPDrr",
+      "VCVTDQ2PDYrr"
+    ],
+    "fpdiv4.udiv v4i32": [
+      "VDIVPDrr",
+      "VDIVPDrr",
+      "VCVTDQ2PDYrr"
+    ],
+    "fpdiv4.urem v4i32": [
+      "VDIVPDrr",
+      "VDIVPDrr",
+      "VCVTDQ2PDYrr"
+    ]
+  }
+}

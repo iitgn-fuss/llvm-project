@@ -311,7 +311,9 @@ TEST(SAVIOPortDescription, ConcurrencyTableNeedsExactlyOneUse) {
 TEST(SAVIOPortDescription, ArchDir) {
   EXPECT_EQ(archDirFor(Triple("arm64-apple-macos")), "AArch64");
   EXPECT_EQ(archDirFor(Triple("aarch64-linux-gnu")), "AArch64");
-  EXPECT_EQ(archDirFor(Triple("x86_64-linux-gnu")), "");
+  EXPECT_EQ(archDirFor(Triple("x86_64-linux-gnu")), "x86");
+  EXPECT_EQ(archDirFor(Triple("i386-linux-gnu")), "");
+  EXPECT_EQ(archDirFor(Triple("riscv64-unknown-linux-gnu")), "");
 }
 
 } // namespace
