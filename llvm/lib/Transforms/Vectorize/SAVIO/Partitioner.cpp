@@ -1162,6 +1162,7 @@ private:
       if (Moved)
         return false;
       Nd.Cost = Fallback(I);
+      Nd.Wide512 = is512BitOp(I);
       NodeOf[V] = Nodes.size();
       unsigned Me = Nodes.size();
       Nodes.push_back(std::move(Nd));
@@ -1196,6 +1197,8 @@ private:
         if (P == 0) {
           PN.Cost = *Seq;
           PN.Conc = SeqConc;
+          // fpdiv8 of 64-bit lanes is a 512-bit sequence.
+          PN.Wide512 = MovedLanes * 64 == 512;
         } else {
           PN.Cost = OpCost{{}, 0, 0};
         }
@@ -1215,6 +1218,7 @@ private:
     }
     CostNode Join;
     Join.Cost = OpCost{{}, 0, 0};
+    Join.Wide512 = is512BitOp(I);
     Join.Preds.assign(GroupNodes.begin(), GroupNodes.end());
     NodeOf[V] = Nodes.size();
     Nodes.push_back(std::move(Join));

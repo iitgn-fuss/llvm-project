@@ -1,9 +1,8 @@
 ; REQUIRES: asserts
 ; RUN: opt -passes=savio-ir -savio-force-count=1 -mtriple=x86_64-unknown-linux-gnu -mcpu=emeraldrapids -savio-port-info=%S/Inputs/port-info -savio-cpu=emeraldrapids -debug-only=savio -disable-output %s 2>&1 | FileCheck %s
-; Emerald Rapids vector multiply (p0,p1), vector shift (p0,p1), vector ALU (p0,p1,p5) and the scalar ALU that does the
-; loop's address arithmetic (p0,p1,p5,p6,p10) share ports, so the resource bound is taken over unions of port sets.
-; This loop is vec_mul 2.09 + vec_shift 1.0 + vec_alu 1.0 + the scalar_alu work: the union of all their ports bounds
-; it at 1.545, busiest class vec_mul. Per-class load/units (the old bound) would say vec_mul 2.09 / 2 = 1.045.
+; Emerald Rapids vector multiply (p0,p1), vector shift (p0,p1) and vector ALU (p0,p1,p5) share ports, so the resource
+; bound is taken over unions of port sets. Here 1.545 = (vec_mul 2.09 + vec_shift 1.0) / |{0,1}|, busiest class
+; vec_mul. Per-class load/units (the old bound) would say vec_mul 2.09 / 2 = 1.045.
 ; CHECK: savio: estimate (copies 1, promoted): TRes 1.545{{0*e\+00}} (vec_mul) {{.*}} with512=0
 target triple = "x86_64-unknown-linux-gnu"
 

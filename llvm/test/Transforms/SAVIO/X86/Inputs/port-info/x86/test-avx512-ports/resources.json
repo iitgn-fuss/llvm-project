@@ -1,0 +1,38 @@
+{
+  "cpu": "test-avx512-ports",
+  "arch": "x86",
+  "complete": true,
+  "dispatch_width": 64,
+  "classes": {
+    "scalar": {
+      "units": 2,
+      "ports": [
+        0,
+        1
+      ]
+    },
+    "vector": {
+      "units": 1,
+      "ports": [
+        2
+      ]
+    },
+    "int_div": {
+      "units": 1
+    },
+    "fp_div": {
+      "units": 1
+    },
+    "mem": {
+      "units": 1
+    }
+  },
+  "registers": {
+    "gpr": 31,
+    "vec": 32,
+    "vec_callee_saved": 8
+  },
+  "source": "estimate",
+  "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only (a 512-bit vector machine); copy of test-avx512 with port sets (scalar p0,p1; vector p2) so the port-set bound and with512 are exercised",
+  "vector_width_bits": 512
+}

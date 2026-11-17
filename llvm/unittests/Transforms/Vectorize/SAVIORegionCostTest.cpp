@@ -328,12 +328,13 @@ TEST_F(SAVIOPortSetTest, LoadsPortSets) {
 }
 
 TEST_F(SAVIOPortSetTest, DisjointSetsAreToday) {
-  // alu {0,1,5,6,10} 10, load {2,3,11} 6, store {4,9} 4, divider 2 (no ports):
-  // every class alone: 2.0, 2.0, 2.0, 2.0.
+  // alu {0,1,5,6,10} 10, load {2,3,11} 6, store {4,9} 4.4, divider 2 (no
+  // ports): per class 2.0, 2.0, 2.2, 2.0; the store class is the maximum.
   SmallVector<CostNode> N = {load("scalar_alu", 10), load("load", 6),
-                             load("store", 4), load("int_div", 2)};
+                             load("store", 4.4), load("int_div", 2)};
   RegionEstimate E = estimateRegion(N, *PD, true);
-  EXPECT_DOUBLE_EQ(E.TRes, 2.0);
+  EXPECT_DOUBLE_EQ(E.TRes, 2.2);
+  EXPECT_EQ(PD->className(E.BusiestClass), "store");
   EXPECT_FALSE(E.With512);
 }
 
@@ -377,8 +378,8 @@ TEST_F(SAVIOPortSetTest, AgreesWithValidateX86Ports) {
       {"alu+va256", {{"scalar_alu", 22.22}, {"vec_alu", 12.0}}, false, 6.844},
       // va256+va512 (12 + 8): 20 / |{0,5}|.
       {"va256+va512", {{"vec_alu", 20.0}}, true, 10.0},
-      // shlx+vsh512 (8 + 4): shifts on {0,6} and vec_shift on {0}: 12.16 / 2
-      // is beaten by (8.16 + 4) / 2 = 6.08 over {0,6}.
+      // shlx+vsh512 (8 + 4): vec_shift alone on {0}: 4 / 1 = 4; with the
+      // shifts on {0,6}: 12.16 / 2 = 6.08 wins.
       {"shlx+vsh512", {{"scalar_shift", 8.16}, {"vec_shift", 4.0}}, true, 6.08},
       // va256+cvt256 (12 + 4): vec_alu, vec_cvt, vec_cvt_shuffle on {0,1,5}.
       {"va256+cvt256",
