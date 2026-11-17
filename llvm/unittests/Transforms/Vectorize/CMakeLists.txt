@@ -14,6 +14,7 @@ add_llvm_unittest(VectorizeTests
   VPPostDomFrontierTest.cpp
   VPlanHCFGTest.cpp
   VPlanPatternMatchTest.cpp
+  SAVIOAvailabilityTest.cpp
   SAVIOPortDescriptionTest.cpp
   SAVIOPartitionerTest.cpp
   SAVIORegionCostTest.cpp

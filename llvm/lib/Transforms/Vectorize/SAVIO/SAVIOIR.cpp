@@ -368,7 +368,7 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
 
   bool Forced = SAVIOForce || SAVIOForceCount >= 0 || SAVIONoUnroll;
   unsigned LaneGroup = fpDivideGroup(*R.PD, TTI);
-  for (Region &Reg : formRegions(F, LI, LaneGroup)) {
+  for (Region &Reg : formRegions(F, LI, LaneGroup, R.PD.get())) {
     if (BFI.getBlockFreq(Reg.BB).getFrequency() <
         SAVIOColdFraction * EntryFreq)
       continue;
@@ -397,7 +397,7 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
       if (UR == LoopUnrollResult::FullyUnrolled)
         continue;
       if (UR == LoopUnrollResult::PartiallyUnrolled) {
-        for (Region &New : formRegions(F, LI, LaneGroup))
+        for (Region &New : formRegions(F, LI, LaneGroup, R.PD.get()))
           if (New.BB == Header) {
             Apply(New,
                   decide(New, *R.PD, Fallback,

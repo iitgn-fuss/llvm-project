@@ -135,9 +135,12 @@ bool liveOutNeedsInsert(const Group &G, const Instruction &I);
 /// and blocks outside loops. Blocks of other loops are not regions in v1.
 /// \p LaneGroup is the number of lanes one divide sequence handles together
 /// (fpDivideGroup): vector divides of up to 64 * \p LaneGroup bits are split
-/// into lane groups of that many lanes.
+/// into lane groups of that many lanes. With \p PD, an operation is a candidate
+/// of a transformation only if \p PD has every key it needs (Availability.h);
+/// without, only the shape of the operation decides.
 SmallVector<Region, 4> formRegions(Function &F, LoopInfo &LI,
-                                   unsigned LaneGroup = 2);
+                                   unsigned LaneGroup = 2,
+                                   const PortDescription *PD = nullptr);
 
 /// Dependences between the instructions of a region's block, independent of
 /// costing. Every non-phi instruction is a node, in program order, so node

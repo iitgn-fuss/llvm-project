@@ -1,0 +1,78 @@
+//===- SAVIOAvailabilityTest.cpp - SAVIO availability table tests ---------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#include "llvm/Transforms/Vectorize/SAVIO/Availability.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Transforms/Vectorize/SAVIO/PortDescription.h"
+#include "gtest/gtest.h"
+
+using namespace llvm;
+using namespace llvm::savio;
+
+namespace {
+
+std::string inputsRoot() {
+  SmallString<128> Root(SAVIO_TEST_INPUTS);
+  sys::path::append(Root, "port-info");
+  return std::string(Root);
+}
+
+using Keys = SmallVector<std::string, 8>;
+
+TEST(SAVIOAvailability, RequiredKeysSingletonVectorize) {
+  LLVMContext Ctx;
+  Type *I32 = Type::getInt32Ty(Ctx);
+  EXPECT_EQ(requiredKeys(Transform::SingletonVectorize, "add", I32),
+            (Keys{"sv.add v4i32", "gpr_to_vec", "vec_to_gpr"}));
+  EXPECT_EQ(requiredKeys(Transform::SingletonVectorize, "shl.imm", I32),
+            (Keys{"sv.shl.imm v4i32", "gpr_to_vec", "vec_to_gpr"}));
+}
+
+TEST(SAVIOAvailability, RequiredKeysFpDivideLanes) {
+  LLVMContext Ctx;
+  Type *V8 = FixedVectorType::get(Type::getInt32Ty(Ctx), 8);
+  EXPECT_EQ(requiredKeys(Transform::FpDivideLanes, "udiv", V8, 4),
+            (Keys{"udiv v8i32", "fpdiv4.udiv v8i32"}));
+  EXPECT_EQ(requiredKeys(Transform::FpDivideLanes, "urem", V8, 8),
+            (Keys{"urem v8i32", "fpdiv8.urem v8i32"}));
+}
+
+TEST(SAVIOAvailability, RequiredKeysScalarize) {
+  LLVMContext Ctx;
+  Type *V4 = FixedVectorType::get(Type::getInt64Ty(Ctx), 4);
+  EXPECT_EQ(requiredKeys(Transform::Scalarize, "mul", V4),
+            (Keys{"mul v4i64", "mul i64", "load v4i64", "load i64",
+                  "store v4i64", "store i64", "lane_extract", "lane_insert"}));
+}
+
+TEST(SAVIOAvailability, FirstMissing) {
+  auto PD = PortDescription::load(inputsRoot(), "AArch64", "test2s1v");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  LLVMContext Ctx;
+  Type *I32 = Type::getInt32Ty(Ctx);
+  // Everything Singleton Vectorize of add needs is there.
+  EXPECT_FALSE(firstMissing(
+      **PD, requiredKeys(Transform::SingletonVectorize, "add", I32)));
+  // A probe key without a cost, a transfer without a cost: the first of the
+  // keys that is missing is reported.
+  EXPECT_EQ(firstMissing(**PD, Keys{"add i32", "nosuch v4i32", "lane_extract"}),
+            "nosuch v4i32");
+  EXPECT_EQ(firstMissing(**PD, Keys{"add i32", "lane_extract", "lane_insert"}),
+            "lane_extract");
+  EXPECT_FALSE(firstMissing(**PD, Keys{}));
+}
+
+TEST(SAVIOAvailability, TransformNames) {
+  EXPECT_EQ(transformName(Transform::SingletonVectorize), "singleton-vectorize");
+  EXPECT_EQ(transformName(Transform::FpDivideLanes), "fpdiv-lanes");
+  EXPECT_EQ(transformName(Transform::Scalarize), "scalarize");
+}
+
+} // namespace

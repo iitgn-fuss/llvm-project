@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Vectorize/SAVIO/Partitioner.h"
+#include "llvm/Transforms/Vectorize/SAVIO/Availability.h"
+#include "llvm/Transforms/Vectorize/SAVIO/PortDescription.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -105,6 +107,37 @@ static bool isVectorCandidate(const Instruction &I) {
 
 static bool isCandidate(const Instruction &I) {
   return isScalarCandidate(I) || isVectorCandidate(I);
+}
+
+static bool isImmAmount(const Value *V);
+
+/// Whether the transformation \p X of \p I has every port-info key it needs
+/// (see requiredKeys); no description (\p PD null) means no check. Logs the
+/// keys looked up, or the first one missing.
+static bool isAvailable(const PortDescription *PD, Transform X,
+                        const Instruction &I, unsigned L = 0) {
+  if (!PD)
+    return true;
+  std::string Op = I.getOpcodeName();
+  if (isShift(I.getOpcode()) &&
+      (X == Transform::SingletonVectorize ? isa<ConstantInt>(I.getOperand(1))
+                                          : isImmAmount(I.getOperand(1))))
+    Op += ".imm";
+  SmallVector<std::string, 8> Keys = requiredKeys(X, Op, I.getType(), L);
+  std::optional<std::string> Missing = firstMissing(*PD, Keys);
+  LLVM_DEBUG({
+    dbgs() << "savio: " << transformName(X) << " of " << I.getOpcodeName()
+           << ' ' << *I.getType();
+    if (Missing) {
+      dbgs() << " not available: missing '" << *Missing << "'\n";
+    } else {
+      dbgs() << " keys:";
+      for (const std::string &K : Keys)
+        dbgs() << " '" << K << "'";
+      dbgs() << "\n";
+    }
+  });
+  return !Missing;
 }
 
 static bool isSimpleStoreOf(const User *U, const Value *V) {
@@ -338,7 +371,8 @@ static std::string sliceKey(const Group &G, const Loop *L, unsigned RegionNo) {
 /// classes of different regions apart.
 static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
                                         StringMap<unsigned> &Classes,
-                                        unsigned RegionNo, unsigned LaneGroup) {
+                                        unsigned RegionNo, unsigned LaneGroup,
+                                        const PortDescription *PD) {
   RegionGraph RG = buildRegionGraph(BB, L);
   unsigned N = RG.Insts.size();
   // Scalar candidates move to the vector unit, vector candidates to the scalar
@@ -346,8 +380,13 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
   // recurrence group: recurrences are pinned in the form LLVM chose.
   SmallVector<bool, 32> InScope(N, false), IsVec(N, false);
   for (unsigned I = 0; I != N; ++I) {
-    InScope[I] = isCandidate(*RG.Insts[I]) && !reachesAddress(*RG.Insts[I]);
-    IsVec[I] = isVectorCandidate(*RG.Insts[I]);
+    const Instruction &In = *RG.Insts[I];
+    IsVec[I] = isVectorCandidate(In);
+    InScope[I] = isCandidate(In) && !reachesAddress(In) &&
+                 isAvailable(PD,
+                             IsVec[I] ? Transform::Scalarize
+                                      : Transform::SingletonVectorize,
+                             In);
   }
 
   SmallVector<bool, 8> CompCycle;
@@ -514,7 +553,8 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
     unsigned NumLanes = VT->getNumElements();
     unsigned Size = std::min(LaneGroup, NumLanes);
     if (NumLanes < 4 || NumLanes > 16 || !isPowerOf2_32(NumLanes) ||
-        NumLanes * 32 > 64 * LaneGroup || NumLanes % Size)
+        NumLanes * 32 > 64 * LaneGroup || NumLanes % Size ||
+        !isAvailable(PD, Transform::FpDivideLanes, *I, Size))
       continue;
     std::string Key = (Twine(RegionNo) + "V:" + I->getOpcodeName() + " " +
                        typeKey(VT))
@@ -534,7 +574,8 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
 }
 
 SmallVector<Region, 4> savio::formRegions(Function &F, LoopInfo &LI,
-                                          unsigned LaneGroup) {
+                                          unsigned LaneGroup,
+                                          const PortDescription *PD) {
   SmallVector<Region, 4> Regions;
   StringMap<unsigned> Classes;
   unsigned RegionNo = 0;
@@ -543,7 +584,7 @@ SmallVector<Region, 4> savio::formRegions(Function &F, LoopInfo &LI,
     // v1: innermost single-block loops, and blocks outside any loop.
     if (L && !(L->isInnermost() && L->getNumBlocks() == 1))
       continue;
-    SmallVector<Group, 4> Groups = formGroups(BB, L, Classes, RegionNo++, LaneGroup);
+    SmallVector<Group, 4> Groups = formGroups(BB, L, Classes, RegionNo++, LaneGroup, PD);
     if (!Groups.empty())
       Regions.push_back({&BB, L, std::move(Groups)});
   }
