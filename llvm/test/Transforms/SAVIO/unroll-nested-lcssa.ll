@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1vc -pass-remarks=savio -S %s 2>&1 | FileCheck %s
 ; The adi-like loop inside an outer loop, with the last quotient used after
 ; the inner loop without an LCSSA phi (as a function can look at the end of
 ; the pipeline). The unroller needs the whole nest in LCSSA form, so SAVIO

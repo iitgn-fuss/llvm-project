@@ -14,6 +14,8 @@
 #include <algorithm>
 #include <cassert>
 
+#define DEBUG_TYPE "savio"
+
 using namespace llvm;
 using namespace llvm::savio;
 
@@ -212,6 +214,13 @@ RegionEstimate savio::estimateRegion(ArrayRef<CostNode> Nodes,
       Load[U.Class] += U.Cycles;
     Uops += N.Cost.Uops;
   }
+  LLVM_DEBUG({
+    dbgs() << "savio: class loads (cycles, whole region):";
+    for (unsigned C = 0; C != PD.numClasses(); ++C)
+      if (Load[C] > 0)
+        dbgs() << ' ' << PD.className(C) << '=' << Load[C];
+    dbgs() << " uops=" << Uops << '\n';
+  });
   if (!PD.hasPortSets()) {
     for (unsigned C = 0; C != PD.numClasses(); ++C) {
       double T = Load[C] / PD.units(C);

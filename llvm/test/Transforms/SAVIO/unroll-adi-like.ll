@@ -1,21 +1,24 @@
-; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1vc -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
 ; adi's shape: two independent divides per element (x[i] = a[i] / b[i] and
 ; y[i] = c[i] / d[i]), no recurrence through the divides, a trip count that
 ; ScalarEvolution can compute. Two instances of the divide slice are already in
 ; the body; the divide unit is the bottleneck, so the pass unrolls the loop to
 ; reach a better fraction and moves some of the divides to the vector side.
 ; The unrolled loop keeps an epilogue loop for any trip count.
-; On apple-m4 T is 4.00 per original iteration unchanged (two divides on
-; int_div); with one of the two moved it would be 2.37; unrolled by 4 there are
-; 8 instances of the divide slice and moving 4 gives T 2.11 per original
-; iteration (the remark reports T per original iteration), 11% better.
-; CHECK: remark: {{.*}}: T 4.00 -> 2.11 (resource), 4/8 of slice {{[0-9]+}}, unrolled by 4 (estimated 4/8 T 2.11)
+; The test CPU test2s1vc (the loop's loads and stores are not charged by it): T is
+; 8.00 per original iteration unchanged (two divides on the divider); unrolled by
+; 4 there are 8 instances of the divide slice and moving 3 gives T 5.00 per
+; original iteration (the remark reports T per original iteration).
+; (On apple-m4 the loop's four loads and two stores are charged since the
+; out-of-group charge: the address units bound T at 2.55 and no unroll helps,
+; see unroll-disabled.ll.)
+; CHECK: remark: {{.*}}: T 8.00 -> 5.00 (resource), 3/8 of slice {{[0-9]+}}, unrolled by 4 (estimated 3/8 T 5.00)
 ; CHECK: define void @f
 ; The remainder count is n mod 4.
 ; CHECK: and i64 %n, 3
 ; CHECK: loop:
-; CHECK-COUNT-4: call <4 x i32> @llvm.savio.sv.udiv.v4i32
-; Exactly four: none between the fourth and the loop branch.
+; CHECK-COUNT-3: call <4 x i32> @llvm.savio.sv.udiv.v4i32
+; Exactly three: none between the third and the loop branch.
 ; CHECK-NOT: call <4 x i32> @llvm.savio.sv.udiv.v4i32
 ; CHECK: br i1 %niter.ncmp.3, label %loop, label %exit.loopexit.unr-lcssa
 ; The remainder loop is the original scalar body.

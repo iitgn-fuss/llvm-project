@@ -906,6 +906,50 @@ static bool is512BitOp(const Instruction &I) {
 /// feeds it appear once, in the last copy. Groups of a copy are separate
 /// instances (virtual group j * NumGroups + g), except a recurrence, which is
 /// one chain through all copies and keeps the virtual group g.
+/// The port-info cost of an instruction that is in no group: it stays as it
+/// is before and after the move, so it adds a fixed load to the resource and
+/// dispatch bounds. Loads, stores, the lane extracts / inserts the SLP
+/// vectorizer leaves at the scalar boundary, and the arithmetic and logic ops
+/// that have an "<op> <type>" key. Nullopt (the caller's latency-only
+/// fallback, logged under -debug-only=savio) for anything without a key.
+static std::optional<OpCost> outOfGroupOpCost(const PortDescription &PD,
+                                              const Instruction &I) {
+  std::optional<OpCost> C;
+  if (auto *EE = dyn_cast<ExtractElementInst>(&I)) {
+    auto *VT = dyn_cast<FixedVectorType>(EE->getVectorOperand()->getType());
+    auto *Idx = dyn_cast<ConstantInt>(EE->getIndexOperand());
+    if (VT && Idx && VT->getElementType()->isIntegerTy())
+      C = PD.transferCost(Idx->isZero() ? TransferKind::VecToGpr
+                                        : TransferKind::LaneExtract);
+  } else if (auto *IE = dyn_cast<InsertElementInst>(&I)) {
+    auto *VT = dyn_cast<FixedVectorType>(IE->getType());
+    auto *Idx = dyn_cast<ConstantInt>(IE->getOperand(2));
+    if (VT && Idx && VT->getElementType()->isIntegerTy())
+      C = PD.transferCost(Idx->isZero() && isa<PoisonValue>(IE->getOperand(0))
+                              ? TransferKind::GprToVec
+                              : TransferKind::LaneInsert);
+  } else if (auto *LD = dyn_cast<LoadInst>(&I)) {
+    C = PD.irOpCost("load " + typeKey(LD->getType()));
+  } else if (auto *ST = dyn_cast<StoreInst>(&I)) {
+    C = PD.irOpCost(
+        "store " + typeKey(ST->getValueOperand()->getType()));
+  } else if (I.isBinaryOp() && !I.getType()->isFPOrFPVectorTy()) {
+    bool Imm = isa<ConstantInt>(I.getOperand(1)) &&
+               (I.getOpcode() == Instruction::Shl ||
+                I.getOpcode() == Instruction::LShr ||
+                I.getOpcode() == Instruction::AShr);
+    C = PD.irOpCost((Twine(I.getOpcodeName()) + (Imm ? ".imm " : " ") +
+                     typeKey(I.getType()))
+                        .str());
+  } else {
+    return std::nullopt;
+  }
+  LLVM_DEBUG(if (!C) dbgs() << "savio: no port-info cost for out-of-group "
+                            << I << "\n");
+  LLVM_DEBUG(if (C) dbgs() << "savio: out-of-group charge: " << I << "\n");
+  return C;
+}
+
 class NodeBuilder {
   const Region &R;
   const RegionGraph &RG;
@@ -1208,6 +1252,8 @@ private:
       if (C && P)
         Conc = PD.concurrency(Key);
     }
+    if (!C && !InGroup)
+      C = outOfGroupOpCost(PD, I);
     Nd.Cost = C ? *C : Fallback(I);
     Nd.Conc = Conc;
     // A Scalarized operation is scalar code, whatever the IR type says.
