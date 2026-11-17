@@ -1,9 +1,10 @@
 ; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -savio-cpu=emeraldrapids -pass-remarks=savio -pass-remarks-missed=savio -debug-only=savio -disable-output %s 2>&1 | FileCheck %s
-; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -debug-only=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=OFF
+; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -debug-only=savio -disable-output %S/unroll-adi-like.ll 2>&1 | FileCheck %s --check-prefix=OFF
 ; REQUIRES: asserts
 ; The charge is opt-in per port information (resources.json "charge_out_of_group":
-; true, set for emeraldrapids only): a description without it (the test fixture,
-; apple-m4) charges nothing outside the groups, as before (the second RUN: no charge line).
+; true, set for emeraldrapids only): a description without it (apple-m4 on the adi-like loop of unroll-adi-like.ll,
+; the test fixtures) charges nothing outside the groups, as before (see the OFF checks).
+; OFF: savio: class loads
 ; OFF-NOT: out-of-group
 ; Instructions outside every group (here the loads, the store and the induction
 ; add) are charged with their port-info cost, on emeraldrapids: they are present
