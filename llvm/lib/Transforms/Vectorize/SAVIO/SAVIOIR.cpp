@@ -249,6 +249,8 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
       return "recurrence";
     case Bound::Dispatch:
       return "dispatch";
+    case Bound::Memory:
+      return "memory";
     }
     llvm_unreachable("unknown bound");
   };

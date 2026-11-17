@@ -68,6 +68,20 @@ enum class TransferKind {
 
 constexpr unsigned NumTransferKinds = 7;
 
+/// Cycles per access of a load / store whose address depends on loaded data
+/// (a gather, a scatter, a table lookup) when the accessed array does not fit
+/// the first-level cache. Measured per access in a loop that streams the index
+/// array and accesses a footprint just beyond the second-level cache; the
+/// access count of a loop times these is a throughput floor that moving
+/// arithmetic between scalar and vector units does not lower.
+struct IndirectAccessCost {
+  double LoadCycles = 0;
+  double StoreCycles = 0;
+  /// Footprints up to this many bytes stay in the first-level cache and are
+  /// not charged.
+  uint64_t ResidentBytes = 0;
+};
+
 class PortDescription {
 public:
   /// Loads <Root>/<Arch>/<CPU>/{resources,ops,transfers,probes}.json. Returns
@@ -118,6 +132,12 @@ public:
   /// Instruction-window size in micro-ops (resources.json "window_uops"), or 0
   /// when absent.
   unsigned windowUops() const { return WindowUops; }
+  /// Throughput cost of data-dependent memory accesses beyond the first-level
+  /// cache (resources.json "indirect_access"); null when the description has
+  /// none.
+  const IndirectAccessCost *indirectAccess() const {
+    return HasIndirectAccess ? &IndirectAccess : nullptr;
+  }
 
 private:
   PortDescription() = default;
@@ -129,6 +149,8 @@ private:
   unsigned DispatchWidth = 0;
   unsigned VectorWidthBits = 128;
   unsigned WindowUops = 0;
+  IndirectAccessCost IndirectAccess;
+  bool HasIndirectAccess = false;
   StringMap<ConcurrencyTable> Concurrency;
   StringMap<OpCost> Probes;
   std::optional<OpCost> Transfers[NumTransferKinds];

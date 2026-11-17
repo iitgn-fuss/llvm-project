@@ -41,12 +41,16 @@ struct CostNode {
   bool Wide512 = false;
 };
 
-enum class Bound { Resource, Recurrence, Dispatch };
+enum class Bound { Resource, Recurrence, Dispatch, Memory };
 
 struct RegionEstimate {
   double TRes = 0;
   double TRec = 0;
   double TDisp = 0;
+  /// Throughput floor of the data-dependent memory accesses of the region
+  /// (PortDescription::indirectAccess); not computed by estimateRegion (it
+  /// needs the accesses of the whole loop), the caller sets it.
+  double TMem = 0;
   /// The class with the largest load inside the maximizing port union (or
   /// the most loaded class when the description has no port sets).
   unsigned BusiestClass = 0;
@@ -54,10 +58,10 @@ struct RegionEstimate {
   /// the description has port sets).
   bool With512 = false;
 
-  /// Estimated cycles: the largest of the three bounds.
+  /// Estimated cycles: the largest of the four bounds.
   double t() const;
   /// The bound that determines t(); ties resolve Recurrence > Resource >
-  /// Dispatch.
+  /// Dispatch > Memory.
   Bound limiting() const;
 };
 

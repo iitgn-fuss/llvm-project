@@ -446,3 +446,32 @@ TEST(SAVIOPortDescription, ArchDir) {
 }
 
 } // namespace
+
+TEST(SAVIOPortDescription, IndirectAccessParsedAndAbsentByDefault) {
+  auto None = PortDescription::load(inputsRoot(), "AArch64", "test2s1v");
+  ASSERT_TRUE(!!None) << toString(None.takeError());
+  EXPECT_EQ((*None)->indirectAccess(), nullptr);
+
+  std::string Root = copyFixture();
+  rewrite(Root, "resources.json", "\"dispatch_width\"",
+          "\"indirect_access\": {\"load_cycles\": 5.5, \"store_cycles\": 8, "
+          "\"resident_bytes\": 49152, \"source\": \"estimate\", "
+          "\"evidence\": \"unit test\"},\n  \"dispatch_width\"");
+  auto PD = PortDescription::load(Root, "AArch64", "test2s1v");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  ASSERT_NE((*PD)->indirectAccess(), nullptr);
+  EXPECT_DOUBLE_EQ((*PD)->indirectAccess()->LoadCycles, 5.5);
+  EXPECT_DOUBLE_EQ((*PD)->indirectAccess()->StoreCycles, 8.0);
+  EXPECT_EQ((*PD)->indirectAccess()->ResidentBytes, 49152u);
+  sys::fs::remove_directories(Root);
+}
+
+TEST(SAVIOPortDescription, IndirectAccessNeedsNumbersAndEvidence) {
+  std::string Root = copyFixture();
+  rewrite(Root, "resources.json", "\"dispatch_width\"",
+          "\"indirect_access\": {\"load_cycles\": 5.5, "
+          "\"resident_bytes\": 49152, \"source\": \"estimate\", "
+          "\"evidence\": \"unit test\"},\n  \"dispatch_width\"");
+  EXPECT_NE(loadError(Root).find("indirect_access"), std::string::npos);
+  sys::fs::remove_directories(Root);
+}

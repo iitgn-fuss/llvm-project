@@ -17,7 +17,7 @@
 using namespace llvm;
 using namespace llvm::savio;
 
-double RegionEstimate::t() const { return std::max({TRes, TRec, TDisp}); }
+double RegionEstimate::t() const { return std::max({TRes, TRec, TDisp, TMem}); }
 
 Bound RegionEstimate::limiting() const {
   double T = t();
@@ -25,7 +25,9 @@ Bound RegionEstimate::limiting() const {
     return Bound::Recurrence;
   if (TRes == T)
     return Bound::Resource;
-  return Bound::Dispatch;
+  if (TDisp == T)
+    return Bound::Dispatch;
+  return Bound::Memory;
 }
 
 namespace {

@@ -91,6 +91,10 @@ struct Region {
   BasicBlock *BB;
   Loop *L; // Null outside loops.
   SmallVector<Group, 4> Groups;
+  /// Cycles per iteration the loop's data-dependent memory accesses take
+  /// whatever is moved (PortDescription::indirectAccess); 0 outside loops or
+  /// when the description has none.
+  double MemFloor = 0;
 };
 
 /// k of the U instances of a slice class are moved.

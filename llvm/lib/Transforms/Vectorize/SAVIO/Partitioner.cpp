@@ -14,6 +14,9 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/ValueTracking.h"
+#include "llvm/IR/GetElementPtrTypeIterator.h"
+#include "llvm/IR/Operator.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
@@ -574,6 +577,62 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
   return Groups;
 }
 
+/// True if \p V is computed from a value loaded inside \p L (through casts,
+/// arithmetic and selects; not through phis, which are induction variables or
+/// carried values).
+static bool dependsOnLoadInLoop(const Value *V, const Loop *L,
+                                unsigned Depth = 0) {
+  auto *I = dyn_cast<Instruction>(V);
+  if (!I || Depth > 8 || !L->contains(I))
+    return false;
+  if (isa<LoadInst>(I))
+    return true;
+  if (isa<PHINode>(I))
+    return false;
+  return any_of(I->operands(), [&](const Value *Op) {
+    return dependsOnLoadInLoop(Op, L, Depth + 1);
+  });
+}
+
+/// Throughput floor in cycles per iteration of the loop of \p BB from its
+/// data-dependent accesses: a load or store through a one-index GEP whose index
+/// is computed from loaded data and may reach beyond the first-level cache
+/// (the index range known from its bits, times the element size).
+static double indirectAccessFloor(const BasicBlock &BB, const Loop *L,
+                                  const PortDescription &PD) {
+  const IndirectAccessCost *IA = PD.indirectAccess();
+  if (!L || !IA)
+    return 0;
+  const DataLayout &DL = BB.getDataLayout();
+  double Floor = 0;
+  for (const Instruction &I : BB) {
+    const Value *Ptr = nullptr;
+    bool IsLoad = isa<LoadInst>(I);
+    if (auto *LD = dyn_cast<LoadInst>(&I))
+      Ptr = LD->getPointerOperand();
+    else if (auto *ST = dyn_cast<StoreInst>(&I))
+      Ptr = ST->getPointerOperand();
+    else
+      continue;
+    auto *GEP = dyn_cast<GEPOperator>(Ptr);
+    if (!GEP || GEP->getNumOperands() != 2 ||
+        !dependsOnLoadInLoop(GEP->getOperand(1), L))
+      continue;
+    uint64_t Elt = DL.getTypeAllocSize(GEP->getSourceElementType());
+    APInt MaxIdx = computeKnownBits(GEP->getOperand(1), DL).getMaxValue();
+    // Footprint = (max index + 1) * element size, saturating.
+    bool Resident = false;
+    if (MaxIdx.getActiveBits() <= 63) {
+      uint64_t N = MaxIdx.getZExtValue();
+      Resident = N < IA->ResidentBytes / Elt;
+    }
+    if (Resident)
+      continue;
+    Floor += IsLoad ? IA->LoadCycles : IA->StoreCycles;
+  }
+  return Floor;
+}
+
 SmallVector<Region, 4> savio::formRegions(Function &F, LoopInfo &LI,
                                           unsigned LaneGroup,
                                           const PortDescription *PD) {
@@ -587,7 +646,9 @@ SmallVector<Region, 4> savio::formRegions(Function &F, LoopInfo &LI,
       continue;
     SmallVector<Group, 4> Groups = formGroups(BB, L, Classes, RegionNo++, LaneGroup, PD);
     if (!Groups.empty())
-      Regions.push_back({&BB, L, std::move(Groups)});
+      Regions.push_back(
+          {&BB, L, std::move(Groups),
+           PD ? indirectAccessFloor(BB, L, *PD) : 0.0});
   }
   return Regions;
 }
@@ -1314,13 +1375,15 @@ estimateAssignment(const Region &R, const RegionGraph &RG,
   E.TRes /= Copies;
   E.TRec /= Copies;
   E.TDisp /= Copies;
+  E.TMem = R.MemFloor; // Per original iteration: the unroll does not change it.
   LLVM_DEBUG({
     dbgs() << "savio: estimate (copies " << Copies << ", promoted";
     for (unsigned I = 0; I != Promoted.size(); ++I)
       if (Promoted[I])
         dbgs() << ' ' << I;
     dbgs() << "): TRes " << E.TRes << " (" << PD.className(E.BusiestClass)
-           << ") TRec " << E.TRec << " TDisp " << E.TDisp;
+           << ") TRec " << E.TRec << " TDisp " << E.TDisp << " TMem "
+           << E.TMem;
     if (PD.hasPortSets())
       dbgs() << " with512=" << E.With512;
     dbgs() << "\n";

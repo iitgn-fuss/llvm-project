@@ -398,3 +398,16 @@ TEST_F(SAVIOPortSetTest, AgreesWithValidateX86Ports) {
 }
 
 } // namespace
+
+TEST_F(SAVIORegionCostTest, MemoryFloorLimitsAndTiesLast) {
+  SmallVector<CostNode> N;
+  add(N, "add i32", 6);
+  RegionEstimate E = estimateRegion(N, *PD, /*IsLoop=*/true);
+  EXPECT_DOUBLE_EQ(E.TMem, 0.0); // estimateRegion does not compute it
+  E.TMem = 8.0;
+  EXPECT_DOUBLE_EQ(E.t(), 8.0);
+  EXPECT_EQ(E.limiting(), Bound::Memory);
+  E.TMem = 3.0; // equal to TRes: the resource bound wins the tie
+  EXPECT_DOUBLE_EQ(E.t(), 3.0);
+  EXPECT_EQ(E.limiting(), Bound::Resource);
+}

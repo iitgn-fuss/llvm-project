@@ -192,6 +192,22 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
         return makeError(F, "'window_uops' needs a positive integer 'value'");
       PD->WindowUops = *V;
     }
+    if (const json::Value *IV = R->get("indirect_access")) {
+      const json::Object *IO = IV->getAsObject();
+      if (!IO)
+        return makeError(F, "'indirect_access' must be an object");
+      if (Error E = requireProvenance(F, *IO, "'indirect_access'"))
+        return std::move(E);
+      std::optional<double> L = IO->getNumber("load_cycles");
+      std::optional<double> S = IO->getNumber("store_cycles");
+      std::optional<int64_t> B = IO->getInteger("resident_bytes");
+      if (!L || !S || !B || *L < 0 || *S < 0 || *B <= 0)
+        return makeError(F, "'indirect_access' needs non-negative numbers "
+                            "'load_cycles' and 'store_cycles' and a positive "
+                            "integer 'resident_bytes'");
+      PD->IndirectAccess = {*L, *S, uint64_t(*B)};
+      PD->HasIndirectAccess = true;
+    }
     const json::Object *Classes = R->getObject("classes");
     if (!Classes || Classes->empty())
       return makeError(F, "'classes' must be a non-empty object");
