@@ -257,7 +257,8 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
 
   // Instructions without a port-info entry: TTI latency (1 if unknown) and one
   // micro-op unless TTI says the instruction is free (folded casts, phis,
-  // debug intrinsics); no resource use.
+  // debug intrinsics); no resource use (unless the port description sets
+  // chargeOutOfGroup(): see outOfGroupOpCost in Partitioner.cpp).
   auto &TTI = FAM.getResult<TargetIRAnalysis>(F);
   auto Fallback = [&](const Instruction &I) {
     OpCost C;

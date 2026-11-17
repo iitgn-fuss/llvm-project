@@ -889,23 +889,6 @@ static bool is512BitOp(const Instruction &I) {
   return VT && VT->getPrimitiveSizeInBits().getFixedValue() == 512;
 }
 
-/// Cost model nodes of a region for one assignment, one node per instruction
-/// of the region graph plus the transfers a Singleton Vectorized group needs.
-///
-/// In-scope operations of groups are priced from the port description (scalar
-/// or lane-0 vector form); every other instruction (loads, stores, address
-/// arithmetic, calls, compares, branches, other types) from the fallback, which
-/// gives it latency and micro-ops but no resource use. So a dependence through
-/// any instruction is kept, and T bounds the whole block.
-///
-/// The builder can also model the region unrolled \p Copies times without
-/// touching the IR ("virtual unroll"): the body is laid out Copies times, the
-/// carried edge of distance d from copy j goes to copy j-d (a same-iteration
-/// edge) or, past the first copy, wraps to the last copies with a distance in
-/// unrolled iterations; the loop-control branch and the compare that only
-/// feeds it appear once, in the last copy. Groups of a copy are separate
-/// instances (virtual group j * NumGroups + g), except a recurrence, which is
-/// one chain through all copies and keeps the virtual group g.
 /// The port-info cost of an instruction that is in no group: it stays as it
 /// is before and after the move, so it adds a fixed load to the resource and
 /// dispatch bounds. Loads, stores, the lane extracts / inserts the SLP
@@ -950,6 +933,25 @@ static std::optional<OpCost> outOfGroupOpCost(const PortDescription &PD,
   return C;
 }
 
+/// Cost model nodes of a region for one assignment, one node per instruction
+/// of the region graph plus the transfers a Singleton Vectorized group needs.
+///
+/// In-scope operations of groups are priced from the port description (scalar
+/// or lane-0 vector form); every other instruction (loads, stores, address
+/// arithmetic, calls, compares, branches, other types) from the fallback, which
+/// gives it latency and micro-ops but no resource use (unless the port
+/// description sets chargeOutOfGroup(): then outOfGroupOpCost prices loads,
+/// stores, lane extracts / inserts and integer ops). So a dependence through
+/// any instruction is kept, and T bounds the whole block.
+///
+/// The builder can also model the region unrolled \p Copies times without
+/// touching the IR ("virtual unroll"): the body is laid out Copies times, the
+/// carried edge of distance d from copy j goes to copy j-d (a same-iteration
+/// edge) or, past the first copy, wraps to the last copies with a distance in
+/// unrolled iterations; the loop-control branch and the compare that only
+/// feeds it appear once, in the last copy. Groups of a copy are separate
+/// instances (virtual group j * NumGroups + g), except a recurrence, which is
+/// one chain through all copies and keeps the virtual group g.
 class NodeBuilder {
   const Region &R;
   const RegionGraph &RG;

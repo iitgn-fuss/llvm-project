@@ -466,6 +466,37 @@ TEST(SAVIOPortDescription, IndirectAccessParsedAndAbsentByDefault) {
   sys::fs::remove_directories(Root);
 }
 
+TEST(SAVIOPortDescription, ChargeOutOfGroupOptInAndValidated) {
+  auto None = PortDescription::load(inputsRoot(), "AArch64", "test2s1v");
+  ASSERT_TRUE(!!None) << toString(None.takeError());
+  EXPECT_FALSE((*None)->chargeOutOfGroup());
+
+  std::string Root = copyFixture();
+  rewrite(Root, "resources.json", "\"dispatch_width\"",
+          "\"charge_out_of_group\": {\"value\": true, \"source\": "
+          "\"estimate\", \"evidence\": \"unit test\"},\n  "
+          "\"dispatch_width\"");
+  auto PD = PortDescription::load(Root, "AArch64", "test2s1v");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  EXPECT_TRUE((*PD)->chargeOutOfGroup());
+  sys::fs::remove_directories(Root);
+
+  // A value that is not a boolean, and a missing provenance, are errors.
+  Root = copyFixture();
+  rewrite(Root, "resources.json", "\"dispatch_width\"",
+          "\"charge_out_of_group\": {\"value\": 1, \"source\": "
+          "\"estimate\", \"evidence\": \"unit test\"},\n  "
+          "\"dispatch_width\"");
+  EXPECT_NE(loadError(Root).find("charge_out_of_group"), std::string::npos);
+  sys::fs::remove_directories(Root);
+  Root = copyFixture();
+  rewrite(Root, "resources.json", "\"dispatch_width\"",
+          "\"charge_out_of_group\": {\"value\": true},\n  "
+          "\"dispatch_width\"");
+  EXPECT_NE(loadError(Root).find("charge_out_of_group"), std::string::npos);
+  sys::fs::remove_directories(Root);
+}
+
 TEST(SAVIOPortDescription, IndirectAccessNeedsNumbersAndEvidence) {
   std::string Root = copyFixture();
   rewrite(Root, "resources.json", "\"dispatch_width\"",
