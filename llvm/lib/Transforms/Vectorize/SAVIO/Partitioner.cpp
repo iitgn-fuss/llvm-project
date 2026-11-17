@@ -577,21 +577,36 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
   return Groups;
 }
 
-/// True if \p V is computed from a value loaded inside \p L (through casts,
-/// arithmetic and selects; not through phis, which are induction variables or
-/// carried values).
-static bool dependsOnLoadInLoop(const Value *V, const Loop *L,
-                                unsigned Depth = 0) {
+/// Walks the computation of \p V inside \p L (through casts, arithmetic and
+/// selects; a load is a leaf, its address is not followed) and records whether
+/// it reads a loaded value and whether it reads a phi of the loop.
+static void scanIndex(const Value *V, const Loop *L,
+                      SmallPtrSetImpl<const Value *> &Seen, bool &HasLoad,
+                      bool &HasPhi) {
   auto *I = dyn_cast<Instruction>(V);
-  if (!I || Depth > 8 || !L->contains(I))
-    return false;
-  if (isa<LoadInst>(I))
-    return true;
-  if (isa<PHINode>(I))
-    return false;
-  return any_of(I->operands(), [&](const Value *Op) {
-    return dependsOnLoadInLoop(Op, L, Depth + 1);
-  });
+  if (!I || !L->contains(I) || !Seen.insert(I).second)
+    return;
+  if (isa<LoadInst>(I)) {
+    HasLoad = true;
+    return;
+  }
+  if (isa<PHINode>(I)) {
+    HasPhi = true;
+    return;
+  }
+  for (const Value *Op : I->operands())
+    scanIndex(Op, L, Seen, HasLoad, HasPhi);
+}
+
+/// True if the index \p V is a function of loaded data alone: it reads a loaded
+/// value and no phi of the loop. An index that also reads a phi (the induction
+/// variable, a carried offset such as j += x & 1) moves along with the loop and
+/// stays near its previous value, so it is not a random access.
+static bool isDataDependentIndex(const Value *V, const Loop *L) {
+  SmallPtrSet<const Value *, 16> Seen;
+  bool HasLoad = false, HasPhi = false;
+  scanIndex(V, L, Seen, HasLoad, HasPhi);
+  return HasLoad && !HasPhi;
 }
 
 /// Throughput floor in cycles per iteration of the loop of \p BB from its
@@ -616,7 +631,7 @@ static double indirectAccessFloor(const BasicBlock &BB, const Loop *L,
       continue;
     auto *GEP = dyn_cast<GEPOperator>(Ptr);
     if (!GEP || GEP->getNumOperands() != 2 ||
-        !dependsOnLoadInLoop(GEP->getOperand(1), L))
+        !isDataDependentIndex(GEP->getOperand(1), L))
       continue;
     uint64_t Elt = DL.getTypeAllocSize(GEP->getSourceElementType());
     APInt MaxIdx = computeKnownBits(GEP->getOperand(1), DL).getMaxValue();

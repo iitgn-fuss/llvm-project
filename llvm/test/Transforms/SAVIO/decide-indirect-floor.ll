@@ -13,6 +13,8 @@
 ; A gather (load by a loaded index) feeding the divide: 5.18 is below the divider's 6.00,
 ; so the floor does not limit and the divide is moved down to the floor.
 ; CHECK: remark: {{.*}}: T 6.00 -> 5.18 (resource), 1/1 of slice
+; The carried offset (@carried, last): not charged either.
+; CHECK: remark: {{.*}}: T 6.00 -> 2.40 (resource), 3/5 of slice
 target triple = "x86_64-unknown-linux-gnu"
 
 define void @scatter(ptr %a, ptr %idx, ptr %o, i32 %d, i64 %n) "target-cpu"="emeraldrapids" {
@@ -72,6 +74,34 @@ loop:
   %pa = getelementptr inbounds i32, ptr %a, i64 %jz
   %x = load i32, ptr %pa
   %q = udiv i32 %x, %d
+  %po = getelementptr inbounds i32, ptr %o, i64 %i
+  store i32 %q, ptr %po
+  %i.next = add nuw i64 %i, 1
+  %c = icmp eq i64 %i.next, %n
+  br i1 %c, label %exit, label %loop
+
+exit:
+  ret void
+}
+
+; A carried offset advanced by loaded data (j += x & 1, a5_mul_streams_rec): the index reads a
+; phi, the access follows the loop and is not charged; the result is the same as for the
+; masked scatter (T 6.00 -> 2.40, 3/5, no memory bound).
+define void @carried(ptr %a, ptr %b, ptr %o, i32 %d, i64 %n) "target-cpu"="emeraldrapids" {
+entry:
+  br label %loop
+
+loop:
+  %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+  %j = phi i64 [ 0, %entry ], [ %j.next, %loop ]
+  %pa = getelementptr inbounds i32, ptr %a, i64 %i
+  %x = load i32, ptr %pa
+  %xb = and i32 %x, 1
+  %xz = zext i32 %xb to i64
+  %j.next = add i64 %j, %xz
+  %pb = getelementptr inbounds i32, ptr %b, i64 %j.next
+  %z = load i32, ptr %pb
+  %q = udiv i32 %z, %d
   %po = getelementptr inbounds i32, ptr %o, i64 %i
   store i32 %q, ptr %po
   %i.next = add nuw i64 %i, 1
