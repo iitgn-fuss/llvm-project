@@ -554,6 +554,7 @@ FUNCTION_PASS("separate-const-offset-from-gep",
 FUNCTION_PASS("sink", SinkingPass())
 FUNCTION_PASS("sjlj-eh-prepare", SjLjEHPreparePass(TM))
 FUNCTION_PASS("savio-ir", SAVIOIRPass())
+FUNCTION_PASS("savio-expand", SAVIOExpandIntrinsicsPass())
 FUNCTION_PASS("slp-vectorizer", SLPVectorizerPass())
 FUNCTION_PASS("slsr", StraightLineStrengthReducePass())
 FUNCTION_PASS("stack-protector", StackProtectorPass(*TM))

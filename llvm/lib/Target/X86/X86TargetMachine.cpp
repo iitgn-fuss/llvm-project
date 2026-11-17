@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "X86TargetMachine.h"
+#include "llvm/Transforms/Vectorize/SAVIO/ExpandIntrinsics.h"
 #include "MCTargetDesc/X86MCTargetDesc.h"
 #include "TargetInfo/X86TargetInfo.h"
 #include "X86.h"
@@ -67,6 +68,7 @@ extern "C" LLVM_C_ABI void LLVMInitializeX86Target() {
   // Register the target.
   RegisterTargetMachine<X86TargetMachine> X(getTheX86_32Target());
   RegisterTargetMachine<X86TargetMachine> Y(getTheX86_64Target());
+  initializeSAVIOExpandIntrinsicsLegacyPassPass(*PassRegistry::getPassRegistry());
 
   PassRegistry &PR = *PassRegistry::getPassRegistry();
   initializeX86LowerAMXIntrinsicsLegacyPassPass(PR);
@@ -426,6 +428,10 @@ void X86PassConfig::addIRPasses() {
   addPass(createX86LowerAMXTypeLegacyPass());
 
   TargetPassConfig::addIRPasses();
+
+  // X86 selects no llvm.savio.* intrinsic itself: lower them to plain IR (all
+  // opt levels; AArch64 keeps them for its own pseudos).
+  addPass(createSAVIOExpandIntrinsicsPass());
 
   if (TM->getOptLevel() != CodeGenOptLevel::None) {
     addPass(createInterleavedAccessPass());

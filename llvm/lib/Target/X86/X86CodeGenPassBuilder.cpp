@@ -26,6 +26,7 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Transforms/CFGuard.h"
+#include "llvm/Transforms/Vectorize/SAVIO/ExpandIntrinsics.h"
 #include "llvm/Transforms/Vectorize/SAVIO/SAVIOPipeline.h"
 
 using namespace llvm;
@@ -74,6 +75,9 @@ void X86CodeGenPassBuilder::addIRPasses(PassManagerWrapper &PMW) const {
   addFunctionPass(X86LowerAMXTypePass(&TM), PMW);
 
   Base::addIRPasses(PMW);
+
+  // X86 selects no llvm.savio.* intrinsic itself: lower them to plain IR.
+  addFunctionPass(SAVIOExpandIntrinsicsPass(), PMW);
 
   if (getOptLevel() != CodeGenOptLevel::None) {
     addFunctionPass(InterleavedAccessPass(TM), PMW);
