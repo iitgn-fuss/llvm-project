@@ -16,6 +16,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include <optional>
@@ -74,14 +75,17 @@ static bool isScalarCandidate(const Instruction &I) {
   }
 }
 
-/// Scalarize candidates: add sub mul and or xor shl lshr ashr on `<4 x i32>`
-/// or `<2 x i64>`. Vector udiv/urem stay with the lane-pair path.
+/// Scalarize candidates: add sub mul and or xor shl lshr ashr on fixed vectors
+/// of i32 or i64 that are 128, 256 or 512 bits wide (whether the port-info has
+/// the keys is decided when the group is costed). Vector udiv/urem stay with
+/// the lane-group path.
 static bool isVectorCandidate(const Instruction &I) {
   auto *VT = dyn_cast<FixedVectorType>(I.getType());
-  if (!VT || !((VT->getNumElements() == 4 &&
-                VT->getElementType()->isIntegerTy(32)) ||
-               (VT->getNumElements() == 2 &&
-                VT->getElementType()->isIntegerTy(64))))
+  if (!VT || !(VT->getElementType()->isIntegerTy(32) ||
+               VT->getElementType()->isIntegerTy(64)))
+    return false;
+  uint64_t Bits = VT->getPrimitiveSizeInBits().getFixedValue();
+  if (Bits != 128 && Bits != 256 && Bits != 512)
     return false;
   switch (I.getOpcode()) {
   case Instruction::Add:
@@ -334,7 +338,7 @@ static std::string sliceKey(const Group &G, const Loop *L, unsigned RegionNo) {
 /// classes of different regions apart.
 static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
                                         StringMap<unsigned> &Classes,
-                                        unsigned RegionNo) {
+                                        unsigned RegionNo, unsigned LaneGroup) {
   RegionGraph RG = buildRegionGraph(BB, L);
   unsigned N = RG.Insts.size();
   // Scalar candidates move to the vector unit, vector candidates to the scalar
@@ -494,36 +498,43 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
     });
   }
 
-  // The lane pairs of each unsigned divide or remainder of <4 x i32> by a
+  // The lane groups of each unsigned divide or remainder of <N x i32> by a
   // non-constant divisor (a constant divisor becomes a multiply: the integer
-  // divider is not used and the fdiv form would lose): two groups, pair
-  // {0,1} then pair {2,3}, instances of one slice class per opcode.
+  // divider is not used and the fdiv form would lose), for vectors that fit
+  // the divide width (64 * LaneGroup bits): N / g groups, lanes {0..g-1}
+  // first, g = min(LaneGroup, N); instances of one slice class per opcode.
   for (const Instruction *CI : RG.Insts) {
     auto *I = const_cast<Instruction *>(CI);
     auto *VT = dyn_cast<FixedVectorType>(I->getType());
-    if (!VT || VT->getNumElements() != 4 ||
-        !VT->getElementType()->isIntegerTy(32) ||
+    if (!VT || !VT->getElementType()->isIntegerTy(32) ||
         (I->getOpcode() != Instruction::UDiv &&
          I->getOpcode() != Instruction::URem) ||
         isa<Constant>(I->getOperand(1)))
       continue;
-    std::string Key = (Twine(RegionNo) + "V:" + I->getOpcodeName() +
-                       " v4i32")
+    unsigned NumLanes = VT->getNumElements();
+    unsigned Size = std::min(LaneGroup, NumLanes);
+    if (NumLanes < 4 || NumLanes > 16 || !isPowerOf2_32(NumLanes) ||
+        NumLanes * 32 > 64 * LaneGroup || NumLanes % Size)
+      continue;
+    std::string Key = (Twine(RegionNo) + "V:" + I->getOpcodeName() + " " +
+                       typeKey(VT))
                           .str();
     unsigned Cls = Classes.try_emplace(Key, Classes.size()).first->second;
-    for (unsigned Pair = 0; Pair != 2; ++Pair) {
+    for (unsigned Index = 0; Index != NumLanes / Size; ++Index) {
       Groups.emplace_back();
       Group &Grp = Groups.back();
       Grp.Ops.push_back(I);
       Grp.SliceClass = Cls;
       Grp.VectorDivide = true;
-      Grp.Pair = Pair;
+      Grp.LaneGroup = Index;
+      Grp.GroupLanes = Size;
     }
   }
   return Groups;
 }
 
-SmallVector<Region, 4> savio::formRegions(Function &F, LoopInfo &LI) {
+SmallVector<Region, 4> savio::formRegions(Function &F, LoopInfo &LI,
+                                          unsigned LaneGroup) {
   SmallVector<Region, 4> Regions;
   StringMap<unsigned> Classes;
   unsigned RegionNo = 0;
@@ -532,7 +543,7 @@ SmallVector<Region, 4> savio::formRegions(Function &F, LoopInfo &LI) {
     // v1: innermost single-block loops, and blocks outside any loop.
     if (L && !(L->isInnermost() && L->getNumBlocks() == 1))
       continue;
-    SmallVector<Group, 4> Groups = formGroups(BB, L, Classes, RegionNo++);
+    SmallVector<Group, 4> Groups = formGroups(BB, L, Classes, RegionNo++, LaneGroup);
     if (!Groups.empty())
       Regions.push_back({&BB, L, std::move(Groups)});
   }
@@ -646,11 +657,11 @@ static unsigned laneCount(const Group &G) {
   return cast<FixedVectorType>(G.Ops[0]->getType())->getNumElements();
 }
 
-/// "v4i32" / "v2i64" (vector form) or "i32" / "i64" (scalar lane form).
+/// "v4i32" / "v8i32" / "v2i64" ... (vector form) or "i32" / "i64" (scalar lane
+/// form).
 static std::string laneTypeName(const Group &G, bool Vector) {
   auto *VT = cast<FixedVectorType>(G.Ops[0]->getType());
-  std::string S = ("i" + Twine(VT->getElementType()->getIntegerBitWidth())).str();
-  return Vector ? "v" + std::to_string(VT->getNumElements()) + S : S;
+  return typeKey(Vector ? static_cast<Type *>(VT) : VT->getElementType());
 }
 
 /// The shift of \p U's operands that the backend folds into \p U (shifted-
@@ -773,8 +784,8 @@ class NodeBuilder {
   SmallVector<unsigned, 32> NodeOf, OutNode;
   /// Group of each graph node, or None.
   SmallVector<unsigned, 32> GroupOfNode;
-  /// The two lane-pair groups of each vector divide node (pair 0, pair 1).
-  DenseMap<unsigned, std::pair<unsigned, unsigned>> PairGroups;
+  /// The lane groups of each vector divide node, by group index.
+  DenseMap<unsigned, SmallVector<unsigned, 4>> LaneGroups;
   SmallVector<bool, 32> ControlOnly;
   /// The ToScalar group owning each load/store node, if any.
   DenseMap<unsigned, unsigned> MemOwner;
@@ -830,10 +841,10 @@ public:
         unsigned NI = RG.Index.lookup(I);
         if (!R.Groups[G].VectorDivide) {
           GroupOfNode[NI] = G;
-        } else if (R.Groups[G].Pair == 0) {
-          PairGroups[NI].first = G;
         } else {
-          PairGroups[NI].second = G;
+          SmallVector<unsigned, 4> &LG = LaneGroups[NI];
+          LG.resize(std::max<size_t>(LG.size(), R.Groups[G].LaneGroup + 1));
+          LG[R.Groups[G].LaneGroup] = G;
         }
       }
     // In a loop, the terminator and what only feeds it (the exit test).
@@ -977,8 +988,8 @@ private:
 
     assert(PredCur == RG.Preds[NI].size() &&
            CarriedCur == RG.Carried[NI].size() && "unconsumed graph edges");
-    if (auto PG = PairGroups.find(NI); PG != PairGroups.end())
-      return buildVectorDivide(J, NI, PG->second, Nd, OwnEdges);
+    if (auto LG = LaneGroups.find(NI); LaneGroups.end() != LG)
+      return buildVectorDivide(J, NI, LG->second, Nd, OwnEdges);
     std::optional<OpCost> C;
     const ConcurrencyTable *Conc = nullptr;
     auto OwnerIt = MemOwner.find(NI);
@@ -1062,26 +1073,36 @@ private:
     return true;
   }
 
-  /// A `udiv`/`urem <4 x i32>`: one node per lane pair, joined by a node of no
-  /// cost that stands for the instruction. A pair that stays is half of the
-  /// backend's scalar split (key "<op> v4i32", half the resource use and
-  /// micro-ops, the same latency); lanes {0,1} alone are the fpdiv2 sequence
-  /// ("fpdiv2.<op> v4i32"), both pairs the fpdiv4 sequence ("fpdiv4.<op>
-  /// v4i32"); each at its measured whole-sequence cost, plus a concurrency
-  /// table if the entry has one. Without the split's cost the instruction costs
-  /// what the fallback says, and cannot be moved. The operands are vectors
-  /// already: there is no transfer.
-  bool buildVectorDivide(unsigned J, unsigned NI,
-                         std::pair<unsigned, unsigned> Groups, CostNode &Nd,
-                         ArrayRef<CarriedEdge> OwnEdges) {
+  /// A `udiv`/`urem <N x i32>`: one node per lane group, joined by a node of
+  /// no cost that stands for the instruction. A group that stays is its share
+  /// of the backend's scalar split (key "<op> v<N>i32", the resource use and
+  /// micro-ops divided by the number of groups, the same latency); the first
+  /// m groups together are the fpdiv<m*G> sequence ("fpdiv<m*G>.<op> v<N>i32",
+  /// G lanes per group), at its measured whole-sequence cost, plus a
+  /// concurrency table if the entry has one. Without the split's cost the
+  /// instruction costs what the fallback says, and cannot be moved. The
+  /// operands are vectors already: there is no transfer.
+  bool buildVectorDivide(unsigned J, unsigned NI, ArrayRef<unsigned> Groups,
+                         CostNode &Nd, ArrayRef<CarriedEdge> OwnEdges) {
     const Instruction &I = *RG.Insts[NI];
     unsigned V = J * N + NI;
-    bool Pr[2] = {bool(Promoted[virtualGroup(Groups.first, J)]),
-                  bool(Promoted[virtualGroup(Groups.second, J)])};
-    std::string Op = (Twine(I.getOpcodeName()) + " v4i32").str();
+    unsigned NumGroups = Groups.size();
+    unsigned Size = R.Groups[Groups[0]].GroupLanes;
+    SmallVector<bool, 4> Pr;
+    unsigned Moved = 0; // The groups moved are the first Moved ones.
+    bool Prefix = true;
+    for (unsigned Idx : Groups) {
+      bool P = Promoted[virtualGroup(Idx, J)];
+      Pr.push_back(P);
+      if (P && Moved != Pr.size() - 1)
+        Prefix = false;
+      Moved += P;
+    }
+    std::string Ty = typeKey(I.getType());
+    std::string Op = (Twine(I.getOpcodeName()) + " " + Ty).str();
     std::optional<OpCost> Base = PD.irOpCost(Op);
     if (!Base) {
-      if (Pr[0] || Pr[1])
+      if (Moved)
         return false;
       Nd.Cost = Fallback(I);
       NodeOf[V] = Nodes.size();
@@ -1091,51 +1112,53 @@ private:
         Pending.push_back({Me, E.Latch, E.Joined, E.Dist});
       return true;
     }
-    // Lanes {2,3} alone would need operand and result shuffles that no
-    // sequence prices: not an assignment the model can cost, so never chosen.
-    if (!Pr[0] && Pr[1])
+    // A later group alone, or after a gap, would need operand and result
+    // shuffles that no sequence prices: not an assignment the model can cost,
+    // so never chosen. Nor is a lane count that has no intrinsic.
+    unsigned MovedLanes = Moved * Size;
+    if (!Prefix || (Moved && (MovedLanes < 2 || !isPowerOf2_32(MovedLanes))))
       return false;
-    SmallVector<unsigned, 2> PairNodes;
-    for (unsigned P = 0; P != 2; ++P) {
+    std::optional<OpCost> Seq;
+    const ConcurrencyTable *SeqConc = nullptr;
+    if (Moved) {
+      std::string Key = ("fpdiv" + Twine(MovedLanes) + "." +
+                         I.getOpcodeName() + " " + Ty)
+                            .str();
+      Seq = PD.irOpCost(Key);
+      if (!Seq)
+        return false;
+      SeqConc = PD.concurrency(Key);
+    }
+    SmallVector<unsigned, 4> GroupNodes;
+    for (unsigned P = 0; P != NumGroups; ++P) {
       CostNode PN;
       PN.Preds = Nd.Preds;
-      if (Pr[0] && Pr[1]) {
-        // Both pairs: one four-lane sequence, carried by the node of pair 0;
-        // the node of pair 1 costs nothing.
+      if (Pr[P]) {
+        // The moved groups are one sequence, carried by the node of group 0;
+        // the nodes of the other moved groups cost nothing.
         if (P == 0) {
-          std::string Key = "fpdiv4." + Op;
-          std::optional<OpCost> C = PD.irOpCost(Key);
-          if (!C)
-            return false;
-          PN.Cost = *C;
-          PN.Conc = PD.concurrency(Key);
+          PN.Cost = *Seq;
+          PN.Conc = SeqConc;
         } else {
           PN.Cost = OpCost{{}, 0, 0};
         }
-      } else if (Pr[P]) {
-        std::string Key = "fpdiv2." + Op;
-        std::optional<OpCost> C = PD.irOpCost(Key);
-        if (!C)
-          return false;
-        PN.Cost = *C;
-        PN.Conc = PD.concurrency(Key);
       } else {
-        // A pair that stays: half the split's resource use and micro-ops (the
-        // odd micro-op goes to pair 0). The latency stays that of the whole
-        // split, which is pessimistic for a two-lane remainder.
+        // A group that stays: its share of the split's resource use and
+        // micro-ops (the odd micro-ops go to the first groups). The latency
+        // stays that of the whole split, which is pessimistic for a part.
         PN.Cost = *Base;
         for (ResourceUse &U : PN.Cost.Uses)
-          U.Cycles /= 2;
-        PN.Cost.Uops = P == 0 ? (PN.Cost.Uops + 1) / 2 : PN.Cost.Uops / 2;
+          U.Cycles /= NumGroups;
+        PN.Cost.Uops = (PN.Cost.Uops + NumGroups - 1 - P) / NumGroups;
       }
-      PairNodes.push_back(Nodes.size());
+      GroupNodes.push_back(Nodes.size());
       Nodes.push_back(std::move(PN));
       for (const CarriedEdge &E : OwnEdges)
-        Pending.push_back({PairNodes.back(), E.Latch, E.Joined, E.Dist});
+        Pending.push_back({GroupNodes.back(), E.Latch, E.Joined, E.Dist});
     }
     CostNode Join;
     Join.Cost = OpCost{{}, 0, 0};
-    Join.Preds.assign(PairNodes.begin(), PairNodes.end());
+    Join.Preds.assign(GroupNodes.begin(), GroupNodes.end());
     NodeOf[V] = Nodes.size();
     Nodes.push_back(std::move(Join));
     return true;
@@ -1323,16 +1346,21 @@ Decision savio::decide(const Region &R, const PortDescription &PD,
         BestClass = G.SliceClass;
       }
     }
-    // A vector divide's instances are lane pairs: the count is in lanes.
+    // A vector divide's instances are lane groups: the count is in lanes.
     unsigned Limit = SAVIOForceCount;
-    if (any_of(R.Groups, [&](const Group &G) {
-          return G.SliceClass == BestClass && G.VectorDivide;
-        })) {
-      if (Limit % 2)
-        report_fatal_error("savio-force-count: a vector divide moves lane "
-                           "pairs, so the count of lanes must be even");
-      Limit /= 2;
-    }
+    for (const Group &G : R.Groups)
+      if (G.SliceClass == BestClass && G.VectorDivide) {
+        if (Limit % G.GroupLanes) {
+          if (G.GroupLanes == 2)
+            report_fatal_error("savio-force-count: a vector divide moves lane "
+                               "pairs, so the count of lanes must be even");
+          report_fatal_error("-savio-force-count=" + Twine(Limit) +
+                             " must be a multiple of the lane group " +
+                             Twine(G.GroupLanes));
+        }
+        Limit /= G.GroupLanes;
+        break;
+      }
     unsigned Taken = 0;
     for (unsigned G = 0; G != N && Taken < Limit; ++G) {
       if (R.Groups[G].SliceClass != BestClass)

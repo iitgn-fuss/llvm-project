@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Vectorize/SAVIO/PortDescription.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/IR/DerivedTypes.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/IOSandbox.h"
@@ -127,6 +129,12 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
     if (!W || *W <= 0)
       return makeError(F, "'dispatch_width' must be a positive integer");
     PD->DispatchWidth = *W;
+    if (const json::Value *VW = R->get("vector_width_bits")) {
+      std::optional<int64_t> Bits = VW->getAsInteger();
+      if (!Bits || (*Bits != 128 && *Bits != 256 && *Bits != 512))
+        return makeError(F, "'vector_width_bits' must be 128, 256 or 512");
+      PD->VectorWidthBits = *Bits;
+    }
     if (const json::Value *WV = R->get("window_uops")) {
       const json::Object *WO = WV->getAsObject();
       if (!WO)
@@ -383,4 +391,24 @@ double ConcurrencyTable::at(double M) const {
     return C0 + (C1 - C0) * (M - M0) / double(M1 - M0);
   }
   return Points.back().second;
+}
+
+std::string savio::typeKey(Type *T) {
+  if (T->isIntegerTy(32) || T->isIntegerTy(64))
+    return "i" + std::to_string(T->getIntegerBitWidth());
+  if (auto *VT = dyn_cast<FixedVectorType>(T)) {
+    Type *E = VT->getElementType();
+    if (E->isIntegerTy(32) || E->isIntegerTy(64))
+      return "v" + std::to_string(VT->getNumElements()) + "i" +
+             std::to_string(E->getIntegerBitWidth());
+  }
+  return "";
+}
+
+unsigned savio::fpDivideGroup(const PortDescription &PD,
+                              const TargetTransformInfo &TTI) {
+  TypeSize Reg =
+      TTI.getRegisterBitWidth(TargetTransformInfo::RGK_FixedWidthVector);
+  unsigned Bits = std::min<uint64_t>(PD.vectorWidthBits(), Reg.getFixedValue());
+  return std::max(Bits / 64, 2u);
 }

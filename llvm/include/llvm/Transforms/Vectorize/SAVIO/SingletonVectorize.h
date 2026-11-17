@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // Rewrites a group of scalar i32 operations into llvm.savio.sv.* intrinsics on
-// <4 x i32> values that hold the scalar in lane 0.
+// <4 x i32> values (on every target) that hold the scalar in lane 0.
 //
 //===----------------------------------------------------------------------===//
 
@@ -27,12 +27,14 @@ namespace savio {
 /// The scalar operations and joined carried phis of the group are erased.
 void rewriteSingletonVectorize(const Group &G, Loop *L);
 
-/// Sends the lane pairs of \p I, a `udiv` or `urem <4 x i32>`, selected by
-/// \p PairMask through the floating-point divider: 3 (both pairs) is one
-/// llvm.savio.fpdiv4.*; 1 (lanes {0,1}) is llvm.savio.fpdiv2.* and the other
-/// lanes stay `udiv`/`urem` on scalars. Lanes {2,3} alone (2) are not
-/// supported: the decision never chooses them. \p I is replaced and erased.
-void rewriteVectorDivide(Instruction *I, unsigned PairMask);
+/// Sends the lane groups of \p I, a `udiv` or `urem <N x i32>`, selected by
+/// \p GroupMask (bit g is the group of lanes {g * \p GroupLanes ..
+/// (g+1) * \p GroupLanes - 1}) through the floating-point divider: the groups
+/// must be a prefix of the groups, and m of them are one
+/// llvm.savio.fpdiv<m * GroupLanes>.*; the other lanes stay `udiv`/`urem` on
+/// scalars. \p I is replaced and erased.
+void rewriteVectorDivide(Instruction *I, unsigned GroupMask,
+                         unsigned GroupLanes);
 
 } // end namespace savio
 } // end namespace llvm

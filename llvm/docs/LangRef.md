@@ -25919,25 +25919,21 @@ These intrinsics are created by the experimental SAVIO pass (`-enable-savio`).
 They hold one scalar `i32` value in lane 0 of a `<4 x i32>` so that the
 operation can run on a vector execution unit. They are opaque on purpose: a
 plain vector operation with only lane 0 used would be folded back into a scalar
-operation.
+operation. They are overloaded on the vector type; the result and both operands
+have the same type, and SAVIO uses `<4 x i32>` on every target.
 
-#### '`llvm.savio.sv.*.v4i32`' Intrinsics
+#### '`llvm.savio.sv.*`' Intrinsics
 
 ##### Syntax:
 
+This is an overloaded intrinsic; `<op>` is one of `add`, `sub`, `mul`, `and`,
+`or`, `xor`, `shl`, `lshr`, `ashr`, `udiv`, `urem`.
+
 ```
-declare <4 x i32> @llvm.savio.sv.add.v4i32(<4 x i32> %a, <4 x i32> %b)
-declare <4 x i32> @llvm.savio.sv.sub.v4i32(<4 x i32> %a, <4 x i32> %b)
-declare <4 x i32> @llvm.savio.sv.mul.v4i32(<4 x i32> %a, <4 x i32> %b)
-declare <4 x i32> @llvm.savio.sv.and.v4i32(<4 x i32> %a, <4 x i32> %b)
-declare <4 x i32> @llvm.savio.sv.or.v4i32(<4 x i32> %a, <4 x i32> %b)
-declare <4 x i32> @llvm.savio.sv.xor.v4i32(<4 x i32> %a, <4 x i32> %b)
-declare <4 x i32> @llvm.savio.sv.shl.v4i32(<4 x i32> %a, <4 x i32> %b)
-declare <4 x i32> @llvm.savio.sv.lshr.v4i32(<4 x i32> %a, <4 x i32> %b)
-declare <4 x i32> @llvm.savio.sv.ashr.v4i32(<4 x i32> %a, <4 x i32> %b)
-declare <4 x i32> @llvm.savio.sv.udiv.v4i32(<4 x i32> %a, <4 x i32> %b)
-declare <4 x i32> @llvm.savio.sv.urem.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <4 x i32> @llvm.savio.sv.<op>.v4i32(<4 x i32> %a, <4 x i32> %b)
 ```
+
+For example `llvm.savio.sv.add.v4i32`.
 
 ##### Overview:
 
@@ -25956,49 +25952,34 @@ behavior), so the intrinsics are speculatable. SAVIO only creates them from
 scalar operations that were already undefined on a zero divisor, so no defined
 program changes meaning.
 
-#### '`llvm.savio.fpdiv2.*.v4i32`' Intrinsics
+#### '`llvm.savio.fpdiv<L>.*`' Intrinsics
 
 ##### Syntax:
 
+This is an overloaded intrinsic; `<L>` is 2, 4, 8 or 16 and `<op>` is `udiv` or
+`urem`. The element type must be `i32` and `L` at most the number of lanes.
+
 ```
-declare <4 x i32> @llvm.savio.fpdiv2.udiv.v4i32(<4 x i32> %a, <4 x i32> %b)
+declare <8 x i32> @llvm.savio.fpdiv8.udiv.v8i32(<8 x i32> %a, <8 x i32> %b)
 declare <4 x i32> @llvm.savio.fpdiv2.urem.v4i32(<4 x i32> %a, <4 x i32> %b)
 ```
 
 ##### Overview:
 
-Unsigned divide or remainder of two lanes of an existing `<4 x i32>` operation.
-SAVIO creates them from `udiv`/`urem <4 x i32>`, to send lane pairs through the
-floating-point divider (on AArch64, `fdiv .2d`) instead of four integer
-divides.
+Unsigned divide or remainder of the first `L` lanes of an existing vector
+operation. SAVIO creates them from `udiv`/`urem` of a vector of `i32`, to send
+lane groups through the floating-point divider (on AArch64, `fdiv .2d`)
+instead of integer divides.
 
 ##### Semantics:
 
-Lanes 0 and 1 of the result are `op i32 %a[i], %b[i]`; lanes 2 and 3 are
+Lanes `0` to `L-1` of the result are `op i32 %a[i], %b[i]`; the other lanes are
 `poison`, and the same lanes of the operands are ignored. The intrinsics never
-have undefined behavior: a zero divisor in lane 0 or 1 makes that lane of the
-result `poison`.
-
-#### '`llvm.savio.fpdiv4.*.v4i32`' Intrinsics
-
-##### Syntax:
-
-```
-declare <4 x i32> @llvm.savio.fpdiv4.udiv.v4i32(<4 x i32> %a, <4 x i32> %b)
-declare <4 x i32> @llvm.savio.fpdiv4.urem.v4i32(<4 x i32> %a, <4 x i32> %b)
-```
-
-##### Overview:
-
-Unsigned divide or remainder of all four lanes of a `<4 x i32>` operation,
-through the floating-point divider (on AArch64, two `fdiv .2d`). SAVIO creates
-them when both lane pairs of a `udiv`/`urem <4 x i32>` are moved.
-
-##### Semantics:
-
-Lane `i` of the result is `op i32 %a[i], %b[i]` for every `i`. The intrinsics
-never have undefined behavior: a zero divisor in a lane makes that lane of the
-result `poison`.
+have undefined behavior: a zero divisor in one of the first `L` lanes makes that
+lane of the result `poison`. The verifier rejects an element type other than
+`i32` and an `L` larger than the number of lanes ("llvm.savio.fpdiv lane count
+exceeds vector width"). Only `fpdiv2` and `fpdiv4` on `<4 x i32>` are selectable
+on AArch64.
 
 ### Masked Vector Load and Store Intrinsics
 

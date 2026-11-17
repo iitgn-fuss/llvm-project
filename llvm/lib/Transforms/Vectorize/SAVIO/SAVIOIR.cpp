@@ -34,6 +34,7 @@
 #include "llvm/Transforms/Vectorize/SAVIO/Scalarize.h"
 #include "llvm/Transforms/Vectorize/SAVIO/SingletonVectorize.h"
 #include <map>
+#include <tuple>
 
 using namespace llvm;
 using namespace llvm::savio;
@@ -320,11 +321,11 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
           K = M.K;
           U = M.U;
         }
-      // The instances of a vector divide are lane pairs; the remark counts
+      // The instances of a vector divide are lane groups; the remark counts
       // lanes.
       if (Reg.Groups[G].VectorDivide) {
-        K *= 2;
-        U *= 2;
+        K *= Reg.Groups[G].GroupLanes;
+        U *= Reg.Groups[G].GroupLanes;
       }
       ORE.emit([&] {
         // Singleton Vectorize keeps the name "Promoted"; the opposite
@@ -341,9 +342,9 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
         return Rm;
       });
     }
-    // The remarks above name operations the rewrite erases. The lane pairs of
+    // The remarks above name operations the rewrite erases. The lane groups of
     // one vector divide are rewritten together.
-    SmallVector<std::pair<Instruction *, unsigned>, 2> Divides;
+    SmallVector<std::tuple<Instruction *, unsigned, unsigned>, 2> Divides;
     for (unsigned G : D.Promoted) {
       const Group &Grp = Reg.Groups[G];
       if (Grp.Dir == Direction::ToScalar) {
@@ -355,18 +356,19 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
         continue;
       }
       auto *It =
-          find_if(Divides, [&](auto &P) { return P.first == Grp.Ops[0]; });
+          find_if(Divides, [&](auto &P) { return std::get<0>(P) == Grp.Ops[0]; });
       if (It == Divides.end())
-        It = Divides.insert(Divides.end(), {Grp.Ops[0], 0u});
-      It->second |= 1u << Grp.Pair;
+        It = Divides.insert(Divides.end(), {Grp.Ops[0], 0u, Grp.GroupLanes});
+      std::get<1>(*It) |= 1u << Grp.LaneGroup;
     }
-    for (auto &[I, Mask] : Divides)
-      rewriteVectorDivide(I, Mask);
+    for (auto &[I, Mask, Lanes] : Divides)
+      rewriteVectorDivide(I, Mask, Lanes);
     Changed = true;
   };
 
   bool Forced = SAVIOForce || SAVIOForceCount >= 0 || SAVIONoUnroll;
-  for (Region &Reg : formRegions(F, LI)) {
+  unsigned LaneGroup = fpDivideGroup(*R.PD, TTI);
+  for (Region &Reg : formRegions(F, LI, LaneGroup)) {
     if (BFI.getBlockFreq(Reg.BB).getFrequency() <
         SAVIOColdFraction * EntryFreq)
       continue;
@@ -395,7 +397,7 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
       if (UR == LoopUnrollResult::FullyUnrolled)
         continue;
       if (UR == LoopUnrollResult::PartiallyUnrolled) {
-        for (Region &New : formRegions(F, LI))
+        for (Region &New : formRegions(F, LI, LaneGroup))
           if (New.BB == Header) {
             Apply(New,
                   decide(New, *R.PD, Fallback,

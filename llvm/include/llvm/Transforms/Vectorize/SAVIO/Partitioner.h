@@ -75,14 +75,16 @@ struct Group {
   /// True for a whole recurrence (a cycle of the dependence graph, all in
   /// scope) moved as a vector-phi group; false for an acyclic slice.
   bool Recurrence = false;
-  /// True for one lane pair of a `udiv`/`urem <4 x i32>` (Ops holds that one
-  /// vector instruction): Pair 0 is lanes {0,1}, Pair 1 is lanes {2,3}. The
-  /// two pairs of one instruction are two instances of one slice class; moving
-  /// a pair sends its lanes through fdiv .2d. Has no inputs or live-outs: the
-  /// operands are never transferred, only lanes of vectors that are already
-  /// vectors.
+  /// True for one lane group of a `udiv`/`urem <N x i32>` (Ops holds that one
+  /// vector instruction): group LaneGroup is lanes {LaneGroup * GroupLanes ..
+  /// (LaneGroup + 1) * GroupLanes - 1}. The N / GroupLanes groups of one
+  /// instruction are instances of one slice class; moving groups sends their
+  /// lanes through the floating-point divider (always a prefix of the
+  /// groups). Has no inputs or live-outs: the operands are never transferred,
+  /// only lanes of vectors that are already vectors.
   bool VectorDivide = false;
-  unsigned Pair = 0;
+  unsigned LaneGroup = 0;
+  unsigned GroupLanes = 2;
 };
 
 struct Region {
@@ -131,7 +133,11 @@ bool liveOutNeedsInsert(const Group &G, const Instruction &I);
 
 /// Regions of \p F that have at least one group: innermost single-block loops
 /// and blocks outside loops. Blocks of other loops are not regions in v1.
-SmallVector<Region, 4> formRegions(Function &F, LoopInfo &LI);
+/// \p LaneGroup is the number of lanes one divide sequence handles together
+/// (fpDivideGroup): vector divides of up to 64 * \p LaneGroup bits are split
+/// into lane groups of that many lanes.
+SmallVector<Region, 4> formRegions(Function &F, LoopInfo &LI,
+                                   unsigned LaneGroup = 2);
 
 /// Dependences between the instructions of a region's block, independent of
 /// costing. Every non-phi instruction is a node, in program order, so node

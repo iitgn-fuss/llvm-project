@@ -3208,34 +3208,28 @@ def int_protected_field_ptr :
 
 // Lane 0 of the result is the scalar operation on lane 0 of the operands; the
 // other lanes are poison. Never undefined behavior for any lane values: a zero
-// divisor in lane 0 of udiv/urem makes lane 0 of the result poison.
+// divisor in lane 0 of udiv/urem makes lane 0 of the result poison. Overloaded
+// on the vector type (SAVIO uses <4 x i32>; the mangled name of that form is
+// llvm.savio.sv.<op>.v4i32).
 foreach Op = ["add", "sub", "mul", "and", "or", "xor", "shl", "lshr", "ashr",
               "udiv", "urem"] in
-  def int_savio_sv_#Op#_v4i32
-      : DefaultAttrsIntrinsic<[llvm_v4i32_ty],
-                              [llvm_v4i32_ty, llvm_v4i32_ty],
+  def int_savio_sv_#Op
+      : DefaultAttrsIntrinsic<[llvm_anyvector_ty],
+                              [LLVMMatchType<0>, LLVMMatchType<0>],
                               [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
-// Lanes 0 and 1 of the result are the exact unsigned quotient (udiv) or
-// remainder (urem) of lanes 0 and 1 of the operands; lanes 2 and 3 are poison.
-// A zero divisor in lane 0 or 1 makes that lane poison, never undefined
-// behavior. On AArch64 the two lanes go through the floating-point divider
-// together (fdiv .2d).
-foreach Op = ["udiv", "urem"] in
-  def int_savio_fpdiv2_#Op#_v4i32
-      : DefaultAttrsIntrinsic<[llvm_v4i32_ty],
-                              [llvm_v4i32_ty, llvm_v4i32_ty],
-                              [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
-
-// All four lanes of the result are the exact unsigned quotient (udiv) or
-// remainder (urem) of the operand lanes. A zero divisor in a lane makes that
-// lane poison, never undefined behavior. On AArch64 the lanes go through the
-// floating-point divider two at a time (two fdiv .2d) and are narrowed together.
-foreach Op = ["udiv", "urem"] in
-  def int_savio_fpdiv4_#Op#_v4i32
-      : DefaultAttrsIntrinsic<[llvm_v4i32_ty],
-                              [llvm_v4i32_ty, llvm_v4i32_ty],
-                              [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+// Lanes 0 .. L-1 of the result are the exact unsigned quotient (udiv) or
+// remainder (urem) of lanes 0 .. L-1 of the operands; the other lanes are
+// poison. The element type must be i32 and L at most the number of lanes (the
+// verifier checks). A zero divisor in one of those lanes makes that lane
+// poison, never undefined behavior. On AArch64 the lanes go through the
+// floating-point divider two at a time (fdiv .2d); L is 2 or 4 there.
+foreach L = [2, 4, 8, 16] in
+  foreach Op = ["udiv", "urem"] in
+    def int_savio_fpdiv#L#_#Op
+        : DefaultAttrsIntrinsic<[llvm_anyvector_ty],
+                                [LLVMMatchType<0>, LLVMMatchType<0>],
+                                [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===----------------------------------------------------------------------===//
 // Target-specific intrinsics

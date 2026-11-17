@@ -24,27 +24,27 @@ using namespace llvm::savio;
 static Intrinsic::ID svIntrinsicFor(unsigned Opcode) {
   switch (Opcode) {
   case Instruction::Add:
-    return Intrinsic::savio_sv_add_v4i32;
+    return Intrinsic::savio_sv_add;
   case Instruction::Sub:
-    return Intrinsic::savio_sv_sub_v4i32;
+    return Intrinsic::savio_sv_sub;
   case Instruction::Mul:
-    return Intrinsic::savio_sv_mul_v4i32;
+    return Intrinsic::savio_sv_mul;
   case Instruction::And:
-    return Intrinsic::savio_sv_and_v4i32;
+    return Intrinsic::savio_sv_and;
   case Instruction::Or:
-    return Intrinsic::savio_sv_or_v4i32;
+    return Intrinsic::savio_sv_or;
   case Instruction::Xor:
-    return Intrinsic::savio_sv_xor_v4i32;
+    return Intrinsic::savio_sv_xor;
   case Instruction::Shl:
-    return Intrinsic::savio_sv_shl_v4i32;
+    return Intrinsic::savio_sv_shl;
   case Instruction::LShr:
-    return Intrinsic::savio_sv_lshr_v4i32;
+    return Intrinsic::savio_sv_lshr;
   case Instruction::AShr:
-    return Intrinsic::savio_sv_ashr_v4i32;
+    return Intrinsic::savio_sv_ashr;
   case Instruction::UDiv:
-    return Intrinsic::savio_sv_udiv_v4i32;
+    return Intrinsic::savio_sv_udiv;
   case Instruction::URem:
-    return Intrinsic::savio_sv_urem_v4i32;
+    return Intrinsic::savio_sv_urem;
   default:
     llvm_unreachable("operation is not in scope of Singleton Vectorize");
   }
@@ -157,7 +157,8 @@ public:
       B.SetInsertPoint(Op);
       B.SetCurrentDebugLocation(Op->getDebugLoc());
       Function *Decl =
-          Intrinsic::getOrInsertDeclaration(M, svIntrinsicFor(Op->getOpcode()));
+          Intrinsic::getOrInsertDeclaration(M, svIntrinsicFor(Op->getOpcode()),
+                                            {VecTy});
       VecOf[Op] = B.CreateCall(Decl, Args, Op->getName() + ".sv");
     }
 
@@ -245,42 +246,47 @@ private:
 
 } // namespace
 
-void savio::rewriteVectorDivide(Instruction *I, unsigned PairMask) {
+/// The llvm.savio.fpdiv<Lanes>.<op> intrinsic, \p Lanes in {2, 4, 8, 16}.
+static Intrinsic::ID fpDivIntrinsicFor(unsigned Lanes, bool Rem) {
+  switch (Lanes) {
+  case 2:
+    return Rem ? Intrinsic::savio_fpdiv2_urem : Intrinsic::savio_fpdiv2_udiv;
+  case 4:
+    return Rem ? Intrinsic::savio_fpdiv4_urem : Intrinsic::savio_fpdiv4_udiv;
+  case 8:
+    return Rem ? Intrinsic::savio_fpdiv8_urem : Intrinsic::savio_fpdiv8_udiv;
+  case 16:
+    return Rem ? Intrinsic::savio_fpdiv16_urem : Intrinsic::savio_fpdiv16_udiv;
+  }
+  llvm_unreachable("no fpdiv intrinsic for this lane count");
+}
+
+void savio::rewriteVectorDivide(Instruction *I, unsigned GroupMask,
+                                unsigned GroupLanes) {
   assert((I->getOpcode() == Instruction::UDiv ||
           I->getOpcode() == Instruction::URem) &&
-         PairMask >= 1 && PairMask <= 3 && "not a vector divide to rewrite");
+         GroupMask && "not a vector divide to rewrite");
+  // Only a prefix of the groups is ever chosen (the cost model cannot price a
+  // later group without the first ones).
+  if (GroupMask & (GroupMask + 1))
+    report_fatal_error("savio: lane groups of a vector divide must be moved "
+                       "from lane 0 on");
   bool Rem = I->getOpcode() == Instruction::URem;
+  unsigned NumLanes = cast<FixedVectorType>(I->getType())->getNumElements();
+  unsigned Lanes = llvm::popcount(GroupMask) * GroupLanes;
   Module *M = I->getModule();
   IRBuilder<> B(I);
   B.SetCurrentDebugLocation(I->getDebugLoc());
   Value *A = I->getOperand(0), *D = I->getOperand(1);
 
-  // Both pairs: one four-lane form, no shuffles.
-  if (PairMask == 3) {
-    Function *D4 = Intrinsic::getOrInsertDeclaration(
-        M, Rem ? Intrinsic::savio_fpdiv4_urem_v4i32
-               : Intrinsic::savio_fpdiv4_udiv_v4i32);
-    Value *R = B.CreateCall(D4, {A, D}, I->getName() + ".fp4");
-    I->replaceAllUsesWith(R);
-    I->eraseFromParent();
-    return;
-  }
-  // Lanes {2,3} alone are never chosen: the cost model cannot price them (see
-  // buildVectorDivide), so the decision never moves them without {0,1}.
-  if (PairMask != 1)
-    report_fatal_error("savio: lanes {2,3} of a vector divide alone are not "
-                       "supported");
-
-  // Lanes {0,1} divide the vector as it is (lanes 2 and 3 of the result are
-  // poison).
-  Function *Decl = Intrinsic::getOrInsertDeclaration(
-      M, Rem ? Intrinsic::savio_fpdiv2_urem_v4i32
-             : Intrinsic::savio_fpdiv2_udiv_v4i32);
-  Value *Res = B.CreateCall(Decl, {A, D}, I->getName() + ".fp0");
+  // The first Lanes lanes divide the vector as it is (the other lanes of the
+  // result are poison).
+  Function *Decl =
+      Intrinsic::getOrInsertDeclaration(M, fpDivIntrinsicFor(Lanes, Rem),
+                                        {I->getType()});
+  Value *Res = B.CreateCall(Decl, {A, D}, I->getName() + ".fp");
   // The lanes not sent through fdiv stay on the integer divider.
-  for (unsigned Lane = 0; Lane != 4; ++Lane) {
-    if (PairMask & (1u << (Lane / 2)))
-      continue;
+  for (unsigned Lane = Lanes; Lane != NumLanes; ++Lane) {
     Value *Idx = B.getInt32(Lane);
     Value *X = B.CreateExtractElement(A, Idx);
     Value *Y = B.CreateExtractElement(D, Idx);

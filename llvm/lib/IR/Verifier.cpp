@@ -5965,6 +5965,42 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
   switch (ID) {
   default:
     break;
+  case Intrinsic::savio_fpdiv2_udiv:
+  case Intrinsic::savio_fpdiv2_urem:
+  case Intrinsic::savio_fpdiv4_udiv:
+  case Intrinsic::savio_fpdiv4_urem:
+  case Intrinsic::savio_fpdiv8_udiv:
+  case Intrinsic::savio_fpdiv8_urem:
+  case Intrinsic::savio_fpdiv16_udiv:
+  case Intrinsic::savio_fpdiv16_urem:
+    {
+      // fpdiv<L>: the lanes 0..L-1 must exist and the element type is i32.
+      unsigned Lanes = 0;
+      switch (ID) {
+      case Intrinsic::savio_fpdiv2_udiv:
+      case Intrinsic::savio_fpdiv2_urem:
+        Lanes = 2;
+        break;
+      case Intrinsic::savio_fpdiv4_udiv:
+      case Intrinsic::savio_fpdiv4_urem:
+        Lanes = 4;
+        break;
+      case Intrinsic::savio_fpdiv8_udiv:
+      case Intrinsic::savio_fpdiv8_urem:
+        Lanes = 8;
+        break;
+      default:
+        Lanes = 16;
+        break;
+      }
+      auto *VT = cast<VectorType>(Call.getType());
+      Check(VT->getElementType()->isIntegerTy(32),
+            "llvm.savio.fpdiv element type must be i32", Call);
+      Check(!VT->getElementCount().isScalable() &&
+                Lanes <= VT->getElementCount().getFixedValue(),
+            "llvm.savio.fpdiv lane count exceeds vector width", Call);
+      break;
+    }
   case Intrinsic::assume: {
     if (Call.hasOperandBundles()) {
       auto *Cond = dyn_cast<ConstantInt>(Call.getArgOperand(0));

@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Vectorize/SAVIO/PortDescription.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -306,6 +308,47 @@ TEST(SAVIOPortDescription, ConcurrencyTableNeedsExactlyOneUse) {
     EXPECT_NE(Msg.find("exactly one"), std::string::npos) << Uses << ": " << Msg;
     sys::fs::remove_directories(Root);
   }
+}
+
+TEST(SAVIOPortDescription, VectorWidthBits) {
+  auto PD = PortDescription::load(inputsRoot(), "AArch64", "test2s1v");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  EXPECT_EQ((*PD)->vectorWidthBits(), 128u); // Absent: 128.
+
+  for (unsigned Bits : {128u, 256u, 512u}) {
+    std::string Root = copyFixture();
+    rewrite(Root, "resources.json", "\"dispatch_width\"",
+            ("\"vector_width_bits\": " + Twine(Bits) + ", \"dispatch_width\"")
+                .str());
+    auto Loaded = PortDescription::load(Root, "AArch64", "test2s1v");
+    ASSERT_TRUE(!!Loaded) << toString(Loaded.takeError());
+    EXPECT_EQ((*Loaded)->vectorWidthBits(), Bits);
+    sys::fs::remove_directories(Root);
+  }
+  for (const char *Bad : {"384", "64", "0", "\"512\"", "256.5"}) {
+    std::string Root = copyFixture();
+    rewrite(Root, "resources.json", "\"dispatch_width\"",
+            (Twine("\"vector_width_bits\": ") + Bad + ", \"dispatch_width\"")
+                .str());
+    std::string Msg = loadError(Root);
+    EXPECT_NE(Msg.find("vector_width_bits"), std::string::npos)
+        << Bad << ": " << Msg;
+    sys::fs::remove_directories(Root);
+  }
+}
+
+TEST(SAVIOPortDescription, TypeKey) {
+  LLVMContext Ctx;
+  Type *I32 = Type::getInt32Ty(Ctx), *I64 = Type::getInt64Ty(Ctx);
+  EXPECT_EQ(typeKey(I32), "i32");
+  EXPECT_EQ(typeKey(I64), "i64");
+  EXPECT_EQ(typeKey(FixedVectorType::get(I32, 4)), "v4i32");
+  EXPECT_EQ(typeKey(FixedVectorType::get(I32, 8)), "v8i32");
+  EXPECT_EQ(typeKey(FixedVectorType::get(I32, 16)), "v16i32");
+  EXPECT_EQ(typeKey(FixedVectorType::get(I64, 2)), "v2i64");
+  EXPECT_EQ(typeKey(FixedVectorType::get(I64, 4)), "v4i64");
+  EXPECT_EQ(typeKey(Type::getInt16Ty(Ctx)), "");
+  EXPECT_EQ(typeKey(Type::getFloatTy(Ctx)), "");
 }
 
 TEST(SAVIOPortDescription, ArchDir) {

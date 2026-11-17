@@ -24,7 +24,9 @@
 #include <string>
 
 namespace llvm {
+class TargetTransformInfo;
 class Triple;
+class Type;
 
 namespace savio {
 
@@ -77,6 +79,9 @@ public:
   StringRef className(unsigned C) const { return ClassNames[C]; }
   unsigned units(unsigned C) const { return ClassUnits[C]; }
   unsigned dispatchWidth() const { return DispatchWidth; }
+  /// Width in bits of the vector unit the probes were measured on
+  /// (resources.json "vector_width_bits": 128, 256 or 512; 128 when absent).
+  unsigned vectorWidthBits() const { return VectorWidthBits; }
 
   /// Cost of an IR operation form, "<op> <type>" for scalar operations and
   /// "sv.<op> v4i32" for lane-0 vector operations; the sequence entry for the
@@ -100,11 +105,22 @@ private:
   SmallVector<std::string, 8> ClassNames;
   SmallVector<unsigned, 8> ClassUnits;
   unsigned DispatchWidth = 0;
+  unsigned VectorWidthBits = 128;
   unsigned WindowUops = 0;
   StringMap<ConcurrencyTable> Concurrency;
   StringMap<OpCost> Probes;
   std::optional<OpCost> Transfers[NumTransferKinds];
 };
+
+/// The probe-key spelling of \p T: "i32", "i64", "v<N>i32" or "v<N>i64"; empty
+/// for any other type.
+std::string typeKey(Type *T);
+
+/// Lanes (of i32) that one floating-point divide sequence handles together:
+/// min(the port-info vector width, the target's fixed vector register width)
+/// / 64, at least 2.
+unsigned fpDivideGroup(const PortDescription &PD,
+                       const TargetTransformInfo &TTI);
 
 /// Port-info directory name for a target triple: "AArch64", "x86" or "".
 std::string archDirFor(const Triple &T);

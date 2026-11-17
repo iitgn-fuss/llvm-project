@@ -50,17 +50,17 @@ multiclass SAVIOSVBinary<string Name, Intrinsic Int> {
             (!cast<Instruction>("SAVIO_SV_" # Name # "_V4I32") V128:$a, V128:$b)>;
 }
 
-defm : SAVIOSVBinary<"ADD", int_savio_sv_add_v4i32>;
-defm : SAVIOSVBinary<"SUB", int_savio_sv_sub_v4i32>;
-defm : SAVIOSVBinary<"MUL", int_savio_sv_mul_v4i32>;
-defm : SAVIOSVBinary<"AND", int_savio_sv_and_v4i32>;
-defm : SAVIOSVBinary<"OR", int_savio_sv_or_v4i32>;
-defm : SAVIOSVBinary<"XOR", int_savio_sv_xor_v4i32>;
-defm : SAVIOSVBinary<"SHL", int_savio_sv_shl_v4i32>;
-defm : SAVIOSVBinary<"LSHR", int_savio_sv_lshr_v4i32>;
-defm : SAVIOSVBinary<"ASHR", int_savio_sv_ashr_v4i32>;
-defm : SAVIOSVBinary<"UDIV", int_savio_sv_udiv_v4i32>;
-defm : SAVIOSVBinary<"UREM", int_savio_sv_urem_v4i32>;
+defm : SAVIOSVBinary<"ADD", int_savio_sv_add>;
+defm : SAVIOSVBinary<"SUB", int_savio_sv_sub>;
+defm : SAVIOSVBinary<"MUL", int_savio_sv_mul>;
+defm : SAVIOSVBinary<"AND", int_savio_sv_and>;
+defm : SAVIOSVBinary<"OR", int_savio_sv_or>;
+defm : SAVIOSVBinary<"XOR", int_savio_sv_xor>;
+defm : SAVIOSVBinary<"SHL", int_savio_sv_shl>;
+defm : SAVIOSVBinary<"LSHR", int_savio_sv_lshr>;
+defm : SAVIOSVBinary<"ASHR", int_savio_sv_ashr>;
+defm : SAVIOSVBinary<"UDIV", int_savio_sv_udiv>;
+defm : SAVIOSVBinary<"UREM", int_savio_sv_urem>;
 
 multiclass SAVIOSVShiftImm<string Name, Intrinsic Int> {
   def : Pat<(v4i32 (Int (v4i32 V128:$a),
@@ -70,16 +70,16 @@ multiclass SAVIOSVShiftImm<string Name, Intrinsic Int> {
                                                                    imm:$n)>;
 }
 
-defm : SAVIOSVShiftImm<"SHL", int_savio_sv_shl_v4i32>;
-defm : SAVIOSVShiftImm<"LSHR", int_savio_sv_lshr_v4i32>;
-defm : SAVIOSVShiftImm<"ASHR", int_savio_sv_ashr_v4i32>;
+defm : SAVIOSVShiftImm<"SHL", int_savio_sv_shl>;
+defm : SAVIOSVShiftImm<"LSHR", int_savio_sv_lshr>;
+defm : SAVIOSVShiftImm<"ASHR", int_savio_sv_ashr>;
 
-def : Pat<(v4i32 (int_savio_fpdiv2_udiv_v4i32 (v4i32 V128:$a), (v4i32 V128:$b))),
+def : Pat<(v4i32 (int_savio_fpdiv2_udiv (v4i32 V128:$a), (v4i32 V128:$b))),
           (SAVIO_FPDIV2_UDIV_V4I32 V128:$a, V128:$b)>;
-def : Pat<(v4i32 (int_savio_fpdiv2_urem_v4i32 (v4i32 V128:$a), (v4i32 V128:$b))),
+def : Pat<(v4i32 (int_savio_fpdiv2_urem (v4i32 V128:$a), (v4i32 V128:$b))),
           (SAVIO_FPDIV2_UREM_V4I32 V128:$a, V128:$b)>;
 
-def : Pat<(v4i32 (int_savio_fpdiv4_udiv_v4i32 (v4i32 V128:$a), (v4i32 V128:$b))),
+def : Pat<(v4i32 (int_savio_fpdiv4_udiv (v4i32 V128:$a), (v4i32 V128:$b))),
           (SAVIO_FPDIV4_UDIV_V4I32 V128:$a, V128:$b)>;
-def : Pat<(v4i32 (int_savio_fpdiv4_urem_v4i32 (v4i32 V128:$a), (v4i32 V128:$b))),
+def : Pat<(v4i32 (int_savio_fpdiv4_urem (v4i32 V128:$a), (v4i32 V128:$b))),
           (SAVIO_FPDIV4_UREM_V4I32 V128:$a, V128:$b)>;
