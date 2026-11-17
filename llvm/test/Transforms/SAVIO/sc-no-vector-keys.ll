@@ -1,8 +1,8 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s 2>&1 | FileCheck %s --check-prefix=IR
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=FORCE
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks-output=%t.yaml -disable-output %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s 2>&1 | FileCheck %s --check-prefix=IR
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=FORCE
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks-output=%t.yaml -disable-output %s
 ; RUN: FileCheck %s --check-prefix=YAML --input-file=%t.yaml
 ; An -O3-shaped loop: a vectorized body (<4 x i32> load, mul, xor, lshr, store) next to a scalar tail copy of the same
 ; chain. The test2s1v fixture is Part-2 format: it has no "<op> v4i32" / "<op> i32" vector probe keys and no

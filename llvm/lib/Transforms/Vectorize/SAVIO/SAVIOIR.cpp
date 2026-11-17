@@ -1,4 +1,4 @@
-//===- SAVIOPass.cpp - Scalar/vector instruction orchestration ------------===//
+//===- SAVIOIR.cpp - SAVIO-IR: scalar/vector orchestration pass -----------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Transforms/Vectorize/SAVIO/SAVIOPass.h"
+#include "llvm/Transforms/Vectorize/SAVIO/SAVIOIR.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/BlockFrequencyInfo.h"
@@ -182,7 +182,7 @@ LoopUnrollResult unrollWithRemainder(Loop *L, unsigned Count, LoopInfo &LI,
 
 } // namespace
 
-PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
+PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
   if (F.isDeclaration())
     return PreservedAnalyses::all();
 

@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
 ; The adi-like loop with a trip count of at most 3 (n & 3). The unroller lowers
 ; the factor to the maximum trip count and unrolls fully, which removes the loop
 ; and its phis: SAVIO used to go on deciding on the deleted loop and crashed. A

@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -savio-test-redecide-margin=0.5 -pass-remarks=savio -pass-remarks-missed=savio -S %S/unroll-adi-like.ll 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -savio-test-redecide-margin=0.5 -pass-remarks=savio -pass-remarks-missed=savio -S %S/unroll-adi-like.ll 2>&1 | FileCheck %s
 ; The decision on the real unrolled loop can differ from the estimate made on
 ; the virtual one (the remark then says both). Here the test option raises the
 ; margin of the second decision so that it moves nothing: the loop is unrolled

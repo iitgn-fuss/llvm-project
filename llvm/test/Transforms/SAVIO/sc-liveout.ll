@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio,verify -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s
+; RUN: opt -passes=savio-ir,verify -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s
 ; A slice value used outside the slice by something that is not a store of it (here a <4 x i32> phi at the exit, via
 ; LCSSA, and a call): an insertelement chain rebuilds the vector for that user, after the last lane operation.
 ; CHECK-LABEL: @f(

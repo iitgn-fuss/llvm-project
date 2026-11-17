@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -savio-force -S %s | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -savio-force -S %s | FileCheck %s
 ; acc = fshl(acc, 5) ^ v. The recurrence (fshl, xor) has an operation with no
 ; vector equivalent, so it is pinned scalar: even -savio-force cannot move the
 ; xor, since that would put GprToVec and VecToGpr transfers on the cycle (this

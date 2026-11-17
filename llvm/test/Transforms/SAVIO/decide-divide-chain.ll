@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
 ; Chained urems carried by a phi: the recurrence limits T, so nothing is promoted.
 ; CHECK: remark: {{.*}}T 40.00 (recurrence)
 ; CHECK-NOT: remark:

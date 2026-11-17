@@ -1,5 +1,5 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -pass-remarks=savio -pass-remarks-missed=savio -debug-only=savio -disable-output %s 2>&1 | FileCheck %s
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -savio-force -pass-remarks=savio -debug-only=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=FORCE
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -pass-remarks=savio -pass-remarks-missed=savio -debug-only=savio -disable-output %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -savio-force -pass-remarks=savio -debug-only=savio -disable-output %s 2>&1 | FileCheck %s --check-prefix=FORCE
 ; REQUIRES: asserts
 ; Addresses stay in GPRs: an index computation and an induction increment whose
 ; phi reaches addressing (directly, or only through the in-scope mul in @g) are

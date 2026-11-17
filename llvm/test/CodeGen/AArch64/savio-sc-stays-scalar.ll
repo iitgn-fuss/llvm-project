@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/../../Transforms/SAVIO/Inputs/port-info -savio-cpu=test3scv -S %s | llc -mtriple=arm64-apple-macos -mcpu=apple-m4 | FileCheck %s --implicit-check-not=.4s
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/../../Transforms/SAVIO/Inputs/port-info -savio-cpu=test3scv -S %s | llc -mtriple=arm64-apple-macos -mcpu=apple-m4 | FileCheck %s --implicit-check-not=.4s
 ; A Scalarized copy, from the loads to the stores, must compile to scalar ldp/ldr w, add w, eor w and stp/str w (no .4s operation anywhere): the DAG combiner does
 ; not merge the per-lane scalar operations back into a vector.
 ; CHECK-LABEL: _f:

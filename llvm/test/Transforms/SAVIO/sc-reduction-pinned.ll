@@ -1,5 +1,5 @@
 ; REQUIRES: asserts
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -debug-only=savio -disable-output %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -debug-only=savio -disable-output %s 2>&1 | FileCheck %s
 ; A vectorized sum reduction: the vector accumulator phi and the add that closes it are a recurrence, which is pinned
 ; in the form LLVM chose and is never a Scalarize group, even forced. The multiply that feeds it is not on the cycle
 ; and may be Scalarized (its lanes go back into a vector for the add: one lane insert per lane).

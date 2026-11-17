@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
 ; The scalar remainder of a loop the vectorizer already vectorized carries
 ; llvm.loop.isvectorized and runs fewer than VF times: unrolling it only adds a
 ; dead body, so SAVIO leaves it alone (the same body without the metadata is

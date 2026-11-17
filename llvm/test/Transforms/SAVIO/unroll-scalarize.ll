@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio,verify -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir,verify -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
 ; Unrolling and Scalarize together, with no force flag. On the test3scv fixture (two scalar units, one vector unit) a
 ; loop of twelve <4 x i32> operations on one vector load is bound by the vector unit; the cost search unrolls it by
 ; three and Scalarizes one of the three copies (T 10.00 -> 6.67 per original iteration). The pass unrolls, forms the

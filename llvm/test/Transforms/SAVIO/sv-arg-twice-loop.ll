@@ -1,5 +1,5 @@
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/../../../../../src/port-info -S %s | FileCheck %s
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/../../../../../src/port-info -S %s | opt -passes=verify -disable-output
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/../../../../../src/port-info -S %s | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/../../../../../src/port-info -S %s | opt -passes=verify -disable-output
 ; Forced on apple-m4 (the measured whole-sequence cost of a lane-0 urem, 3.8
 ; cycles against 2.0 for the scalar one, makes the default model leave these
 ; two divides alone): the argument %p, used by both, is a loop-invariant input

@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
 ; A hash accumulator whose recurrence runs through llvm.fshl, an operation SAVIO
 ; has no port-info for: acc = fshl(acc + b[i]*P2, 13) * P1. The fshl latency
 ; still counts, so the loop is bound by its recurrence, and no group is moved.

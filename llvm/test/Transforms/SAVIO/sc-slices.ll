@@ -1,6 +1,6 @@
 ; REQUIRES: asserts
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -debug-only=savio -disable-output %s 2>&1 | FileCheck %s
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s --check-prefix=IR
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -debug-only=savio -disable-output %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s --check-prefix=IR
 ; The -O3 vector body of fmix32 (bench/savio-pass/isolation/scalarize/k.c) with four interleaved copies, as the loop
 ; vectorizer leaves it at interleave count 4: each copy is a <4 x i32> load, eight vector operations, a <4 x i32> store.
 ; Every copy is one Scalarize slice, all four are instances of one class (same operations, constants, owned load and

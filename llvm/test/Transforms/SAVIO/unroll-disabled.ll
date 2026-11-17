@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s --implicit-check-not=.epil --implicit-check-not="unrolled by" --implicit-check-not=%i.next.1
+; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s --implicit-check-not=.epil --implicit-check-not="unrolled by" --implicit-check-not=%i.next.1
 ; The adi-like loop with llvm.loop.unroll.disable (what
 ; `#pragma clang loop unroll(disable)` produces): SAVIO must not unroll it, so
 ; it decides on the two instances present and nothing is unrolled.

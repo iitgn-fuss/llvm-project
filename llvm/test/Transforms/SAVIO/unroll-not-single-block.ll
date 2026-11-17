@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s --implicit-check-not=llvm.savio --implicit-check-not=.epil --implicit-check-not="unrolled by"
+; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s --implicit-check-not=llvm.savio --implicit-check-not=.epil --implicit-check-not="unrolled by"
 ; The adi-like body behind an `if` inside the loop: the loop is not a
 ; single-block innermost loop, so SAVIO does not form a region for the loop
 ; blocks and does not unroll it. The pass leaves the loop alone.

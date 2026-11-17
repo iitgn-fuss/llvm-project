@@ -1,5 +1,5 @@
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
 ; urem_acc_x4: acc = rotl(acc, 5) ^ bucket(i+k), four times. The accumulator
 ; chain (fshl, xor) is a recurrence with an operation that has no vector
 ; equivalent (fshl), so it is pinned scalar: no xor goes to the vector side and

@@ -1,6 +1,6 @@
 ; REQUIRES: asserts
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -debug-only=savio -pass-remarks=savio -S %s 2>&1 | FileCheck %s
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -pass-remarks-output=%t.yaml -disable-output %s
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -debug-only=savio -pass-remarks=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -pass-remarks-output=%t.yaml -disable-output %s
 ; RUN: FileCheck %s --check-prefix=YAML --input-file=%t.yaml
 ; One loop with a scalar urem chain (Singleton Vectorize candidate) and an independent vectorized <4 x i32> chain
 ; (Scalarize candidate): both directions are candidates of one region, forcing moves both, and no group is in both

@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
 ; The same adds, in a loop on the wide-dispatch fixture, but operands come from opaque calls and results feed calls: each
 ; group needs GprToVec and VecToGpr transfers, so nothing is promoted.
 ; CHECK: remark: {{.*}}T 3.00 (resource)

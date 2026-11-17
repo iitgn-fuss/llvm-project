@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio,verify -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s
+; RUN: opt -passes=savio-ir,verify -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s
 ; Non-splat shift amounts: each lane of the Scalarized shift takes the matching lane of %amt, extracted (it is a
 ; function argument defined outside the loop, so the extracts are hoisted to the preheader); flags are copied.
 ; CHECK-LABEL: @f(

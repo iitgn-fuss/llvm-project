@@ -400,7 +400,7 @@
 #include "llvm/Transforms/Vectorize/LoadStoreVectorizer.h"
 #include "llvm/Transforms/Vectorize/LoopIdiomVectorize.h"
 #include "llvm/Transforms/Vectorize/LoopVectorize.h"
-#include "llvm/Transforms/Vectorize/SAVIO/SAVIOPass.h"
+#include "llvm/Transforms/Vectorize/SAVIO/SAVIOIR.h"
 #include "llvm/Transforms/Vectorize/SLPVectorizer.h"
 #include "llvm/Transforms/Vectorize/SandboxVectorizer/SandboxVectorizer.h"
 #include "llvm/Transforms/Vectorize/VectorCombine.h"

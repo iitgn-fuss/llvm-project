@@ -1,5 +1,5 @@
-; RUN: opt -passes=savio -savio-force-count=1 -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s
-; RUN: opt -passes=savio,verify -savio-force-count=1 -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -disable-output %s
+; RUN: opt -passes=savio-ir -savio-force-count=1 -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s
+; RUN: opt -passes=savio-ir,verify -savio-force-count=1 -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -disable-output %s
 ; Forcing one instance of the four-copy fmix32 loop Scalarizes the first copy: four scalar loads at lane offsets 0, 4,
 ; 8, 12 with alignment gcd(16, offset) (the vector load is align 16 here), the per-lane operation chains and four
 ; scalar stores; the other three copies stay vectors.

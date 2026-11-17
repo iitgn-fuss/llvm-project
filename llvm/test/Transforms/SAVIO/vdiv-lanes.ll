@@ -1,10 +1,10 @@
-; RUN: opt -passes=savio -savio-force-count=2 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=K2
-; RUN: opt -passes=savio -savio-force-count=4 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=K4
-; RUN: opt -passes=savio -savio-force-count=0 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=K0
-; RUN: opt -passes=savio -savio-force-count=2 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
-; RUN: opt -passes=savio -savio-force-count=4 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
-; RUN: opt -passes=savio -savio-force-count=2 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s -pass-remarks=savio 2>&1 | FileCheck %s --check-prefix=REM
-; RUN: not --crash opt -passes=savio -savio-force-count=3 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s 2>&1 | FileCheck %s --check-prefix=ODD
+; RUN: opt -passes=savio-ir -savio-force-count=2 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=K2
+; RUN: opt -passes=savio-ir -savio-force-count=4 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=K4
+; RUN: opt -passes=savio-ir -savio-force-count=0 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=K0
+; RUN: opt -passes=savio-ir -savio-force-count=2 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
+; RUN: opt -passes=savio-ir -savio-force-count=4 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
+; RUN: opt -passes=savio-ir -savio-force-count=2 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s -pass-remarks=savio 2>&1 | FileCheck %s --check-prefix=REM
+; RUN: not --crash opt -passes=savio-ir -savio-force-count=3 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s 2>&1 | FileCheck %s --check-prefix=ODD
 ; The lanes of a urem <4 x i32> are two instances (lane pairs {0,1} and {2,3})
 ; of one slice class; -savio-force-count counts lanes for such a class.
 ;

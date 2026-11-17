@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v-wide -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
 ; Six independent adds from loads to stores, in a loop (so load latency is not a
 ; critical path) on the wide-dispatch fixture (loads and stores count as
 ; micro-ops): two are Singleton Vectorized.

@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
 ; Four independent urems: two go to the vector divider.
 ; CHECK-COUNT-2: remark: {{.*}}T 16.00 -> 8.00 (resource)
 ; CHECK-NOT: remark:

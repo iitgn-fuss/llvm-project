@@ -1,4 +1,4 @@
-//===- AArch64SAVIOExpand.cpp - Expand SAVIO Singleton Vectorize pseudos --===//
+//===- AArch64SAVIOMIR.cpp - SAVIO-MIR: expand SAVIO pseudos (AArch64) ----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -34,14 +34,14 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "aarch64-savio-expand"
-#define AARCH64_SAVIO_EXPAND_NAME "AArch64 SAVIO Singleton Vectorize expansion"
+#define DEBUG_TYPE "aarch64-savio-mir"
+#define AARCH64_SAVIO_MIR_NAME "AArch64 SAVIO-MIR (expand SAVIO pseudos)"
 
 STATISTIC(NumExpanded, "SAVIO pseudos expanded");
 
 namespace {
 
-class AArch64SAVIOExpandImpl {
+class AArch64SAVIOMIRImpl {
 public:
   bool run(MachineFunction &MF);
 
@@ -60,31 +60,31 @@ private:
   Register lowHalf(MachineInstr &MI, Register Vec);
 };
 
-class AArch64SAVIOExpandLegacy : public MachineFunctionPass {
+class AArch64SAVIOMIRLegacy : public MachineFunctionPass {
 public:
   static char ID;
-  AArch64SAVIOExpandLegacy() : MachineFunctionPass(ID) {}
+  AArch64SAVIOMIRLegacy() : MachineFunctionPass(ID) {}
 
   bool runOnMachineFunction(MachineFunction &MF) override {
-    return AArch64SAVIOExpandImpl().run(MF);
+    return AArch64SAVIOMIRImpl().run(MF);
   }
 
-  StringRef getPassName() const override { return AARCH64_SAVIO_EXPAND_NAME; }
+  StringRef getPassName() const override { return AARCH64_SAVIO_MIR_NAME; }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 };
-char AArch64SAVIOExpandLegacy::ID = 0;
+char AArch64SAVIOMIRLegacy::ID = 0;
 
 } // end anonymous namespace
 
-INITIALIZE_PASS(AArch64SAVIOExpandLegacy, "aarch64-savio-expand",
-                AARCH64_SAVIO_EXPAND_NAME, false, false)
+INITIALIZE_PASS(AArch64SAVIOMIRLegacy, "aarch64-savio-mir",
+                AARCH64_SAVIO_MIR_NAME, false, false)
 
 /// The low 64 bits (dsub) of the 128-bit register \p Vec, as a new FPR64.
-Register AArch64SAVIOExpandImpl::lowHalf(MachineInstr &MI, Register Vec) {
+Register AArch64SAVIOMIRImpl::lowHalf(MachineInstr &MI, Register Vec) {
   Register Lo = MRI->createVirtualRegister(&AArch64::FPR64RegClass);
   BuildMI(*MI.getParent(), MI, MI.getDebugLoc(), TII->get(TargetOpcode::COPY),
           Lo)
@@ -92,21 +92,21 @@ Register AArch64SAVIOExpandImpl::lowHalf(MachineInstr &MI, Register Vec) {
   return Lo;
 }
 
-void AArch64SAVIOExpandImpl::expandBinary(MachineInstr &MI, unsigned Opc) {
+void AArch64SAVIOMIRImpl::expandBinary(MachineInstr &MI, unsigned Opc) {
   BuildMI(*MI.getParent(), MI, MI.getDebugLoc(), TII->get(Opc),
           MI.getOperand(0).getReg())
       .add(MI.getOperand(1))
       .add(MI.getOperand(2));
 }
 
-void AArch64SAVIOExpandImpl::expandShiftImm(MachineInstr &MI, unsigned Opc) {
+void AArch64SAVIOMIRImpl::expandShiftImm(MachineInstr &MI, unsigned Opc) {
   BuildMI(*MI.getParent(), MI, MI.getDebugLoc(), TII->get(Opc),
           MI.getOperand(0).getReg())
       .add(MI.getOperand(1))
       .add(MI.getOperand(2));
 }
 
-void AArch64SAVIOExpandImpl::expandVarShift(MachineInstr &MI, unsigned Opc,
+void AArch64SAVIOMIRImpl::expandVarShift(MachineInstr &MI, unsigned Opc,
                                             bool NegateCount) {
   MachineBasicBlock &MBB = *MI.getParent();
   DebugLoc DL = MI.getDebugLoc();
@@ -121,7 +121,7 @@ void AArch64SAVIOExpandImpl::expandVarShift(MachineInstr &MI, unsigned Opc,
       .addReg(Count);
 }
 
-void AArch64SAVIOExpandImpl::expandDiv(MachineInstr &MI, bool Rem) {
+void AArch64SAVIOMIRImpl::expandDiv(MachineInstr &MI, bool Rem) {
   MachineBasicBlock &MBB = *MI.getParent();
   DebugLoc DL = MI.getDebugLoc();
   Register Dst = MI.getOperand(0).getReg();
@@ -171,7 +171,7 @@ void AArch64SAVIOExpandImpl::expandDiv(MachineInstr &MI, bool Rem) {
 /// (fcvtzu .2d) and narrow (xtn). The operands are read through their low 64
 /// bits, so the poison upper lanes never reach the divider. Exact for the same
 /// reason as the lane-0 form. urem adds an mls on the two 32-bit lanes.
-void AArch64SAVIOExpandImpl::expandDiv2(MachineInstr &MI, bool Rem) {
+void AArch64SAVIOMIRImpl::expandDiv2(MachineInstr &MI, bool Rem) {
   MachineBasicBlock &MBB = *MI.getParent();
   DebugLoc DL = MI.getDebugLoc();
   Register Dst = MI.getOperand(0).getReg();
@@ -218,7 +218,7 @@ void AArch64SAVIOExpandImpl::expandDiv2(MachineInstr &MI, bool Rem) {
 /// move), then one uzp1 narrows both quotients (the low 32 bits of each 64-bit
 /// lane) and, for urem, one mls on the four 32-bit lanes. Exact per lane for
 /// the same reason as the lane-0 form.
-void AArch64SAVIOExpandImpl::expandDiv4(MachineInstr &MI, bool Rem) {
+void AArch64SAVIOMIRImpl::expandDiv4(MachineInstr &MI, bool Rem) {
   MachineBasicBlock &MBB = *MI.getParent();
   DebugLoc DL = MI.getDebugLoc();
   Register Dst = MI.getOperand(0).getReg();
@@ -271,7 +271,7 @@ void AArch64SAVIOExpandImpl::expandDiv4(MachineInstr &MI, bool Rem) {
       .addReg(P);
 }
 
-bool AArch64SAVIOExpandImpl::expand(MachineInstr &MI) {
+bool AArch64SAVIOMIRImpl::expand(MachineInstr &MI) {
   switch (MI.getOpcode()) {
   default:
     return false;
@@ -335,7 +335,7 @@ bool AArch64SAVIOExpandImpl::expand(MachineInstr &MI) {
   return true;
 }
 
-bool AArch64SAVIOExpandImpl::run(MachineFunction &MF) {
+bool AArch64SAVIOMIRImpl::run(MachineFunction &MF) {
   const AArch64Subtarget &STI = MF.getSubtarget<AArch64Subtarget>();
   TII = STI.getInstrInfo();
   MRI = &MF.getRegInfo();
@@ -348,15 +348,15 @@ bool AArch64SAVIOExpandImpl::run(MachineFunction &MF) {
 }
 
 PreservedAnalyses
-AArch64SAVIOExpandPass::run(MachineFunction &MF,
+AArch64SAVIOMIRPass::run(MachineFunction &MF,
                             MachineFunctionAnalysisManager &MFAM) {
-  if (!AArch64SAVIOExpandImpl().run(MF))
+  if (!AArch64SAVIOMIRImpl().run(MF))
     return PreservedAnalyses::all();
   PreservedAnalyses PA = getMachineFunctionPassPreservedAnalyses();
   PA.preserveSet<CFGAnalyses>();
   return PA;
 }
 
-FunctionPass *llvm::createAArch64SAVIOExpandPass() {
-  return new AArch64SAVIOExpandLegacy();
+FunctionPass *llvm::createAArch64SAVIOMIRPass() {
+  return new AArch64SAVIOMIRLegacy();
 }

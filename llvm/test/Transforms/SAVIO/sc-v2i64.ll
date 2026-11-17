@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio,verify -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s
+; RUN: opt -passes=savio-ir,verify -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s
 ; <2 x i64>: eight-byte lanes, a non-splat constant becomes a scalar constant per lane, a loop-invariant vector computed
 ; in the entry block (%inv, a shuffle) is extracted once in the preheader, and a volatile vector load is
 ; never split: it stays a vector load and its lanes are extracted.

@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio,verify -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s
+; RUN: opt -passes=savio-ir,verify -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s
 ; The load of the Scalarized copy is also used by a second chain that stays a vector (here: a store, which is not in
 ; the slice), so the slice does not own it: the vector load is kept and its four lanes are extracted; no second load.
 ; CHECK-LABEL: @f(

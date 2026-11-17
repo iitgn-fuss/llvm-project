@@ -8,7 +8,7 @@
 //
 // Pseudo-instructions for the llvm.savio.sv.*.v4i32 intrinsics. Lane 0 of the
 // result is the scalar operation on lane 0 of the operands; the other lanes are
-// unspecified. AArch64SAVIOExpand rewrites each pseudo into real NEON/FP
+// unspecified. AArch64SAVIOMIR rewrites each pseudo into real NEON/FP
 // instructions in SSA form, before register allocation.
 //
 //===----------------------------------------------------------------------===//

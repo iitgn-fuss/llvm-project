@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s
 ; optnone functions are left alone even with -savio-force.
 ; CHECK-NOT: llvm.savio
 target triple = "arm64-apple-macos"

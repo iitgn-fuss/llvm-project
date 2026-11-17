@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
 ; Single-copy body of the urem accumulator: acc = fshl(acc, 5) ^ (b*M % ((c&1023)+1)).
 ; The xor is on the accumulator recurrence (through fshl, which has no port-info),
 ; so a group containing it would put a transfer on the cycle. No such group is

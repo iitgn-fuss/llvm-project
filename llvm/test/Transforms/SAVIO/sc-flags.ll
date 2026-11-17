@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio,verify -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s
+; RUN: opt -passes=savio-ir,verify -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s
 ; nsw/nuw, nuw and exact are kept on every lane of the scalar operations.
 ; CHECK-LABEL: @f(
 ; CHECK-COUNT-4: add nuw nsw i32

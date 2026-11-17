@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
 ; The urem_store_x4 body (four independent (b*M) % ((c&1023)+1) results
 ; stored, no recurrence) on apple-m4 with the measured sequence entries
 ; (sv.urem v4i32 with its concurrency table, window 55 uops; see

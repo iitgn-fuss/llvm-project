@@ -1,7 +1,7 @@
-; RUN: opt -passes=savio -savio-force-count=2 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=K2
-; RUN: opt -passes=savio -savio-force-count=0 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=K0
-; RUN: opt -passes=savio -savio-force-count=9 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=K4
-; RUN: opt -passes=savio -savio-force-count=2 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
+; RUN: opt -passes=savio-ir -savio-force-count=2 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=K2
+; RUN: opt -passes=savio-ir -savio-force-count=0 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=K0
+; RUN: opt -passes=savio-ir -savio-force-count=9 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=K4
+; RUN: opt -passes=savio-ir -savio-force-count=2 -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
 ; Four interchangeable urem slices (the same operations and input kinds) and
 ; one lone add slice. -savio-force-count=k promotes the first k instances of the
 ; largest slice class in program order and nothing else.

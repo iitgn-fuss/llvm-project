@@ -1,5 +1,5 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks-output=%t.yaml -disable-output %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks=savio -pass-remarks-missed=savio -disable-output %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks-output=%t.yaml -disable-output %s
 ; RUN: FileCheck %s --check-prefix=YAML --input-file=%t.yaml
 ; add_gpr: acc = fshl(acc + b[i]*P2, 13) * P1, as in slice-feeder.ll but without
 ; -savio-force. The recurrence (add, fshl, mul) is pinned scalar and bounds T;

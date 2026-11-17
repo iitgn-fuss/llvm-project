@@ -1,5 +1,5 @@
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1vc -pass-remarks=savio -S %s 2>&1 | FileCheck %s --check-prefix=TABLE
-; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1vn -pass-remarks=savio -S %s 2>&1 | FileCheck %s --check-prefix=NOTABLE
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1vc -pass-remarks=savio -S %s 2>&1 | FileCheck %s --check-prefix=TABLE
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1vn -pass-remarks=savio -S %s 2>&1 | FileCheck %s --check-prefix=NOTABLE
 ; Four independent urem slices on the fixture machines test2s1vc / test2s1vn,
 ; which have the same sv.urem v4i32 sequence entry (8 vector cycles) but only
 ; test2s1vc gives it a concurrency table (8, 4, 3 cycles per instance at

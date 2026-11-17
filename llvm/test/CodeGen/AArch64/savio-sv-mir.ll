@@ -1,6 +1,6 @@
-; RUN: llc -mtriple=arm64-apple-macos -mcpu=apple-m4 -stop-after=aarch64-savio-expand < %s | FileCheck %s
+; RUN: llc -mtriple=arm64-apple-macos -mcpu=apple-m4 -stop-after=aarch64-savio-mir < %s | FileCheck %s
 
-; After aarch64-savio-expand no SAVIO_SV_ pseudo remains, and the expansion is
+; After aarch64-savio-mir no SAVIO_SV_ pseudo remains, and the expansion is
 ; still in SSA form (virtual registers).
 
 declare <4 x i32> @llvm.savio.sv.urem.v4i32(<4 x i32>, <4 x i32>)

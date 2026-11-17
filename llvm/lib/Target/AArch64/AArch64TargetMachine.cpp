@@ -53,7 +53,7 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/LowerIFunc.h"
 #include "llvm/Transforms/Vectorize/LoopIdiomVectorize.h"
-#include "llvm/Transforms/Vectorize/SAVIO/SAVIOPass.h"
+#include "llvm/Transforms/Vectorize/SAVIO/SAVIOIR.h"
 #include <memory>
 
 using namespace llvm;
@@ -258,7 +258,7 @@ LLVMInitializeAArch64Target() {
   initializeAArch64ConditionOptimizerLegacyPass(PR);
   initializeAArch64DeadRegisterDefinitionsLegacyPass(PR);
   initializeAArch64ExpandPseudoLegacyPass(PR);
-  initializeAArch64SAVIOExpandLegacyPass(PR);
+  initializeAArch64SAVIOMIRLegacyPass(PR);
   initializeAArch64LoadStoreOptLegacyPass(PR);
   initializeAArch64MIPeepholeOptLegacyPass(PR);
   initializeAArch64SIMDInstrOptLegacyPass(PR);
@@ -636,7 +636,7 @@ void AArch64TargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
             Phase == ThinOrFullLTOPhase::FullLTOPreLink)
           return;
         if (EnableSAVIO && Level != OptimizationLevel::O0)
-          MPM.addPass(createModuleToFunctionPassAdaptor(SAVIOPass()));
+          MPM.addPass(createModuleToFunctionPassAdaptor(SAVIOIRPass()));
       });
   if (getTargetTriple().isOSWindows())
     PB.registerPipelineEarlySimplificationEPCallback(
@@ -868,7 +868,7 @@ bool AArch64PassConfig::addILPOpts() {
 void AArch64PassConfig::addPreRegAlloc() {
   // Expand the llvm.savio.sv.* pseudos (SSA form). Present at every opt level:
   // the pseudos exist whenever the intrinsics are selected.
-  addPass(createAArch64SAVIOExpandPass());
+  addPass(createAArch64SAVIOMIRPass());
 
   if (TM->getOptLevel() == CodeGenOptLevel::None)
     addPass(createMachineSMEABIPass(CodeGenOptLevel::None));

@@ -1,4 +1,4 @@
-; RUN: opt -passes=savio -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir -savio-port-info=%S/../../../../../src/port-info -pass-remarks=savio -pass-remarks-missed=savio -S %s 2>&1 | FileCheck %s
 ; adi's shape: two independent divides per element (x[i] = a[i] / b[i] and
 ; y[i] = c[i] / d[i]), no recurrence through the divides, a trip count that
 ; ScalarEvolution can compute. Two instances of the divide slice are already in
