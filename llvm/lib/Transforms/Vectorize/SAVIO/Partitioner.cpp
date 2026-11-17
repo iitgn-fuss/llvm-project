@@ -15,11 +15,10 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
-#include "llvm/IR/GetElementPtrTypeIterator.h"
-#include "llvm/IR/Operator.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/Operator.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -609,6 +608,14 @@ static bool isDataDependentIndex(const Value *V, const Loop *L) {
   return HasLoad && !HasPhi;
 }
 
+/// Known gaps (a floor that is a lower bound in some loops and too high in
+/// others): an index that reads any loop phi on any path (out[idx[i] + i],
+/// idx[i] ^ i) is not charged; a load whose address is loop invariant but not
+/// hoisted is charged as random; only one-index GEPs are classified and
+/// pointer chasing is not charged; each charge includes the stream cost of its
+/// probe loop and is added per access, so a loop with several data-dependent
+/// accesses is over-charged.
+///
 /// Throughput floor in cycles per iteration of the loop of \p BB from its
 /// data-dependent accesses: a load or store through a one-index GEP whose index
 /// is computed from loaded data and may reach beyond the first-level cache
@@ -634,6 +641,8 @@ static double indirectAccessFloor(const BasicBlock &BB, const Loop *L,
         !isDataDependentIndex(GEP->getOperand(1), L))
       continue;
     uint64_t Elt = DL.getTypeAllocSize(GEP->getSourceElementType());
+    if (!Elt) // Zero-sized element ([0 x T]): no footprint to bound; not charged.
+      continue;
     APInt MaxIdx = computeKnownBits(GEP->getOperand(1), DL).getMaxValue();
     // Footprint = (max index + 1) * element size, saturating.
     bool Resident = false;
