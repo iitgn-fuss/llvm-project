@@ -160,8 +160,8 @@ TEST(SAVIOPortDescription, PerWidthLaneTransfers) {
   auto PD = PortDescription::load(x86InputsRoot(), "x86", "test-avx512-lane-widths");
   ASSERT_TRUE(!!PD) << toString(PD.takeError());
   unsigned Vector = *classId(**PD, "vector");
-  // Insert, 8 lanes: two 4-lane chains (vmovd + 3 vpinsrd) joined by one
-  // vinserti: resource use and uops summed, latency = 2 + 3 * 2 + 1 * 3.
+  // Insert, 8 lanes: resource use and uops summed over "opcodes"; latency =
+  // the sum over "path" = vmovd 2 + 3 vpinsrd 2 + vinserti 3.
   std::optional<OpCost> I8 = (*PD)->laneTransferCost(TransferKind::LaneInsert, "v8i32");
   ASSERT_TRUE(I8.has_value());
   ASSERT_EQ(I8->Uses.size(), 1u);
@@ -169,14 +169,13 @@ TEST(SAVIOPortDescription, PerWidthLaneTransfers) {
   EXPECT_EQ(I8->Uses[0].Cycles, 15.0);
   EXPECT_EQ(I8->Uops, 15u);
   EXPECT_EQ(I8->Latency, 11u);
-  // 16 lanes: four chains, a two-level join tree: 2 + 3 * 2 + 2 * 3.
+  // 16 lanes: path vmovd, 3 vpinsrd, vinserti32x4, vinserti64x4: 2 + 6 + 3 + 3.
   std::optional<OpCost> I16 = (*PD)->laneTransferCost(TransferKind::LaneInsert, "v16i32");
   ASSERT_TRUE(I16.has_value());
   EXPECT_EQ(I16->Uses[0].Cycles, 31.0);
   EXPECT_EQ(I16->Uops, 31u);
   EXPECT_EQ(I16->Latency, 14u);
-  // Extract: the longest lane path, vextracti + vpextrd = 3 + 3; at 4 lanes
-  // (one chunk) there is no vextracti.
+  // Extract: path vextracti + vpextrd = 3 + 3.
   std::optional<OpCost> E8 = (*PD)->laneTransferCost(TransferKind::LaneExtract, "v8i32");
   ASSERT_TRUE(E8.has_value());
   EXPECT_EQ(E8->Uses[0].Cycles, 15.0);
@@ -188,13 +187,51 @@ TEST(SAVIOPortDescription, PerWidthLaneTransfers) {
   EXPECT_TRUE((*PD)->transferCost(TransferKind::LaneInsert).has_value());
 }
 
-TEST(SAVIOPortDescription, PerWidthLaneTransferBadKeyIsError) {
-  std::string Root = copyFixture();
-  rewrite(Root, "transfers.json", "\"lane_to_lane0\"",
-          "\"lane_insert v3i32\": [\"T_LANE_INS\"],\n  \"lane_to_lane0\"");
-  std::string Msg = loadError(Root);
-  EXPECT_NE(Msg.find("lane_insert v3i32"), std::string::npos) << Msg;
-  sys::fs::remove_directories(Root);
+/// Copies test-avx512-lane-widths to <tmp>/x86/lanew and rewrites one text in
+/// lane_transfers.json; returns the load error.
+std::string laneWidthsError(StringRef From, StringRef To) {
+  SmallString<128> Tmp;
+  EXPECT_FALSE(sys::fs::createUniqueDirectory("savio-lw", Tmp));
+  SmallString<128> Dst(Tmp);
+  sys::path::append(Dst, "x86", "lanew");
+  EXPECT_FALSE(sys::fs::create_directories(Dst));
+  for (StringRef F : {"resources.json", "ops.json", "transfers.json",
+                      "probes.json", "lane_transfers.json"}) {
+    SmallString<128> Src(x86InputsRoot());
+    sys::path::append(Src, "x86", "test-avx512-lane-widths", F);
+    SmallString<128> To2(Dst);
+    sys::path::append(To2, F);
+    EXPECT_FALSE(sys::fs::copy_file(Src, To2));
+  }
+  SmallString<128> P(Dst);
+  sys::path::append(P, "lane_transfers.json");
+  auto Buf = MemoryBuffer::getFile(P);
+  EXPECT_TRUE(!!Buf);
+  std::string S = (*Buf)->getBuffer().str();
+  size_t Pos = S.find(From);
+  EXPECT_NE(Pos, std::string::npos);
+  S.replace(Pos, From.size(), To);
+  std::error_code EC;
+  raw_fd_ostream(P, EC) << S;
+  auto PD = PortDescription::load(Tmp, "x86", "lanew");
+  EXPECT_FALSE(!!PD);
+  std::string Msg = PD ? "" : toString(PD.takeError());
+  sys::fs::remove_directories(Tmp);
+  return Msg;
+}
+
+TEST(SAVIOPortDescription, PerWidthLaneTransferMalformedTypeIsError) {
+  // Known opcodes, so only the type can be at fault.
+  std::string Msg = laneWidthsError("lane_insert v8i32", "lane_insert v8f32");
+  EXPECT_NE(Msg.find("not a vector type"), std::string::npos) << Msg;
+  Msg = laneWidthsError("lane_insert v8i32", "lane_insert x8");
+  EXPECT_NE(Msg.find("not a vector type"), std::string::npos) << Msg;
+}
+
+TEST(SAVIOPortDescription, PerWidthLaneTransferPathMustBeInOpcodes) {
+  std::string Msg = laneWidthsError("\"path\": [\n        \"VEXTRACTI32X4Z256rri\"",
+                                    "\"path\": [\n        \"VPINSRDZrri\"");
+  EXPECT_NE(Msg.find("not in 'opcodes'"), std::string::npos) << Msg;
 }
 
 TEST(SAVIOPortDescription, LaneTransferUnknownOpcodeIsError) {

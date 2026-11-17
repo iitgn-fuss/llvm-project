@@ -1,0 +1,134 @@
+{
+  "lane_transfers": {
+    "lane_extract v8i32": {
+      "opcodes": [
+        "VMOVPDI2DIZrr",
+        "VMOVPDI2DIZrr",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VEXTRACTI32X4Z256rri"
+      ],
+      "path": [
+        "VEXTRACTI32X4Z256rri",
+        "VPEXTRDZrri"
+      ],
+      "chunk_bits": 128
+    },
+    "lane_insert v8i32": {
+      "opcodes": [
+        "VMOVDI2PDIZrr",
+        "VMOVDI2PDIZrr",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VINSERTI32X4Z256rri"
+      ],
+      "path": [
+        "VMOVDI2PDIZrr",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VINSERTI32X4Z256rri"
+      ],
+      "chunk_bits": 128
+    },
+    "lane_extract v16i32": {
+      "opcodes": [
+        "VMOVPDI2DIZrr",
+        "VMOVPDI2DIZrr",
+        "VMOVPDI2DIZrr",
+        "VMOVPDI2DIZrr",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VPEXTRDZrri",
+        "VEXTRACTI32X4Z256rri",
+        "VEXTRACTI32X4Zrri",
+        "VEXTRACTI32X4Zrri"
+      ],
+      "path": [
+        "VEXTRACTI32X4Zrri",
+        "VPEXTRDZrri"
+      ],
+      "chunk_bits": 128
+    },
+    "lane_insert v16i32": {
+      "opcodes": [
+        "VMOVDI2PDIZrr",
+        "VMOVDI2PDIZrr",
+        "VMOVDI2PDIZrr",
+        "VMOVDI2PDIZrr",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VINSERTI32X4Z256rri",
+        "VINSERTI32X4Z256rri",
+        "VINSERTI64X4Zrri"
+      ],
+      "path": [
+        "VMOVDI2PDIZrr",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VPINSRDZrri",
+        "VINSERTI32X4Z256rri",
+        "VINSERTI64X4Zrri"
+      ],
+      "chunk_bits": 128
+    },
+    "lane_extract v4i64": {
+      "opcodes": [
+        "VMOVPQIto64Zrr",
+        "VMOVPQIto64Zrr",
+        "VPEXTRQZrri",
+        "VPEXTRQZrri",
+        "VEXTRACTI32X4Z256rri"
+      ],
+      "path": [
+        "VEXTRACTI32X4Z256rri",
+        "VPEXTRQZrri"
+      ],
+      "chunk_bits": 128
+    },
+    "lane_insert v4i64": {
+      "opcodes": [
+        "VMOV64toPQIZrr",
+        "VMOV64toPQIZrr",
+        "VMOV64toPQIZrr",
+        "VMOV64toPQIZrr",
+        "VPUNPCKLQDQZ128rr",
+        "VPUNPCKLQDQZ128rr",
+        "VINSERTI32X4Z256rri"
+      ],
+      "path": [
+        "VMOV64toPQIZrr",
+        "VPUNPCKLQDQZ128rr",
+        "VINSERTI32X4Z256rri"
+      ],
+      "chunk_bits": 128
+    }
+  }
+}

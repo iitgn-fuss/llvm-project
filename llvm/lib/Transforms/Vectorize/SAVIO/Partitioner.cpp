@@ -856,38 +856,25 @@ class NodeBuilder {
   };
   SmallVector<CarriedEdge, 4> Pending;
 
-  /// A transfer node. For a Scalarize boundary (\p G given, \p K a lane kind)
-  /// of \p Lanes lanes of the group's vector type: the per-width entry
-  /// ("lane_extract <vty>" / "lane_insert <vty>", the whole-vector sequence)
-  /// once, when the port-info has it. It is scaled by the part of the vector
-  /// transferred: the lanes rounded up to whole 128-bit chunks over the
-  /// chunks of the vector (resource use and micro-ops; the latency stays the
-  /// whole sequence's). Without it, the untyped key charged \p Lanes times
-  /// (resource use and micro-ops times Lanes; latency as is, or times Lanes
-  /// when \p Chain: the inserts into one vector depend on each other).
+  /// A transfer node. For a Scalarize boundary (\p VecTy given, \p K a lane
+  /// kind): the per-width entry for \p VecTy ("lane_extract <vty>" /
+  /// "lane_insert <vty>", the whole-vector sequence) once, when the port-info
+  /// has it; every boundary moves all the lanes (partial transfers are a
+  /// follow-up). Without it, the untyped key charged \p Lanes times (resource
+  /// use and micro-ops times Lanes; latency as is, or times Lanes when
+  /// \p Chain: the inserts into one vector depend on each other).
   bool addTransfer(TransferKind K, ArrayRef<unsigned> Preds, unsigned &Out,
                    unsigned Lanes = 1, bool Chain = false,
-                   const Group *G = nullptr) {
+                   Type *VecTy = nullptr) {
     CostNode Nd;
     bool IsLane =
         K == TransferKind::LaneExtract || K == TransferKind::LaneInsert;
-    StringRef Name = K == TransferKind::LaneExtract ? "lane_extract"
-                                                    : "lane_insert";
     std::optional<OpCost> W;
-    std::string VTy;
-    if (G && IsLane) {
-      auto *VT = cast<FixedVectorType>(G->Ops[0]->getType());
-      VTy = typeKey(VT);
-      W = PD.laneTransferCost(K, VTy);
+    if (VecTy && IsLane) {
+      W = PD.laneTransferCost(K, typeKey(VecTy));
       if (W) {
-        unsigned ElemBits = VT->getScalarSizeInBits();
-        unsigned Total = divideCeil(VT->getNumElements() * ElemBits, 128);
-        unsigned Used = std::min(Total, divideCeil(Lanes * ElemBits, 128));
         Nd.Cost = *W;
-        for (ResourceUse &U : Nd.Cost.Uses)
-          U.Cycles = U.Cycles * Used / Total;
-        Nd.Cost.Uops = divideCeil(Nd.Cost.Uops * Used, Total);
-        Nd.Wide512 = VT->getNumElements() * ElemBits == 512;
+        Nd.Wide512 = VecTy->getPrimitiveSizeInBits().getFixedValue() == 512;
       }
     }
     if (!W) {
@@ -899,10 +886,12 @@ class NodeBuilder {
         Nd.Cost.Latency *= Lanes;
     }
     LLVM_DEBUG({
-      if (G && IsLane) {
-        dbgs() << "savio: transfer " << Name;
+      if (VecTy && IsLane) {
+        dbgs() << "savio: transfer "
+               << (K == TransferKind::LaneExtract ? "lane_extract"
+                                                  : "lane_insert");
         if (W)
-          dbgs() << ' ' << VTy << " per-width";
+          dbgs() << ' ' << typeKey(VecTy) << " per-width";
         else
           dbgs() << " per-lane x" << Lanes;
         dbgs() << ": uops " << Nd.Cost.Uops << " latency " << Nd.Cost.Latency
@@ -1063,7 +1052,7 @@ private:
           bool Ok =
               Vec ? addTransfer(TransferKind::LaneExtract, TP, T,
                                 laneCount(R.Groups[GIdx]), /*Chain=*/false,
-                                &R.Groups[GIdx])
+                                I.getType())
                   : addTransfer(K == InputKind::GprToVec
                                     ? TransferKind::GprToVec
                                     : TransferKind::LaneToLane0,
@@ -1157,7 +1146,7 @@ private:
       if (is_contained(G.LiveOuts, &I) && liveOutNeedsInsert(G, I)) {
         unsigned T;
         if (!addTransfer(TransferKind::LaneInsert, {Me}, T, laneCount(G),
-                         /*Chain=*/true, &G))
+                         /*Chain=*/true, I.getType()))
           return false;
         OutNode[V] = T;
       }

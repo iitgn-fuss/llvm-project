@@ -13,7 +13,6 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/IOSandbox.h"
 #include "llvm/Support/JSON.h"
-#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/TargetParser/Triple.h"
@@ -96,44 +95,49 @@ Expected<OpCost> costOfOpcodes(StringRef File, const Twine &Where,
   return sumCosts(Parts);
 }
 
-/// "v8i32" -> 8 lanes of 32 bits; false for any other spelling.
-bool parseVectorKey(StringRef VTy, unsigned &Lanes, unsigned &Bits) {
+/// "v8i32": a vector of 32- or 64-bit integer lanes.
+bool isVectorKey(StringRef VTy) {
+  unsigned Lanes, Bits;
   if (!VTy.consume_front("v"))
     return false;
   StringRef N, W;
   std::tie(N, W) = VTy.split('i');
   return !N.getAsInteger(10, Lanes) && !W.getAsInteger(10, Bits) && Lanes &&
-         Bits;
+         (Bits == 32 || Bits == 64);
 }
 
-unsigned ceilLog2(unsigned X) { return X <= 1 ? 0 : Log2_32_Ceil(X); }
-
-/// A per-width lane transfer: the opcode sum of \p V with the latency of the
-/// sequence's critical path (see PortDescription::laneTransferCost).
+/// A lane_transfers.json entry {"opcodes": [...], "path": [...],
+/// "chunk_bits": N}: the opcode sum of "opcodes" with the latency summed over
+/// "path" (each path opcode must be one of "opcodes").
 Expected<OpCost> laneSequenceCost(StringRef File, const Twine &Where,
-                                  const json::Value *V,
-                                  const StringMap<OpCost> &Ops, bool Insert,
-                                  unsigned Chunks) {
-  Expected<OpCost> Sum = costOfOpcodes(File, Where, V, Ops);
+                                  const json::Value &V,
+                                  const StringMap<OpCost> &Ops) {
+  const json::Object *O = V.getAsObject();
+  if (!O)
+    return makeError(File, Where + " must be an object");
+  Expected<OpCost> Sum =
+      costOfOpcodes(File, Where + " 'opcodes'", O->get("opcodes"), Ops);
   if (!Sum)
     return Sum.takeError();
-  unsigned Head = 0, Serial = 0, Join = 0, Lane = 0;
-  for (const json::Value &E : *V->getAsArray()) {
-    StringRef Name = *E.getAsString();
-    unsigned Lat = Ops.find(Name)->second.Latency;
-    if (Name.starts_with(Insert ? "VINSERT" : "VEXTRACT"))
-      Join = std::max(Join, Lat);
-    else if (Insert && Name.starts_with("VMOV"))
-      Head = std::max(Head, Lat);
-    else if (Insert)
-      Serial += Lat;
-    else
-      Lane = std::max(Lane, Lat);
+  const json::Array *All = O->getArray("opcodes");
+  const json::Array *Path = O->getArray("path");
+  if (!Path || Path->empty())
+    return makeError(File, Where + " 'path' must be a non-empty array");
+  std::optional<int64_t> Chunk = O->getInteger("chunk_bits");
+  if (!Chunk || *Chunk <= 0)
+    return makeError(File, Where + " 'chunk_bits' must be a positive integer");
+  unsigned Latency = 0;
+  for (const json::Value &E : *Path) {
+    std::optional<StringRef> Name = E.getAsString();
+    bool InSeq = Name && any_of(*All, [&](const json::Value &A) {
+                   return A.getAsString() == Name;
+                 });
+    if (!InSeq)
+      return makeError(File,
+                       Where + " 'path' names an opcode not in 'opcodes'");
+    Latency += Ops.find(*Name)->second.Latency;
   }
-  if (Insert)
-    Sum->Latency = Head + divideCeil(Serial, Chunks) + ceilLog2(Chunks) * Join;
-  else
-    Sum->Latency = Lane + (Chunks > 1 ? Join : 0);
+  Sum->Latency = Latency;
   return Sum;
 }
 
@@ -413,25 +417,38 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
         return C.takeError();
       PD->Transfers[unsigned(Kind)] = std::move(*C);
     }
-    // Optional per-width lane transfers (any number): "lane_extract <vty>".
-    for (const auto &KV : *T) {
-      StringRef Key = KV.first;
-      bool Insert = Key.starts_with("lane_insert ");
-      if (!Insert && !Key.starts_with("lane_extract "))
-        continue;
-      StringRef VTy = Key.drop_until([](char C) { return C == ' '; }).ltrim();
-      unsigned Lanes, Bits;
-      if (!parseVectorKey(VTy, Lanes, Bits))
-        return makeError("transfers.json",
-                         "key '" + Key + "': '" + VTy +
-                             "' is not a vector type (v<N>i<W>)");
-      unsigned Chunks = divideCeil(Lanes * Bits, 128);
-      Expected<OpCost> C = laneSequenceCost("transfers.json",
-                                            "key '" + Key + "'", &KV.second,
-                                            Ops, Insert, Chunks);
-      if (!C)
-        return C.takeError();
-      PD->LaneTransfers.try_emplace(Key, std::move(*C));
+  }
+
+  // lane_transfers.json (optional): per-width lane transfers.
+  {
+    SmallString<128> LP(Dir);
+    sys::path::append(LP, "lane_transfers.json");
+    if (sys::fs::exists(LP)) {
+      Expected<json::Object> L = readObject(Dir, "lane_transfers.json");
+      if (!L)
+        return L.takeError();
+      const json::Object *LT = L->getObject("lane_transfers");
+      if (!LT)
+        return makeError("lane_transfers.json",
+                         "'lane_transfers' must be an object");
+      for (const auto &KV : *LT) {
+        StringRef Key = KV.first;
+        StringRef VTy = Key;
+        if (!VTy.consume_front("lane_insert ") &&
+            !VTy.consume_front("lane_extract "))
+          return makeError("lane_transfers.json",
+                           "key '" + Key + "' must be 'lane_extract <vty>' or "
+                                           "'lane_insert <vty>'");
+        if (!isVectorKey(VTy))
+          return makeError("lane_transfers.json",
+                           "key '" + Key + "': '" + VTy +
+                               "' is not a vector type (v<N>i<W>)");
+        Expected<OpCost> C = laneSequenceCost(
+            "lane_transfers.json", "key '" + Key + "'", KV.second, Ops);
+        if (!C)
+          return C.takeError();
+        PD->LaneTransfers.try_emplace(Key, std::move(*C));
+      }
     }
   }
 
