@@ -1,0 +1,774 @@
+{
+  "probes": {
+    "add i32": [
+      "LEA64_32r"
+    ],
+    "sub i32": [
+      "SUB32rr"
+    ],
+    "mul i32": [
+      "IMUL32rr"
+    ],
+    "and i32": [
+      "AND32rr"
+    ],
+    "or i32": [
+      "OR32rr"
+    ],
+    "xor i32": [
+      "XOR32rr"
+    ],
+    "shl i32": [
+      "SHLX32rr"
+    ],
+    "lshr i32": [
+      "SHRX32rr"
+    ],
+    "ashr i32": [
+      "SARX32rr"
+    ],
+    "udiv i32": [
+      "DIV32r"
+    ],
+    "urem i32": [
+      "DIV32r"
+    ],
+    "add i64": [
+      "LEA64r"
+    ],
+    "add v4i32": [
+      "VPADDDZ128rr"
+    ],
+    "add v8i32": [
+      "VPADDDZ256rr"
+    ],
+    "add v16i32": [
+      "VPADDDZrr"
+    ],
+    "add v2i64": [
+      "VPADDQZ128rr"
+    ],
+    "add v4i64": [
+      "VPADDQZ256rr"
+    ],
+    "add v8i64": [
+      "VPADDQZrr"
+    ],
+    "sub i64": [
+      "SUB64rr"
+    ],
+    "sub v4i32": [
+      "VPSUBDZ128rr"
+    ],
+    "sub v8i32": [
+      "VPSUBDZ256rr"
+    ],
+    "sub v16i32": [
+      "VPSUBDZrr"
+    ],
+    "sub v2i64": [
+      "VPSUBQZ128rr"
+    ],
+    "sub v4i64": [
+      "VPSUBQZ256rr"
+    ],
+    "sub v8i64": [
+      "VPSUBQZrr"
+    ],
+    "mul i64": [
+      "IMUL64rr"
+    ],
+    "mul v4i32": [
+      "VPMULLDZ128rr"
+    ],
+    "mul v8i32": [
+      "VPMULLDZ256rr"
+    ],
+    "mul v16i32": [
+      "VPMULLDZrr"
+    ],
+    "mul v2i64": [
+      "VPMULLQZ128rr"
+    ],
+    "mul v4i64": [
+      "VPMULLQZ256rr"
+    ],
+    "mul v8i64": [
+      "VPMULLQZrr"
+    ],
+    "and i64": [
+      "AND64rr"
+    ],
+    "and v4i32": [
+      "VPANDDZ128rr"
+    ],
+    "and v8i32": [
+      "VPANDDZ256rr"
+    ],
+    "and v16i32": [
+      "VPANDDZrr"
+    ],
+    "and v2i64": [
+      "VPANDQZ128rr"
+    ],
+    "and v4i64": [
+      "VPANDQZ256rr"
+    ],
+    "and v8i64": [
+      "VPANDQZrr"
+    ],
+    "or i64": [
+      "OR64rr"
+    ],
+    "or v4i32": [
+      "VPORDZ128rr"
+    ],
+    "or v8i32": [
+      "VPORDZ256rr"
+    ],
+    "or v16i32": [
+      "VPORDZrr"
+    ],
+    "or v2i64": [
+      "VPORQZ128rr"
+    ],
+    "or v4i64": [
+      "VPORQZ256rr"
+    ],
+    "or v8i64": [
+      "VPORQZrr"
+    ],
+    "xor i64": [
+      "XOR64rr"
+    ],
+    "xor v4i32": [
+      "VPXORDZ128rr"
+    ],
+    "xor v8i32": [
+      "VPXORDZ256rr"
+    ],
+    "xor v16i32": [
+      "VPXORDZrr"
+    ],
+    "xor v2i64": [
+      "VPXORQZ128rr"
+    ],
+    "xor v4i64": [
+      "VPXORQZ256rr"
+    ],
+    "xor v8i64": [
+      "VPXORQZrr"
+    ],
+    "shl i64": [
+      "SHLX64rr"
+    ],
+    "shl v4i32": [
+      "VPSLLVDZ128rr"
+    ],
+    "shl v8i32": [
+      "VPSLLVDZ256rr"
+    ],
+    "shl v16i32": [
+      "VPSLLVDZrr"
+    ],
+    "shl v2i64": [
+      "VPSLLVQZ128rr"
+    ],
+    "shl v4i64": [
+      "VPSLLVQZ256rr"
+    ],
+    "shl v8i64": [
+      "VPSLLVQZrr"
+    ],
+    "lshr i64": [
+      "SHRX64rr"
+    ],
+    "lshr v4i32": [
+      "VPSRLVDZ128rr"
+    ],
+    "lshr v8i32": [
+      "VPSRLVDZ256rr"
+    ],
+    "lshr v16i32": [
+      "VPSRLVDZrr"
+    ],
+    "lshr v2i64": [
+      "VPSRLVQZ128rr"
+    ],
+    "lshr v4i64": [
+      "VPSRLVQZ256rr"
+    ],
+    "lshr v8i64": [
+      "VPSRLVQZrr"
+    ],
+    "ashr i64": [
+      "SARX64rr"
+    ],
+    "ashr v4i32": [
+      "VPSRAVDZ128rr"
+    ],
+    "ashr v8i32": [
+      "VPSRAVDZ256rr"
+    ],
+    "ashr v16i32": [
+      "VPSRAVDZrr"
+    ],
+    "ashr v2i64": [
+      "VPSRAVQZ128rr"
+    ],
+    "ashr v4i64": [
+      "VPSRAVQZ256rr"
+    ],
+    "ashr v8i64": [
+      "VPSRAVQZrr"
+    ],
+    "shl.imm i32": [
+      "SHL32ri"
+    ],
+    "shl.imm i64": [
+      "SHL64ri"
+    ],
+    "shl.imm v4i32": [
+      "VPSLLDZ128ri"
+    ],
+    "shl.imm v8i32": [
+      "VPSLLDZ256ri"
+    ],
+    "shl.imm v16i32": [
+      "VPSLLDZri"
+    ],
+    "shl.imm v2i64": [
+      "VPSLLQZ128ri"
+    ],
+    "shl.imm v4i64": [
+      "VPSLLQZ256ri"
+    ],
+    "shl.imm v8i64": [
+      "VPSLLQZri"
+    ],
+    "lshr.imm i32": [
+      "SHR32ri"
+    ],
+    "lshr.imm i64": [
+      "SHR64ri"
+    ],
+    "lshr.imm v4i32": [
+      "VPSRLDZ128ri"
+    ],
+    "lshr.imm v8i32": [
+      "VPSRLDZ256ri"
+    ],
+    "lshr.imm v16i32": [
+      "VPSRLDZri"
+    ],
+    "lshr.imm v2i64": [
+      "VPSRLQZ128ri"
+    ],
+    "lshr.imm v4i64": [
+      "VPSRLQZ256ri"
+    ],
+    "lshr.imm v8i64": [
+      "VPSRLQZri"
+    ],
+    "ashr.imm i32": [
+      "SAR32ri"
+    ],
+    "ashr.imm i64": [
+      "SAR64ri"
+    ],
+    "ashr.imm v4i32": [
+      "VPSRADZ128ri"
+    ],
+    "ashr.imm v8i32": [
+      "VPSRADZ256ri"
+    ],
+    "ashr.imm v16i32": [
+      "VPSRADZri"
+    ],
+    "ashr.imm v2i64": [
+      "VPSRAQZ128ri"
+    ],
+    "ashr.imm v4i64": [
+      "VPSRAQZ256ri"
+    ],
+    "ashr.imm v8i64": [
+      "VPSRAQZri"
+    ],
+    "add.shl.imm i32": [
+      "SHL32ri",
+      "LEA64_32r"
+    ],
+    "add.shl.imm i64": [
+      "SHL64ri",
+      "LEA64r"
+    ],
+    "add.lshr.imm i32": [
+      "SHR32ri",
+      "LEA64_32r"
+    ],
+    "add.lshr.imm i64": [
+      "SHR64ri",
+      "LEA64r"
+    ],
+    "add.ashr.imm i32": [
+      "SAR32ri",
+      "LEA64_32r"
+    ],
+    "add.ashr.imm i64": [
+      "SAR64ri",
+      "LEA64r"
+    ],
+    "sub.shl.imm i32": [
+      "SHL32ri",
+      "SUB32rr"
+    ],
+    "sub.shl.imm i64": [
+      "SHL64ri",
+      "SUB64rr"
+    ],
+    "sub.lshr.imm i32": [
+      "SHR32ri",
+      "SUB32rr"
+    ],
+    "sub.lshr.imm i64": [
+      "SHR64ri",
+      "SUB64rr"
+    ],
+    "sub.ashr.imm i32": [
+      "SAR32ri",
+      "SUB32rr"
+    ],
+    "sub.ashr.imm i64": [
+      "SAR64ri",
+      "SUB64rr"
+    ],
+    "and.shl.imm i32": [
+      "SHL32ri",
+      "AND32rr"
+    ],
+    "and.shl.imm i64": [
+      "SHL64ri",
+      "AND64rr"
+    ],
+    "and.lshr.imm i32": [
+      "SHR32ri",
+      "AND32rr"
+    ],
+    "and.lshr.imm i64": [
+      "SHR64ri",
+      "AND64rr"
+    ],
+    "and.ashr.imm i32": [
+      "SAR32ri",
+      "AND32rr"
+    ],
+    "and.ashr.imm i64": [
+      "SAR64ri",
+      "AND64rr"
+    ],
+    "or.shl.imm i32": [
+      "SHL32ri",
+      "OR32rr"
+    ],
+    "or.shl.imm i64": [
+      "SHL64ri",
+      "OR64rr"
+    ],
+    "or.lshr.imm i32": [
+      "SHR32ri",
+      "OR32rr"
+    ],
+    "or.lshr.imm i64": [
+      "SHR64ri",
+      "OR64rr"
+    ],
+    "or.ashr.imm i32": [
+      "SAR32ri",
+      "OR32rr"
+    ],
+    "or.ashr.imm i64": [
+      "SAR64ri",
+      "OR64rr"
+    ],
+    "xor.shl.imm i32": [
+      "SHL32ri",
+      "XOR32rr"
+    ],
+    "xor.shl.imm i64": [
+      "SHL64ri",
+      "XOR64rr"
+    ],
+    "xor.lshr.imm i32": [
+      "SHR32ri",
+      "XOR32rr"
+    ],
+    "xor.lshr.imm i64": [
+      "SHR64ri",
+      "XOR64rr"
+    ],
+    "xor.ashr.imm i32": [
+      "SAR32ri",
+      "XOR32rr"
+    ],
+    "xor.ashr.imm i64": [
+      "SAR64ri",
+      "XOR64rr"
+    ],
+    "add.lshr.imm v4i32": [
+      "VPSRLDZ128ri",
+      "VPADDDZ128rr"
+    ],
+    "add.lshr.imm v8i32": [
+      "VPSRLDZ256ri",
+      "VPADDDZ256rr"
+    ],
+    "add.lshr.imm v16i32": [
+      "VPSRLDZri",
+      "VPADDDZrr"
+    ],
+    "add.lshr.imm v2i64": [
+      "VPSRLQZ128ri",
+      "VPADDQZ128rr"
+    ],
+    "add.lshr.imm v4i64": [
+      "VPSRLQZ256ri",
+      "VPADDQZ256rr"
+    ],
+    "add.lshr.imm v8i64": [
+      "VPSRLQZri",
+      "VPADDQZrr"
+    ],
+    "add.ashr.imm v4i32": [
+      "VPSRADZ128ri",
+      "VPADDDZ128rr"
+    ],
+    "add.ashr.imm v8i32": [
+      "VPSRADZ256ri",
+      "VPADDDZ256rr"
+    ],
+    "add.ashr.imm v16i32": [
+      "VPSRADZri",
+      "VPADDDZrr"
+    ],
+    "add.ashr.imm v2i64": [
+      "VPSRAQZ128ri",
+      "VPADDQZ128rr"
+    ],
+    "add.ashr.imm v4i64": [
+      "VPSRAQZ256ri",
+      "VPADDQZ256rr"
+    ],
+    "add.ashr.imm v8i64": [
+      "VPSRAQZri",
+      "VPADDQZrr"
+    ],
+    "load i32": [
+      "MOV32rm"
+    ],
+    "load i64": [
+      "MOV64rm"
+    ],
+    "load v4i32": [
+      "VMOVDQA64Z128rm"
+    ],
+    "load v8i32": [
+      "VMOVDQU64Z256rm"
+    ],
+    "load v16i32": [
+      "VMOVDQU64Zrm"
+    ],
+    "load v2i64": [
+      "VMOVDQA64Z128rm"
+    ],
+    "load v4i64": [
+      "VMOVDQU64Z256rm"
+    ],
+    "load v8i64": [
+      "VMOVDQU64Zrm"
+    ],
+    "store i32": [
+      "MOV32mr"
+    ],
+    "store i64": [
+      "MOV64mr"
+    ],
+    "store v4i32": [
+      "VMOVDQA64Z128mr"
+    ],
+    "store v8i32": [
+      "VMOVDQU64Z256mr"
+    ],
+    "store v16i32": [
+      "VMOVDQU64Zmr"
+    ],
+    "store v2i64": [
+      "VMOVDQA64Z128mr"
+    ],
+    "store v4i64": [
+      "VMOVDQU64Z256mr"
+    ],
+    "store v8i64": [
+      "VMOVDQU64Zmr"
+    ],
+    "udiv v4i32": [
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VMOVDI2PDIZrr",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri"
+    ],
+    "udiv v8i32": [
+      "VEXTRACTI32X4Z256rri",
+      "VPEXTRDZrri",
+      "VEXTRACTI32X4Z256rri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "VMOVDI2PDIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "VMOVDI2PDIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPINSRDZrri",
+      "VINSERTI32X4Z256rri"
+    ],
+    "udiv v16i32": [
+      "VEXTRACTI32X4Zrri",
+      "VPEXTRDZrri",
+      "VEXTRACTI32X4Zrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "VMOVDI2PDIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPINSRDZrri",
+      "VEXTRACTI32X4Zrri",
+      "VPEXTRDZrri",
+      "VEXTRACTI32X4Zrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VMOVDI2PDIZrr",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VEXTRACTI32X4Z256rri",
+      "VPEXTRDZrri",
+      "VEXTRACTI32X4Z256rri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "VMOVDI2PDIZrr",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "VMOVDI2PDIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "VINSERTI32X4Z256rri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPINSRDZrri",
+      "VINSERTI32X4Z256rri",
+      "VINSERTI64X4Zrri"
+    ],
+    "urem v4i32": [
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VMOVDI2PDIZrr",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri"
+    ],
+    "urem v8i32": [
+      "VEXTRACTI32X4Z256rri",
+      "VPEXTRDZrri",
+      "VEXTRACTI32X4Z256rri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "VMOVDI2PDIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "VMOVDI2PDIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPINSRDZrri",
+      "VINSERTI32X4Z256rri"
+    ],
+    "urem v16i32": [
+      "VEXTRACTI32X4Zrri",
+      "VPEXTRDZrri",
+      "VEXTRACTI32X4Zrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "VMOVDI2PDIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPINSRDZrri",
+      "VEXTRACTI32X4Zrri",
+      "VPEXTRDZrri",
+      "VEXTRACTI32X4Zrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VMOVDI2PDIZrr",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VEXTRACTI32X4Z256rri",
+      "VPEXTRDZrri",
+      "VEXTRACTI32X4Z256rri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "VMOVDI2PDIZrr",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "DIV32r",
+      "VMOVPDI2DIZrr",
+      "VMOVPDI2DIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "VMOVDI2PDIZrr",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPEXTRDZrri",
+      "VPEXTRDZrri",
+      "VINSERTI32X4Z256rri",
+      "DIV32r",
+      "VPINSRDZrri",
+      "VPINSRDZrri",
+      "VINSERTI32X4Z256rri",
+      "VINSERTI64X4Zrri"
+    ]
+  }
+}

@@ -8,6 +8,8 @@
 
 #include "llvm/Transforms/Vectorize/SAVIO/RegionCost.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/bit.h"
 #include "llvm/Support/Debug.h"
 #include <algorithm>
 #include <cassert>
@@ -102,6 +104,61 @@ double maxCycleRatio(ArrayRef<CostNode> Nodes) {
   return Lambda;
 }
 
+/// TRes of a description with port sets: the maximum over the non-empty unions
+/// U of the loaded classes' port sets of (the load of the classes whose set
+/// lies inside U) / |U|; a class without ports is its own pool, load / units.
+/// BusiestClass is the class with the largest load inside the maximizing U.
+void resourceBoundOverPorts(const PortDescription &PD, ArrayRef<double> Load,
+                            RegionEstimate &E) {
+  SmallVector<std::pair<uint64_t, unsigned>, 16> Sets; // (port mask, class)
+  for (unsigned C = 0; C != PD.numClasses(); ++C) {
+    if (Load[C] <= 0)
+      continue;
+    ArrayRef<unsigned> Ports = PD.ports(C, E.With512);
+    if (Ports.empty()) {
+      double T = Load[C] / PD.units(C);
+      if (T > E.TRes) {
+        E.TRes = T;
+        E.BusiestClass = C;
+      }
+      continue;
+    }
+    uint64_t Mask = 0;
+    for (unsigned P : Ports)
+      Mask |= uint64_t(1) << P;
+    Sets.push_back({Mask, C});
+  }
+  // The distinct sets; every union is a union of a subset of them (at most 16
+  // classes list ports, so at most 2^16 subsets).
+  SmallVector<uint64_t, 16> Distinct;
+  for (auto &[Mask, C] : Sets)
+    if (!is_contained(Distinct, Mask))
+      Distinct.push_back(Mask);
+  for (uint32_t Subset = 1; Subset < (uint32_t(1) << Distinct.size());
+       ++Subset) {
+    uint64_t U = 0;
+    for (unsigned I = 0; I != Distinct.size(); ++I)
+      if (Subset >> I & 1)
+        U |= Distinct[I];
+    double Sum = 0, Max = 0;
+    unsigned Busiest = 0;
+    for (auto &[Mask, C] : Sets) {
+      if (Mask & ~U)
+        continue;
+      Sum += Load[C];
+      if (Load[C] > Max) {
+        Max = Load[C];
+        Busiest = C;
+      }
+    }
+    double T = Sum / llvm::popcount(U);
+    if (T > E.TRes) {
+      E.TRes = T;
+      E.BusiestClass = Busiest;
+    }
+  }
+}
+
 } // namespace
 
 double savio::effectiveConcurrency(unsigned NK, double UopsPerIter, unsigned W,
@@ -153,12 +210,17 @@ RegionEstimate savio::estimateRegion(ArrayRef<CostNode> Nodes,
       Load[U.Class] += U.Cycles;
     Uops += N.Cost.Uops;
   }
-  for (unsigned C = 0; C != PD.numClasses(); ++C) {
-    double T = Load[C] / PD.units(C);
-    if (T > E.TRes) {
-      E.TRes = T;
-      E.BusiestClass = C;
+  if (!PD.hasPortSets()) {
+    for (unsigned C = 0; C != PD.numClasses(); ++C) {
+      double T = Load[C] / PD.units(C);
+      if (T > E.TRes) {
+        E.TRes = T;
+        E.BusiestClass = C;
+      }
     }
+  } else {
+    E.With512 = any_of(Nodes, [](const CostNode &N) { return N.Wide512; });
+    resourceBoundOverPorts(PD, Load, E);
   }
 
   // Dispatch bound.

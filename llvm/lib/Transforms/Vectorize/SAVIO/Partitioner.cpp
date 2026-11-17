@@ -793,6 +793,16 @@ static bool scalarizeInputIsFree(const Loop *L, const Group &G,
 
 namespace {
 
+/// Whether \p I is an operation on a 512-bit vector type: it produces one, or
+/// is a store of one.
+static bool is512BitOp(const Instruction &I) {
+  Type *T = I.getType();
+  if (auto *SI = dyn_cast<StoreInst>(&I))
+    T = SI->getValueOperand()->getType();
+  auto *VT = dyn_cast<FixedVectorType>(T);
+  return VT && VT->getPrimitiveSizeInBits().getFixedValue() == 512;
+}
+
 /// Cost model nodes of a region for one assignment, one node per instruction
 /// of the region graph plus the transfers a Singleton Vectorized group needs.
 ///
@@ -1080,6 +1090,12 @@ private:
     }
     Nd.Cost = C ? *C : Fallback(I);
     Nd.Conc = Conc;
+    // A Scalarized operation is scalar code, whatever the IR type says.
+    bool Scalarized =
+        (InGroup && R.Groups[GIdx].Dir == Direction::ToScalar && P) ||
+        (OwnerIt != MemOwner.end() &&
+         Promoted[virtualGroup(OwnerIt->second, J)]);
+    Nd.Wide512 = !Scalarized && is512BitOp(I);
     unsigned Me = Nodes.size();
     Nodes.push_back(std::move(Nd));
     NodeOf[V] = Me;
@@ -1265,7 +1281,10 @@ estimateAssignment(const Region &R, const RegionGraph &RG,
       if (Promoted[I])
         dbgs() << ' ' << I;
     dbgs() << "): TRes " << E.TRes << " (" << PD.className(E.BusiestClass)
-           << ") TRec " << E.TRec << " TDisp " << E.TDisp << "\n";
+           << ") TRec " << E.TRec << " TDisp " << E.TDisp;
+    if (PD.hasPortSets())
+      dbgs() << " with512=" << E.With512;
+    dbgs() << "\n";
   });
   return E;
 }

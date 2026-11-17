@@ -1,0 +1,1718 @@
+{
+  "ops": [
+    {
+      "opcode": "ADD32rr",
+      "uses": [
+        {
+          "class": "scalar_alu",
+          "cycles": 1.01
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.201 cycles from the saturated pair-probe solo row class alu (the op-row figure 0.224 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_alu (units 5): cycles = 0.201 x 5 = 1.01. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted). Probe note: self-check row, not a probe opcode (adds are selected as LEA)"
+    },
+    {
+      "opcode": "SUB32rr",
+      "uses": [
+        {
+          "class": "scalar_alu",
+          "cycles": 1.01
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.201 cycles from the saturated pair-probe solo row class alu (the op-row figure 0.225 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_alu (units 5): cycles = 0.201 x 5 = 1.01. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SUB64rr",
+      "uses": [
+        {
+          "class": "scalar_alu",
+          "cycles": 1.01
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.201 cycles from the saturated pair-probe solo row class alu (the op-row figure 0.224 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_alu (units 5): cycles = 0.201 x 5 = 1.01. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "AND32rr",
+      "uses": [
+        {
+          "class": "scalar_alu",
+          "cycles": 1.01
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.201 cycles from the saturated pair-probe solo row class alu (the op-row figure 0.224 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_alu (units 5): cycles = 0.201 x 5 = 1.01. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "AND64rr",
+      "uses": [
+        {
+          "class": "scalar_alu",
+          "cycles": 1.01
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.201 cycles from the saturated pair-probe solo row class alu (the op-row figure 0.224 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_alu (units 5): cycles = 0.201 x 5 = 1.01. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "OR32rr",
+      "uses": [
+        {
+          "class": "scalar_alu",
+          "cycles": 1.01
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.201 cycles from the saturated pair-probe solo row class alu (the op-row figure 0.224 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_alu (units 5): cycles = 0.201 x 5 = 1.01. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "OR64rr",
+      "uses": [
+        {
+          "class": "scalar_alu",
+          "cycles": 1.01
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.201 cycles from the saturated pair-probe solo row class alu (the op-row figure 0.224 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_alu (units 5): cycles = 0.201 x 5 = 1.01. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "XOR32rr",
+      "uses": [
+        {
+          "class": "scalar_alu",
+          "cycles": 1.01
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.201 cycles from the saturated pair-probe solo row class alu (the op-row figure 0.224 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_alu (units 5): cycles = 0.201 x 5 = 1.01. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "XOR64rr",
+      "uses": [
+        {
+          "class": "scalar_alu",
+          "cycles": 1.01
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.201 cycles from the saturated pair-probe solo row class alu (the op-row figure 0.224 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_alu (units 5): cycles = 0.201 x 5 = 1.01. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "IMUL32rr",
+      "uses": [
+        {
+          "class": "scalar_mul",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.001 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_mul (units 1): cycles = 1.001 x 1 = 1.0. Latency 3.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "IMUL64rr",
+      "uses": [
+        {
+          "class": "scalar_mul",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_mul (units 1): cycles = 1.000 x 1 = 1.0. Latency 3.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SHL32ri",
+      "uses": [
+        {
+          "class": "scalar_shift",
+          "cycles": 1.02
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.508 cycles from the saturated pair-probe solo row class shlx (the op-row figure 0.532 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_shift (units 2): cycles = 0.508 x 2 = 1.02. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SHL64ri",
+      "uses": [
+        {
+          "class": "scalar_shift",
+          "cycles": 1.02
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.508 cycles from the saturated pair-probe solo row class shlx (the op-row figure 0.531 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_shift (units 2): cycles = 0.508 x 2 = 1.02. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SHR32ri",
+      "uses": [
+        {
+          "class": "scalar_shift",
+          "cycles": 1.02
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.508 cycles from the saturated pair-probe solo row class shlx (the op-row figure 0.531 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_shift (units 2): cycles = 0.508 x 2 = 1.02. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SHR64ri",
+      "uses": [
+        {
+          "class": "scalar_shift",
+          "cycles": 1.02
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.508 cycles from the saturated pair-probe solo row class shlx (the op-row figure 0.532 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_shift (units 2): cycles = 0.508 x 2 = 1.02. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SAR32ri",
+      "uses": [
+        {
+          "class": "scalar_shift",
+          "cycles": 1.02
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.508 cycles from the saturated pair-probe solo row class shlx (the op-row figure 0.531 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_shift (units 2): cycles = 0.508 x 2 = 1.02. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SAR64ri",
+      "uses": [
+        {
+          "class": "scalar_shift",
+          "cycles": 1.02
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.508 cycles from the saturated pair-probe solo row class shlx (the op-row figure 0.531 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_shift (units 2): cycles = 0.508 x 2 = 1.02. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SHLX32rr",
+      "uses": [
+        {
+          "class": "scalar_shift",
+          "cycles": 1.02
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.508 cycles from the saturated pair-probe solo row class shlx (the op-row figure 0.532 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_shift (units 2): cycles = 0.508 x 2 = 1.02. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SHLX64rr",
+      "uses": [
+        {
+          "class": "scalar_shift",
+          "cycles": 1.02
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.508 cycles from the saturated pair-probe solo row class shlx (the op-row figure 0.531 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_shift (units 2): cycles = 0.508 x 2 = 1.02. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SHRX32rr",
+      "uses": [
+        {
+          "class": "scalar_shift",
+          "cycles": 1.02
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.508 cycles from the saturated pair-probe solo row class shlx (the op-row figure 0.531 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_shift (units 2): cycles = 0.508 x 2 = 1.02. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SHRX64rr",
+      "uses": [
+        {
+          "class": "scalar_shift",
+          "cycles": 1.02
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.508 cycles from the saturated pair-probe solo row class shlx (the op-row figure 0.531 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_shift (units 2): cycles = 0.508 x 2 = 1.02. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SARX32rr",
+      "uses": [
+        {
+          "class": "scalar_shift",
+          "cycles": 1.02
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.508 cycles from the saturated pair-probe solo row class shlx (the op-row figure 0.531 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_shift (units 2): cycles = 0.508 x 2 = 1.02. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "SARX64rr",
+      "uses": [
+        {
+          "class": "scalar_shift",
+          "cycles": 1.02
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.508 cycles from the saturated pair-probe solo row class shlx (the op-row figure 0.531 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_shift (units 2): cycles = 0.508 x 2 = 1.02. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "LEA64_32r",
+      "uses": [
+        {
+          "class": "scalar_alu",
+          "cycles": 1.01
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.201 cycles from the saturated pair-probe solo row class alu (the op-row figure 0.224 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_alu (units 5): cycles = 0.201 x 5 = 1.01. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted). Probe note: two-component lea (base+index); aux LEA64_32r_disp is the 3-component form"
+    },
+    {
+      "opcode": "LEA64r",
+      "uses": [
+        {
+          "class": "scalar_alu",
+          "cycles": 1.01
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.201 cycles from the saturated pair-probe solo row class alu (the op-row figure 0.225 includes the loop's dec/jnz, one fused uop per 16 ops, and 7-8 chains leave an issue port idle; the port_probe-emr-2026-11-17-pairs.csv solo loop has 11 chains and one dec/jnz per 8 atoms) measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class scalar_alu (units 5): cycles = 0.201 x 5 = 1.01. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted). Probe note: two-component lea (base+index); aux LEA64r_disp is the 3-component form"
+    },
+    {
+      "opcode": "DIV32r",
+      "uses": [
+        {
+          "class": "int_div",
+          "cycles": 6.0
+        }
+      ],
+      "latency": 11,
+      "uops": 4,
+      "source": "measured",
+      "evidence": "reciprocal throughput 6.004 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class int_div (units 1): cycles = 6.004 x 1 = 6.0. Latency 11.002 measured (dependent chain), minus the divide chain's one `or`. uops = 4 (divider, estimate). Probe note: lat = chain step minus one `or` (xor edx + div + or on eax); rtput = 8 chains with mov/xor/or glue; divisor 1000, dividend in [0xC0000000,2^32); other divisors in aux DIV32r_d*"
+    },
+    {
+      "opcode": "DIV64r",
+      "uses": [
+        {
+          "class": "int_div",
+          "cycles": 10.0
+        }
+      ],
+      "latency": 14,
+      "uops": 4,
+      "source": "measured",
+      "evidence": "reciprocal throughput 9.998 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class int_div (units 1): cycles = 9.998 x 1 = 10.0. Latency 14.001 measured (dependent chain), minus the divide chain's one `or`. uops = 4 (divider, estimate). Probe note: not in the probe lists; lat = chain step minus one `or`; divisor 1000, dividend in [0xC000000000000000,2^64); other divisors in aux DIV64r_d*"
+    },
+    {
+      "opcode": "VPADDDZ128rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPADDDZ256rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPADDDZrr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 2, the 512-bit ports_with_512 count): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPADDQZ128rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPADDQZ256rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPADDQZrr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 2, the 512-bit ports_with_512 count): cycles = 0.500 x 2 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSUBDZ128rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.334 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.334 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSUBDZ256rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSUBDZrr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 2, the 512-bit ports_with_512 count): cycles = 0.500 x 2 = 1.0. Latency 1.002 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSUBQZ128rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSUBQZ256rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSUBQZrr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 2, the 512-bit ports_with_512 count): cycles = 0.500 x 2 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPMULLDZ128rr",
+      "uses": [
+        {
+          "class": "vec_mul",
+          "cycles": 2.01
+        }
+      ],
+      "latency": 10,
+      "uops": 2,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.005 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_mul (units 2): cycles = 1.005 x 2 = 2.01. Latency 9.999 measured (dependent chain). uops = round(cycles) = 2 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPMULLDZ256rr",
+      "uses": [
+        {
+          "class": "vec_mul",
+          "cycles": 2.09
+        }
+      ],
+      "latency": 10,
+      "uops": 2,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.044 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_mul (units 2): cycles = 1.044 x 2 = 2.09. Latency 10.004 measured (dependent chain). uops = round(cycles) = 2 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPMULLDZrr",
+      "uses": [
+        {
+          "class": "vec_mul",
+          "cycles": 2.15
+        }
+      ],
+      "latency": 11,
+      "uops": 2,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.075 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_mul (units 2): cycles = 1.075 x 2 = 2.15. Latency 10.877 measured (dependent chain). uops = round(cycles) = 2 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPMULLQZ128rr",
+      "uses": [
+        {
+          "class": "vec_mul",
+          "cycles": 3.0
+        }
+      ],
+      "latency": 15,
+      "uops": 3,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_mul (units 2): cycles = 1.500 x 2 = 3.0. Latency 14.998 measured (dependent chain). uops = round(cycles) = 3 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPMULLQZ256rr",
+      "uses": [
+        {
+          "class": "vec_mul",
+          "cycles": 3.0
+        }
+      ],
+      "latency": 15,
+      "uops": 3,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.501 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_mul (units 2): cycles = 1.501 x 2 = 3.0. Latency 15.013 measured (dependent chain). uops = round(cycles) = 3 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPMULLQZrr",
+      "uses": [
+        {
+          "class": "vec_mul",
+          "cycles": 3.0
+        }
+      ],
+      "latency": 16,
+      "uops": 3,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.501 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_mul (units 2): cycles = 1.501 x 2 = 3.0. Latency 16.224 measured (dependent chain). uops = round(cycles) = 3 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPANDDZ128rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPANDDZ256rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPANDDZrr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 2, the 512-bit ports_with_512 count): cycles = 0.500 x 2 = 1.0. Latency 1.002 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPANDQZ128rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPANDQZ256rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPANDQZrr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 2, the 512-bit ports_with_512 count): cycles = 0.500 x 2 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPORDZ128rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPORDZ256rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPORDZrr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 2, the 512-bit ports_with_512 count): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPORQZ128rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPORQZ256rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPORQZrr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 2, the 512-bit ports_with_512 count): cycles = 0.500 x 2 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPXORDZ128rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPXORDZ256rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPXORDZrr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.501 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 2, the 512-bit ports_with_512 count): cycles = 0.501 x 2 = 1.0. Latency 1.002 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPXORQZ128rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPXORQZ256rr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 3): cycles = 0.333 x 3 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPXORQZrr",
+      "uses": [
+        {
+          "class": "vec_alu",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_alu (units 2, the 512-bit ports_with_512 count): cycles = 0.500 x 2 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSLLVDZ128rr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSLLVDZ256rr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSLLVDZrr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.002 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 1, the 512-bit ports_with_512 count): cycles = 1.002 x 1 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSLLVQZ128rr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSLLVQZ256rr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSLLVQZrr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 1, the 512-bit ports_with_512 count): cycles = 1.000 x 1 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRAVDZ128rr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRAVDZ256rr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRAVDZrr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.001 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 1, the 512-bit ports_with_512 count): cycles = 1.001 x 1 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRAVQZ128rr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRAVQZ256rr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.501 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.501 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRAVQZrr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 1, the 512-bit ports_with_512 count): cycles = 1.000 x 1 = 1.0. Latency 1.002 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRLVDZ128rr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRLVDZ256rr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRLVDZrr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.001 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 1, the 512-bit ports_with_512 count): cycles = 1.001 x 1 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRLVQZ128rr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRLVQZ256rr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRLVQZrr",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.001 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 1, the 512-bit ports_with_512 count): cycles = 1.001 x 1 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSLLDZ128ri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSLLDZ256ri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSLLDZri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 1, the 512-bit ports_with_512 count): cycles = 1.000 x 1 = 1.0. Latency 1.003 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSLLQZ128ri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSLLQZ256ri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSLLQZri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 1, the 512-bit ports_with_512 count): cycles = 1.000 x 1 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRADZ128ri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRADZ256ri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRADZri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.003 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 1, the 512-bit ports_with_512 count): cycles = 1.003 x 1 = 1.0. Latency 1.002 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRAQZ128ri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRAQZ256ri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRAQZri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.001 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 1, the 512-bit ports_with_512 count): cycles = 1.001 x 1 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRLDZ128ri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRLDZ256ri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRLDZri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 1, the 512-bit ports_with_512 count): cycles = 1.000 x 1 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRLQZ128ri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRLQZ256ri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 2): cycles = 0.500 x 2 = 1.0. Latency 1.000 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPSRLQZri",
+      "uses": [
+        {
+          "class": "vec_shift",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.001 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shift (units 1, the 512-bit ports_with_512 count): cycles = 1.001 x 1 = 1.0. Latency 1.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VDIVSDZrr",
+      "uses": [
+        {
+          "class": "fp_div",
+          "cycles": 4.0
+        }
+      ],
+      "latency": 14,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 4.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class fp_div (units 1): cycles = 4.000 x 1 = 4.0. Latency 14.008 measured (dependent chain). uops = 1 (divider, estimate). Probe note: not in the probe lists; chain dst = c / dst, operands near 1.2"
+    },
+    {
+      "opcode": "VDIVPDZ128rr",
+      "uses": [
+        {
+          "class": "fp_div",
+          "cycles": 4.0
+        }
+      ],
+      "latency": 14,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 4.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class fp_div (units 1): cycles = 4.000 x 1 = 4.0. Latency 13.999 measured (dependent chain). uops = 1 (divider, estimate). Probe note: not in the probe lists; chain dst = c / dst, operands near 1.2"
+    },
+    {
+      "opcode": "VDIVPDZ256rr",
+      "uses": [
+        {
+          "class": "fp_div",
+          "cycles": 8.0
+        }
+      ],
+      "latency": 14,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 8.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class fp_div (units 1): cycles = 8.000 x 1 = 8.0. Latency 14.007 measured (dependent chain). uops = 1 (divider, estimate). Probe note: not in the probe lists; chain dst = c / dst, operands near 1.2"
+    },
+    {
+      "opcode": "VDIVPDZrr",
+      "uses": [
+        {
+          "class": "fp_div",
+          "cycles": 16.0
+        }
+      ],
+      "latency": 23,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 15.997 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class fp_div (units 1): cycles = 15.997 x 1 = 16.0. Latency 23.000 measured (dependent chain). uops = 1 (divider, estimate). Probe note: not in the probe lists; chain dst = c / dst, operands near 1.2"
+    },
+    {
+      "opcode": "VCVTUDQ2PDZ128rr",
+      "uses": [
+        {
+          "class": "vec_cvt",
+          "cycles": 1.0
+        },
+        {
+          "class": "vec_cvt_shuffle",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 5,
+      "uops": 2,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); two micro-ops, one port-cycle each: vec_cvt (p0/p1) 1.0 and vec_cvt_shuffle (p5) 1.0 (= the measured rate 1.000 cycles/op, one uop per class per op). Latency 5 is an ESTIMATE: half of aux VCVT_roundtrip_128 (10.00, vcvtudq2pd + vcvttpd2udq); the two halves cannot be chained alone. uops = 2 (one on p0/p1, one on p5: published, from memory, not fetched). Probe note: not in the probe lists; lat blank (no standalone chain), see aux VCVT_roundtrip_128"
+    },
+    {
+      "opcode": "VCVTUDQ2PDZ256rr",
+      "uses": [
+        {
+          "class": "vec_cvt",
+          "cycles": 1.0
+        },
+        {
+          "class": "vec_cvt_shuffle",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 7,
+      "uops": 2,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 1.001 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); two micro-ops, one port-cycle each: vec_cvt (p0/p1) 1.0 and vec_cvt_shuffle (p5) 1.0 (= the measured rate 1.001 cycles/op, one uop per class per op). Latency 7 is an ESTIMATE: half of aux VCVT_roundtrip_256 (14.00, vcvtudq2pd + vcvttpd2udq); the two halves cannot be chained alone. uops = 2 (one on p0/p1, one on p5: published, from memory, not fetched). Probe note: not in the probe lists; lat blank, see aux VCVT_roundtrip_256"
+    },
+    {
+      "opcode": "VCVTUDQ2PDZrr",
+      "uses": [
+        {
+          "class": "vec_cvt",
+          "cycles": 1.08
+        },
+        {
+          "class": "vec_cvt_shuffle",
+          "cycles": 1.08
+        }
+      ],
+      "latency": 7,
+      "uops": 2,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 1.081 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); two micro-ops, one port-cycle each: vec_cvt (p0/p1) 1.08 and vec_cvt_shuffle (p5) 1.08 (= the measured rate 1.081 cycles/op, one uop per class per op). Latency 7 is an ESTIMATE: half of aux VCVT_roundtrip_512 (14.11, vcvtudq2pd + vcvttpd2udq); the two halves cannot be chained alone. uops = 2 (one on p0/p1, one on p5: published, from memory, not fetched). Probe note: not in the probe lists; lat blank, see aux VCVT_roundtrip_512"
+    },
+    {
+      "opcode": "VCVTTPD2UDQZ128rr",
+      "uses": [
+        {
+          "class": "vec_cvt",
+          "cycles": 1.0
+        },
+        {
+          "class": "vec_cvt_shuffle",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 5,
+      "uops": 2,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); two micro-ops, one port-cycle each: vec_cvt (p0/p1) 1.0 and vec_cvt_shuffle (p5) 1.0 (= the measured rate 1.000 cycles/op, one uop per class per op). Latency 5 is an ESTIMATE: half of aux VCVT_roundtrip_128 (10.00, vcvtudq2pd + vcvttpd2udq); the two halves cannot be chained alone. uops = 2 (one on p0/p1, one on p5: published, from memory, not fetched). Probe note: not in the probe lists; lat blank, see aux VCVT_roundtrip_128"
+    },
+    {
+      "opcode": "VCVTTPD2UDQZ256rr",
+      "uses": [
+        {
+          "class": "vec_cvt",
+          "cycles": 1.0
+        },
+        {
+          "class": "vec_cvt_shuffle",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 7,
+      "uops": 2,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 1.002 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); two micro-ops, one port-cycle each: vec_cvt (p0/p1) 1.0 and vec_cvt_shuffle (p5) 1.0 (= the measured rate 1.002 cycles/op, one uop per class per op). Latency 7 is an ESTIMATE: half of aux VCVT_roundtrip_256 (14.00, vcvtudq2pd + vcvttpd2udq); the two halves cannot be chained alone. uops = 2 (one on p0/p1, one on p5: published, from memory, not fetched). Probe note: not in the probe lists; lat blank, see aux VCVT_roundtrip_256"
+    },
+    {
+      "opcode": "VCVTTPD2UDQZrr",
+      "uses": [
+        {
+          "class": "vec_cvt",
+          "cycles": 1.0
+        },
+        {
+          "class": "vec_cvt_shuffle",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 7,
+      "uops": 2,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); two micro-ops, one port-cycle each: vec_cvt (p0/p1) 1.0 and vec_cvt_shuffle (p5) 1.0 (= the measured rate 1.000 cycles/op, one uop per class per op). Latency 7 is an ESTIMATE: half of aux VCVT_roundtrip_512 (14.11, vcvtudq2pd + vcvttpd2udq); the two halves cannot be chained alone. uops = 2 (one on p0/p1, one on p5: published, from memory, not fetched). Probe note: not in the probe lists; lat blank, see aux VCVT_roundtrip_512"
+    },
+    {
+      "opcode": "VPSHUFDZ128ri",
+      "uses": [
+        {
+          "class": "vec_shuffle",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_shuffle (units 2): cycles = 0.500 x 2 = 1.0. Latency 0.999 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted)."
+    },
+    {
+      "opcode": "VPINSRDZrri",
+      "uses": [
+        {
+          "class": "vec_lane",
+          "cycles": 1.06
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 1.061 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_lane (units 1): cycles = 1.061 x 1 = 1.06. Latency 3 is an ESTIMATE: g2x 2.0 + (pinsrd_x2g 5.00 - g2x_x2g 4.00) for the r32 operand path (the row's own measured chain, 1.07, is the xmm-to-xmm path); aux XFER_g2x_x2g (vmovd xmm,r32 + vmovd r32,xmm) = 4.00 split evenly: 2.0 each; the four round trips XFER_g2x_x2g 4.00, g2x_pextrd 5.00, pinsrd_x2g 5.00, pinsrd_pextrd 6.00 fix only the differences (pextrd - x2g = 1.00, pinsrd - g2x = 1.00), not the split. uops = round(cycles) = 1 (inferred from the port-cycles, not counted). Probe note: lat is the xmm-to-xmm path (chained through the vector operand), not the r32 operand path"
+    },
+    {
+      "opcode": "VPEXTRDZrri",
+      "uses": [
+        {
+          "class": "vec_lane",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_lane (units 1): cycles = 1.000 x 1 = 1.0. Latency 3 is an ESTIMATE: x2g 2.0 + (g2x_pextrd 5.00 - g2x_x2g 4.00); aux XFER_g2x_x2g (vmovd xmm,r32 + vmovd r32,xmm) = 4.00 split evenly: 2.0 each; the four round trips XFER_g2x_x2g 4.00, g2x_pextrd 5.00, pinsrd_x2g 5.00, pinsrd_pextrd 6.00 fix only the differences (pextrd - x2g = 1.00, pinsrd - g2x = 1.00), not the split. uops = round(cycles) = 1 (inferred from the port-cycles, not counted). Probe note: writes only its destination: lat blank, see aux XFER_* round trips; rtput = 8 independent"
+    },
+    {
+      "opcode": "VEXTRACTI32X4Z256rri",
+      "uses": [
+        {
+          "class": "vec_lane",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_lane (units 1): cycles = 1.000 x 1 = 1.0. Latency 2.999 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted). Probe note: lat chained through the same register (upper half is zero after step 1); rtput reads a fixed source"
+    },
+    {
+      "opcode": "VEXTRACTI32X4Zrri",
+      "uses": [
+        {
+          "class": "vec_lane",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.001 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_lane (units 1): cycles = 1.001 x 1 = 1.0. Latency 3.003 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted). Probe note: lat chained through the same register (upper bits zero after step 1); rtput reads a fixed source"
+    },
+    {
+      "opcode": "VINSERTI32X4Z256rri",
+      "uses": [
+        {
+          "class": "vec_lane",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.001 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_lane (units 1): cycles = 1.001 x 1 = 1.0. Latency 3.003 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted). Probe note: lat through the ymm operand, not the xmm operand"
+    },
+    {
+      "opcode": "VINSERTI64X4Zrri",
+      "uses": [
+        {
+          "class": "vec_lane",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 1.002 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_lane (units 1): cycles = 1.002 x 1 = 1.0. Latency 3.001 measured (dependent chain). uops = round(cycles) = 1 (inferred from the port-cycles, not counted). Probe note: lat through the zmm operand, not the ymm operand"
+    },
+    {
+      "opcode": "VMOVDI2PDIZrr",
+      "uses": [
+        {
+          "class": "gpr_to_vec",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 2,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class gpr_to_vec (units 1): cycles = 1.000 x 1 = 1.0. Latency 2 is an ESTIMATE: aux XFER_g2x_x2g (vmovd xmm,r32 + vmovd r32,xmm) = 4.00 split evenly: 2.0 each; the four round trips XFER_g2x_x2g 4.00, g2x_pextrd 5.00, pinsrd_x2g 5.00, pinsrd_pextrd 6.00 fix only the differences (pextrd - x2g = 1.00, pinsrd - g2x = 1.00), not the split. uops = round(cycles) = 1 (inferred from the port-cycles, not counted). Probe note: writes only its destination: lat blank, see aux XFER_* round trips; rtput = 16 independent"
+    },
+    {
+      "opcode": "VMOVPDI2DIZrr",
+      "uses": [
+        {
+          "class": "vec_to_gpr",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 2,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class vec_to_gpr (units 1): cycles = 1.000 x 1 = 1.0. Latency 2 is an ESTIMATE: aux XFER_g2x_x2g (vmovd xmm,r32 + vmovd r32,xmm) = 4.00 split evenly: 2.0 each; the four round trips XFER_g2x_x2g 4.00, g2x_pextrd 5.00, pinsrd_x2g 5.00, pinsrd_pextrd 6.00 fix only the differences (pextrd - x2g = 1.00, pinsrd - g2x = 1.00), not the split. uops = round(cycles) = 1 (inferred from the port-cycles, not counted). Probe note: writes only its destination: lat blank, see aux XFER_* round trips; rtput = 8 independent"
+    },
+    {
+      "opcode": "VMOVDI2PDIZrm",
+      "uses": [
+        {
+          "class": "load",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 6,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class load (units 3): cycles = 0.333 x 3 = 1.0. Latency 6 is an ESTIMATE: aux VMOVDI2PDIZrm_x2g_chase (load + vmovd/vmovq r,xmm as the next address) = 8.01 minus the estimated x2g latency 2.0. uops = 1 (assumed: 1 per load, 2 fused-domain per store, the front-end bound of ld64+st64 4.70 = (12 + 8 x 2) / 6). Probe note: lat blank: see aux VMOVDI2PDIZrm_x2g_chase (load + vmovd r32,xmm address chain); rtput = 16 loads"
+    },
+    {
+      "opcode": "VMOVPDI2DIZmr",
+      "uses": [
+        {
+          "class": "store",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 2,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class store (units 2): cycles = 0.500 x 2 = 1.0. Latency 1 is an ESTIMATE: store-forwarding round trip aux SF_VMOVPDI2DImr_VMOVDI2PDIrm = 6.98 minus the load latency 6.0 = 0.98; at least 1 (a store is never free for a dependent load). uops = 2 (assumed: 1 per load, 2 fused-domain per store, the front-end bound of ld64+st64 4.70 = (12 + 8 x 2) / 6). Probe note: lat blank: see aux SF_* store-forward chains; rtput = consecutive 4-byte stores"
+    },
+    {
+      "opcode": "MOV32rm",
+      "uses": [
+        {
+          "class": "load",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 5,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class load (units 3): cycles = 0.333 x 3 = 1.0. Latency 5.000 measured (dependent chain). uops = 1 (assumed: 1 per load, 2 fused-domain per store, the front-end bound of ld64+st64 4.70 = (12 + 8 x 2) / 6). Probe note: lat = pointer chase mov ecx,[rcx] (buffer below 4 GiB), L1 load-to-use; rtput = 16 loads, consecutive (stride = width)"
+    },
+    {
+      "opcode": "MOV64rm",
+      "uses": [
+        {
+          "class": "load",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 5,
+      "uops": 1,
+      "source": "measured",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class load (units 3): cycles = 0.333 x 3 = 1.0. Latency 5.002 measured (dependent chain). uops = 1 (assumed: 1 per load, 2 fused-domain per store, the front-end bound of ld64+st64 4.70 = (12 + 8 x 2) / 6). Probe note: lat = pointer chase mov rcx,[rcx], L1 load-to-use; rtput = 16 loads, consecutive (stride = width)"
+    },
+    {
+      "opcode": "MOV32mr",
+      "uses": [
+        {
+          "class": "store",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 2,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class store (units 2): cycles = 0.500 x 2 = 1.0. Latency 1 is an ESTIMATE: store-forwarding round trip aux SF_MOV32mr_MOV32rm = 5.01 minus the load latency 5.0 = 0.01; at least 1 (a store is never free for a dependent load). uops = 2 (assumed: 1 per load, 2 fused-domain per store, the front-end bound of ld64+st64 4.70 = (12 + 8 x 2) / 6). Probe note: no standalone chain: lat blank, see aux SF_MOV32mr_MOV32rm; rtput = consecutive 4-byte stores"
+    },
+    {
+      "opcode": "MOV64mr",
+      "uses": [
+        {
+          "class": "store",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 2,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class store (units 2): cycles = 0.500 x 2 = 1.0. Latency 1 is an ESTIMATE: store-forwarding round trip aux SF_MOV64mr_MOV64rm = 5.01 minus the load latency 5.0 = 0.01; at least 1 (a store is never free for a dependent load). uops = 2 (assumed: 1 per load, 2 fused-domain per store, the front-end bound of ld64+st64 4.70 = (12 + 8 x 2) / 6). Probe note: no standalone chain: lat blank, see aux SF_MOV64mr_MOV64rm; rtput = consecutive 8-byte stores"
+    },
+    {
+      "opcode": "VMOVDQA64Z128rm",
+      "uses": [
+        {
+          "class": "load",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 6,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 0.333 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class load (units 3): cycles = 0.333 x 3 = 1.0. Latency 6 is an ESTIMATE: aux VMOVDQA64Z128rm_x2g_chase (load + vmovd/vmovq r,xmm as the next address) = 8.00 minus the estimated x2g latency 2.0. uops = 1 (assumed: 1 per load, 2 fused-domain per store, the front-end bound of ld64+st64 4.70 = (12 + 8 x 2) / 6). Probe note: lat blank: see aux VMOVDQA64Z128rm_x2g_chase; rtput = 16 loads, consecutive (stride = width)"
+    },
+    {
+      "opcode": "VMOVDQU64Z256rm",
+      "uses": [
+        {
+          "class": "load",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 7,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 0.334 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class load (units 3): cycles = 0.334 x 3 = 1.0. Latency 7 is an ESTIMATE: aux VMOVDQU64Z256rm_x2g_chase (load + vmovd/vmovq r,xmm as the next address) = 9.01 minus the estimated x2g latency 2.0. uops = 1 (assumed: 1 per load, 2 fused-domain per store, the front-end bound of ld64+st64 4.70 = (12 + 8 x 2) / 6). Probe note: lat blank: see aux VMOVDQU64Z256rm_x2g_chase; rtput = 16 loads, consecutive (stride = width)"
+    },
+    {
+      "opcode": "VMOVDQU64Zrm",
+      "uses": [
+        {
+          "class": "load",
+          "cycles": 1.5
+        }
+      ],
+      "latency": 7,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class load (units 3): cycles = 0.500 x 3 = 1.5. Latency 7 is an ESTIMATE: aux VMOVDQU64Zrm_x2g_chase (load + vmovd/vmovq r,xmm as the next address) = 9.00 minus the estimated x2g latency 2.0. uops = 1 (assumed: 1 per load, 2 fused-domain per store, the front-end bound of ld64+st64 4.70 = (12 + 8 x 2) / 6). Probe note: lat blank: see aux VMOVDQU64Zrm_x2g_chase; rtput = 16 loads, consecutive (stride = width)"
+    },
+    {
+      "opcode": "VMOVDQA64Z128mr",
+      "uses": [
+        {
+          "class": "store",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 2,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class store (units 2): cycles = 0.500 x 2 = 1.0. Latency 1 is an ESTIMATE: store-forwarding round trip aux SF_VMOVDQA64Z128 = 6.78 minus the load latency 6.0 = 0.78; at least 1 (a store is never free for a dependent load). uops = 2 (assumed: 1 per load, 2 fused-domain per store, the front-end bound of ld64+st64 4.70 = (12 + 8 x 2) / 6). Probe note: lat blank: see aux SF_VMOVDQA64Z128; rtput = consecutive 16-byte stores"
+    },
+    {
+      "opcode": "VMOVDQU64Z256mr",
+      "uses": [
+        {
+          "class": "store",
+          "cycles": 1.0
+        }
+      ],
+      "latency": 1,
+      "uops": 2,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 0.500 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class store (units 2): cycles = 0.500 x 2 = 1.0. Latency 1 is an ESTIMATE: store-forwarding round trip aux SF_VMOVDQU64Z256 = 7.52 minus the load latency 7.0 = 0.52; at least 1 (a store is never free for a dependent load). uops = 2 (assumed: 1 per load, 2 fused-domain per store, the front-end bound of ld64+st64 4.70 = (12 + 8 x 2) / 6). Probe note: lat blank: see aux SF_VMOVDQU64Z256; rtput = consecutive 32-byte stores"
+    },
+    {
+      "opcode": "VMOVDQU64Zmr",
+      "uses": [
+        {
+          "class": "store",
+          "cycles": 2.0
+        }
+      ],
+      "latency": 1,
+      "uops": 2,
+      "source": "estimate",
+      "evidence": "reciprocal throughput 1.000 cycles measured in results/savio-pass/port_probe-emr-2026-11-17.csv (+ .meta; bench/x86_port_probe.c, median of 7, cycle-calibrated to a dependent add chain = 1 cycle, 2.49 GHz); class store (units 2): cycles = 1.000 x 2 = 2.0. Latency 1 is an ESTIMATE: store-forwarding round trip aux SF_VMOVDQU64Z = 6.73 minus the load latency 7.0 = -0.27; at least 1 (a store is never free for a dependent load). uops = 2 (assumed: 1 per load, 2 fused-domain per store, the front-end bound of ld64+st64 4.70 = (12 + 8 x 2) / 6). Probe note: lat blank: see aux SF_VMOVDQU64Z; rtput = consecutive 64-byte stores"
+    }
+  ]
+}

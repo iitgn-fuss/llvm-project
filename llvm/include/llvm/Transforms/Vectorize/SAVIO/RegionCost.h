@@ -36,6 +36,9 @@ struct CostNode {
   /// Set for a node that is an instance of a sequence entry with a concurrency
   /// table (see applyConcurrency); null otherwise.
   const ConcurrencyTable *Conc = nullptr;
+  /// The node is an operation on a 512-bit vector type; any such node makes
+  /// the whole region use the classes' ports_with_512.
+  bool Wide512 = false;
 };
 
 enum class Bound { Resource, Recurrence, Dispatch };
@@ -44,7 +47,12 @@ struct RegionEstimate {
   double TRes = 0;
   double TRec = 0;
   double TDisp = 0;
+  /// The class with the largest load inside the maximizing port union (or
+  /// the most loaded class when the description has no port sets).
   unsigned BusiestClass = 0;
+  /// Some node is an operation on a 512-bit vector type (only computed when
+  /// the description has port sets).
+  bool With512 = false;
 
   /// Estimated cycles: the largest of the three bounds.
   double t() const;

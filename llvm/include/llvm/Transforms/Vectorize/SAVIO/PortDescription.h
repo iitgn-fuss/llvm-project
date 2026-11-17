@@ -15,6 +15,7 @@
 #ifndef LLVM_TRANSFORMS_VECTORIZE_SAVIO_PORTDESCRIPTION_H
 #define LLVM_TRANSFORMS_VECTORIZE_SAVIO_PORTDESCRIPTION_H
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
@@ -78,6 +79,17 @@ public:
   unsigned numClasses() const { return ClassNames.size(); }
   StringRef className(unsigned C) const { return ClassNames[C]; }
   unsigned units(unsigned C) const { return ClassUnits[C]; }
+  /// The issue ports class \p C draws on (resources.json "ports"), or, when
+  /// \p With512 and the class has "ports_with_512", the ports it uses while a
+  /// 512-bit vector op is in flight (not necessarily a subset). Empty when the
+  /// class has no "ports": it is then a separate pool of units(C) units.
+  ArrayRef<unsigned> ports(unsigned C, bool With512) const {
+    return With512 && !ClassPorts512[C].empty() ? ArrayRef<unsigned>(ClassPorts512[C])
+                                                : ArrayRef<unsigned>(ClassPorts[C]);
+  }
+  /// Whether any class lists its ports; the region resource bound is then
+  /// taken over port sets rather than per class.
+  bool hasPortSets() const { return HasPortSets; }
   unsigned dispatchWidth() const { return DispatchWidth; }
   /// Width in bits of the vector unit the probes were measured on
   /// (resources.json "vector_width_bits": 128, 256 or 512; 128 when absent).
@@ -104,6 +116,8 @@ private:
 
   SmallVector<std::string, 8> ClassNames;
   SmallVector<unsigned, 8> ClassUnits;
+  SmallVector<SmallVector<unsigned, 8>, 8> ClassPorts, ClassPorts512;
+  bool HasPortSets = false;
   unsigned DispatchWidth = 0;
   unsigned VectorWidthBits = 128;
   unsigned WindowUops = 0;

@@ -1,0 +1,175 @@
+{
+  "cpu": "emeraldrapids",
+  "arch": "x86",
+  "complete": true,
+  "dispatch_width": 6,
+  "vector_width_bits": 256,
+  "classes": {
+    "scalar_alu": {
+      "units": 5,
+      "ports": [
+        0,
+        1,
+        5,
+        6,
+        10
+      ],
+      "source": "measured",
+      "evidence": "add/sub/and/or/xor/lea saturated rate 0.2012 cycles/op (solo atom of 22 adds, 11 chains, results/savio-pass/port_probe-emr-2026-11-17-pairs.csv psolo ADD32rr 4.427 cycles) = 5 ports; the op rows' 0.224 include the loop dec/jnz and 7-8 chains. Shares ports with the vector ALU and the shifts: alu+va256 mix 6.87 vs max 4.43 (pooled 5 ports predicts 6.8), alu+va128 6.87, alu+shlx 6.11 (pooled 6.0), alu+vsh256 6.11, alu+vshuf 6.11, alu+vmul256 6.06, alu+g2x 5.29, alu+va512 6.11; disjoint from loads (alu+ld64 5.71 = front-end bound (22+12)/6 = 5.67, not ports) and from the divider (alu+div32 6.00 = div alone). Units measured; port indices published (unverified). The committed port-info as a whole (scripts/savio/validate_x86_ports.py: Task 9's port-set bound + uops/dispatch_width) reproduces 188 of the 211 psolo+pair rows within 6%; the misfits are data (load/store beside vector ops 6-33% under-predicted, imul+div32, alu+x2g, alu+st64/stv256). Published port set (uops.info Alder Lake-P/Golden Cove, quoted from memory, NOT fetched; uops.info is script-rendered): p0,p1,p5,p6,p10."
+    },
+    "scalar_mul": {
+      "units": 1,
+      "ports": [
+        1
+      ],
+      "source": "measured",
+      "evidence": "imul r32/r64: reciprocal throughput 1.000, latency 3 (results/savio-pass/port_probe-emr-2026-11-17.csv); one multiplier. Published: p1 (from memory, not fetched). Pair rows: imul+shlx 4.06 = max (shifts on p0,p6 do not touch p1); alu7+imul 4.02 = max (14 adds + 4 imuls is 3.6 cycles of p0156 10 even if imul takes p1, so this pair cannot show p1 sharing); imul+va256 5.33 against max 4.00: 12 vector uops on p0,p1,p5 plus 4 imuls on p1 is 16/3 = 5.33 (disjoint would be 4.00), so the multiplier shares p1 with the vector ALU; imul+div32 8.09 > max 6.00: the divide takes p1 time."
+    },
+    "scalar_shift": {
+      "units": 2,
+      "ports": [
+        0,
+        6
+      ],
+      "source": "measured",
+      "evidence": "shl/shr/sar imm and shlx/shrx/sarx: saturated 0.508 cycles/op (solo shlx, results/savio-pass/port_probe-emr-2026-11-17-pairs.csv, 8 per atom) = 2 ports (op rows 0.531 include the loop branch). Shares with the ALU (alu+shlx 6.11 vs max 4.43, pooled 6.0) and with p0 vector ops (shlx+x2g 6.17, shlx+vsh256 5.37). Published p0,p6 (from memory, not fetched)."
+    },
+    "int_div": {
+      "units": 1,
+      "source": "estimate",
+      "evidence": "div r32 reciprocal throughput 6.00, r64 10.00 (results/savio-pass/port_probe-emr-2026-11-17.csv): one non-pipelined divider. Pair rows: alu+div32 6.00 (= div alone), va256+div32 6.00, div32+fdiv256 8.00 (= max: the integer and the FP dividers are separate). imul+div32 8.09 against max 6.00 and sum 10.0 says the divide's micro-ops take about 4 cycles of p1 (inferred, not published). unit count 1 = one divider; the class has no port list."
+    },
+    "vec_alu": {
+      "units": 3,
+      "ports": [
+        0,
+        1,
+        5
+      ],
+      "ports_with_512": [
+        0,
+        5
+      ],
+      "source": "measured",
+      "evidence": "vpadd/vpsub/vpand/vpor/vpxor 128/256-bit: 0.333 cycles/op = 3 ports; 512-bit: 0.500 = 2 ports (results/savio-pass/port_probe-emr-2026-11-17.csv). With a 512-bit op in the loop the 128/256-bit ops lose p1: va256+va512 mix 10.00 and va128+va512 10.02 where sum is 8.00 (20 uops on 2 ports = 10.0); va256 alone/with va128 would be 12 uops on 3 ports = 4.0. Published: p0,p1,p5 (p0,p5 for zmm); from memory, not fetched."
+    },
+    "vec_mul": {
+      "units": 2,
+      "ports": [
+        0,
+        1
+      ],
+      "ports_with_512": [
+        0,
+        5
+      ],
+      "source": "estimate",
+      "evidence": "vpmulld/vpmullq: 2 (3 for vpmullq) micro-ops per op, 1.04 cycles/op for vpmulld ymm (results/savio-pass/port_probe-emr-2026-11-17.csv); 2 ports alone. Pair rows (port_probe-emr-2026-11-17-pairs.csv): va256+vmul256 6.67 (p0,p1,p5 shared with the vector ALU), vmul512 solo 4.05 = 8 uops on {0,5} (vmul512 on p0 alone would be 8), vmul256+vmul512 8.19, vmul256+vsh512 6.00, va512+vmul256 8.02; ports_with_512 [0,5] reproduces these (validate_x86_ports.py). Units measured; port indices published (unverified: uops.info Alder Lake-P p01, zmm p05, from memory, not fetched). Because |ports_with_512| == |ports|, a zmm multiply costs rt x units either way (csv_to_ops X86_SCALE512 excludes vec_mul)."
+    },
+    "vec_shift": {
+      "units": 2,
+      "ports": [
+        0,
+        1
+      ],
+      "ports_with_512": [
+        0
+      ],
+      "source": "measured",
+      "evidence": "vpsll/vpsra/vpsrl (imm and variable) 128/256-bit: 0.500 cycles/op = 2 ports, 512-bit 1.000 = 1 port (results/savio-pass/port_probe-emr-2026-11-17.csv). va512+vsh256 8.01 and vsh256+vsh512 12.03 (8+4 uops all on p0). Shares p0,p1 with the vector ALU (va256+vsh256 6.67). Published p0,p1 (p0 for zmm), from memory, not fetched."
+    },
+    "vec_shuffle": {
+      "units": 2,
+      "ports": [
+        1,
+        5
+      ],
+      "ports_with_512": [
+        5
+      ],
+      "source": "measured",
+      "evidence": "vpshufd xmm: 0.500 cycles/op = 2 ports (results/savio-pass/port_probe-emr-2026-11-17.csv); va256+vshuf 6.67 (shares p1,p5 with the vector ALU), va512+vshuf 8.00, vsh256+vshuf 5.34. Published p1,p5 (p5 only for zmm), from memory, not fetched."
+    },
+    "vec_lane": {
+      "units": 1,
+      "ports": [
+        5
+      ],
+      "source": "estimate",
+      "evidence": "vextracti/vinserti/vpinsrd/vpextrd: 1.0 cycles/op = 1 port (results/savio-pass/port_probe-emr-2026-11-17.csv); not paired (probe classes do not include them): the port is the published p5 (vpextrd/vpinsrd also use a p0 uop; from memory, not fetched), so this is an estimate. vpinsrd/vpextrd also have a p0 uop that is not modelled (one class use per op). VPSHUFDZri (zmm shuffle) is not in the op rows."
+    },
+    "vec_cvt": {
+      "units": 2,
+      "ports": [
+        0,
+        1
+      ],
+      "ports_with_512": [
+        0,
+        5
+      ],
+      "source": "estimate",
+      "evidence": "vcvtudq2pd/vcvttpd2udq: 1.0 cycles/op = two micro-ops, one on p0/p1 (this class) and one on p5 (class vec_cvt_shuffle), as the analysis model assumes (uops.info Alder Lake-P: from memory, not fetched); ops.json gives each op one port-cycle in each class. Pair rows: va256+cvt256 6.67, vshuf+cvt256 6.01, vsh256+cvt256 6.00, va512+cvt256 8.02, vmul512+cvt256 8.00, vsh512+cvt256 6.00, fdiv256+cvt256 7.98 (= fdiv alone). Units measured by pairing, port indices published (unverified); estimate. ports_with_512 is [0,5] (an earlier [0] gave a model of 12.00 for vsh512+cvt256 against 6.00 measured; [0,5] fits the zmm+cvt256 rows)."
+    },
+    "fp_div": {
+      "units": 1,
+      "source": "measured",
+      "evidence": "vdivsd/vdivpd xmm 4.0, ymm 8.0, zmm 16.0 cycles (results/savio-pass/port_probe-emr-2026-11-17.csv): one non-pipelined divider, throughput scales with width. fdiv256 beside va256 8.01, vsh256 7.98, cvt256 7.98, alu 8.00, div32 8.00: all equal to the divide alone, so it does not take vector ALU ports measurably."
+    },
+    "gpr_to_vec": {
+      "units": 1,
+      "ports": [
+        5
+      ],
+      "source": "measured",
+      "evidence": "vmovd xmm,r32: 1.000 cycles/op (results/savio-pass/port_probe-emr-2026-11-17.csv); g2x+vshuf 6.00 (shares p5 with the shuffle: 8+4 uops on {1,5}), g2x+va256 5.33, alu+g2x 5.29; g2x+x2g 4.00 = max (separate ports). Published p5 (from memory, not fetched)."
+    },
+    "vec_to_gpr": {
+      "units": 1,
+      "ports": [
+        0
+      ],
+      "source": "measured",
+      "evidence": "vmovd r32,xmm: 1.000 cycles/op (results/savio-pass/port_probe-emr-2026-11-17.csv); x2g+vsh256 6.00 (shares p0 with the shifts), x2g+va256 5.33, g2x+x2g 4.00 = max. alu+x2g 6.77 and shlx+x2g 6.17 are above the port-set bound (5.2, 5.2): unexplained, reported in the ports md. Published p0 (from memory, not fetched)."
+    },
+    "load": {
+      "units": 3,
+      "ports": [
+        2,
+        3,
+        11
+      ],
+      "source": "measured",
+      "evidence": "loads: 0.333 cycles/op consecutive, 0.504 stride-64 (results/savio-pass/port_probe-emr-2026-11-17.csv) = 3 load ports (2/cycle when every load is on its own line); ld64+ldv256 8.01 = 24 loads at 3/cycle; no ALU port use: alu+ld64 5.71 = front-end bound. Beside vector ALU ops the pair costs 5-50% more than the larger solo (va256+ldv256 5.98, va256+ld64 5.33, vsh256+ldv256 5.11): not explained by any shared port in the published assignment; kept as a ports-disjoint class and the excess is reported in the ports md. Port indices published (unverified): p2,p3,p11 (from memory, not fetched)."
+    },
+    "store": {
+      "units": 2,
+      "ports": [
+        4,
+        9
+      ],
+      "source": "measured",
+      "evidence": "stores: 0.500 cycles/op consecutive, 1.0 stride-64 (results/savio-pass/port_probe-emr-2026-11-17.csv) = 2 store-data ports; st64 and stv256 do not use the ALU/vector ports (alu+stv256 5.05 = front end; alu+st64 6.88 is above the model, unexplained). Published store-data p4,p9 and store-address p7,p8 (from memory, not fetched). ops.json gives a store 2 fused-domain uops: ld64+st64 4.70 = (12 + 8 x 2) / 6 and va256+st64 4.70 (the same arithmetic); alu+stv256 5.05 (model 6.33) is the one pair that contradicts this and is left unexplained."
+    },
+    "vec_cvt_shuffle": {
+      "units": 1,
+      "ports": [
+        5
+      ],
+      "source": "estimate",
+      "evidence": "The p5 micro-op of vcvtudq2pd/vcvttpd2udq (see vec_cvt): g2x+cvt256 and the other rows of vec_cvt constrain it; units 1 = one port, index published (unverified, from memory)."
+    }
+  },
+  "registers": {
+    "gpr": 16,
+    "vec": 32,
+    "vec_callee_saved": 0
+  },
+  "source": "estimate",
+  "evidence": "dispatch_width 6 is the published Golden Cove allocate/rename width (6 micro-ops per cycle; Intel 64 and IA-32 Architectures Optimization Reference Manual, Golden Cove / Alder Lake performance-core section; from memory, NOT fetched) and the pair rows agree: alu+ld64 mix 5.71 against 34 uops / 6 = 5.67 with no shared port, alu+ldv256 and similar the same; so label estimate until the measured dispatch probe of Task 12. vector_width_bits 256 is an ESTIMATE: the vectorizer default prefer-vector-width=256 of emeraldrapids and a measured zmm/ymm core-clock ratio of 1.000 at the pinned 2.5 GHz (results/savio-pass/emr-2026-11-17-ports.md, perf stat cycles:u/ref-cycles:u) with the 512-bit port-1 loss (ports_with_512), to be decided by the Task 12 256/512 measurement. registers: gpr 16 (x86-64 rax..r15; rsp is not allocatable but is counted as the architecture's 16), vec 32 (AVX-512 zmm0-zmm31), vec_callee_saved 0: System V AMD64 ABI, no vector register is callee-saved.",
+  "window_uops": {
+    "value": 512,
+    "source": "estimate",
+    "evidence": "Published Golden Cove reorder buffer size, 512 entries (Intel optimization manual, Golden Cove section; from memory, NOT fetched). Not measured: the Task 12 window probe replaces it. The unified scheduler is much smaller (about 97 entries), so 512 overstates the overlap of dependent work."
+  }
+}

@@ -277,3 +277,123 @@ TEST_F(SAVIORegionCostTest, InvariantOperandFree) {
 }
 
 } // end namespace
+
+namespace {
+
+/// The port-info of the Emerald Rapids x86 machine (a copy of
+/// src/port-info/x86/emeraldrapids in the lit fixtures): classes list their
+/// issue ports, vec_alu {0,1,5} ({0,5} with a 512-bit op), scalar_alu
+/// {0,1,5,6,10}, load {2,3,11}, store {4,9}, int_div has none.
+class SAVIOPortSetTest : public testing::Test {
+protected:
+  void SetUp() override {
+    SmallString<128> Root(SAVIO_TEST_INPUTS);
+    sys::path::append(Root, "..", "X86", "Inputs", "port-info");
+    auto PDOrErr = PortDescription::load(Root, "x86", "emeraldrapids");
+    ASSERT_TRUE(!!PDOrErr) << toString(PDOrErr.takeError());
+    PD = std::move(*PDOrErr);
+  }
+
+  unsigned cls(StringRef Name) {
+    for (unsigned C = 0; C != PD->numClasses(); ++C)
+      if (PD->className(C) == Name)
+        return C;
+    ADD_FAILURE() << "no class " << Name.str();
+    return 0;
+  }
+
+  /// A node of no latency and no micro-ops that puts \p Cycles on \p Class.
+  CostNode load(StringRef Class, double Cycles, bool Wide512 = false) {
+    CostNode N;
+    N.Cost = OpCost{{{cls(Class), Cycles}}, 0, 0};
+    N.Wide512 = Wide512;
+    return N;
+  }
+
+  std::unique_ptr<PortDescription> PD;
+};
+
+TEST_F(SAVIOPortSetTest, LoadsPortSets) {
+  EXPECT_TRUE(PD->hasPortSets());
+  EXPECT_EQ(PD->ports(cls("vec_alu"), false), ArrayRef<unsigned>({0, 1, 5}));
+  EXPECT_EQ(PD->ports(cls("vec_alu"), true), ArrayRef<unsigned>({0, 5}));
+  // vec_mul moves p0,p1 to p0,p5: not a subset.
+  EXPECT_EQ(PD->ports(cls("vec_mul"), false), ArrayRef<unsigned>({0, 1}));
+  EXPECT_EQ(PD->ports(cls("vec_mul"), true), ArrayRef<unsigned>({0, 5}));
+  // No ports_with_512: the same set; no ports at all: empty.
+  EXPECT_EQ(PD->ports(cls("scalar_alu"), true),
+            ArrayRef<unsigned>({0, 1, 5, 6, 10}));
+  EXPECT_TRUE(PD->ports(cls("int_div"), false).empty());
+  EXPECT_TRUE(PD->ports(cls("int_div"), true).empty());
+}
+
+TEST_F(SAVIOPortSetTest, DisjointSetsAreToday) {
+  // alu {0,1,5,6,10} 10, load {2,3,11} 6, store {4,9} 4, divider 2 (no ports):
+  // every class alone: 2.0, 2.0, 2.0, 2.0.
+  SmallVector<CostNode> N = {load("scalar_alu", 10), load("load", 6),
+                             load("store", 4), load("int_div", 2)};
+  RegionEstimate E = estimateRegion(N, *PD, true);
+  EXPECT_DOUBLE_EQ(E.TRes, 2.0);
+  EXPECT_FALSE(E.With512);
+}
+
+TEST_F(SAVIOPortSetTest, SharedPorts) {
+  // scalar_alu load 5 + vec_alu load 3 on the union {0,1,5,6,10}: 8 / 5.
+  SmallVector<CostNode> N = {load("scalar_alu", 5), load("vec_alu", 3)};
+  RegionEstimate E = estimateRegion(N, *PD, true);
+  EXPECT_DOUBLE_EQ(E.TRes, 1.6);
+  EXPECT_EQ(PD->className(E.BusiestClass), "scalar_alu");
+  // vec_alu alone: 3 / 3.
+  SmallVector<CostNode> V = {load("vec_alu", 3)};
+  E = estimateRegion(V, *PD, true);
+  EXPECT_DOUBLE_EQ(E.TRes, 1.0);
+  EXPECT_EQ(PD->className(E.BusiestClass), "vec_alu");
+}
+
+TEST_F(SAVIOPortSetTest, With512IsRegionWide) {
+  // vec_alu load 3 with a 512-bit op in the region: {0,5}.
+  SmallVector<CostNode> N = {load("vec_alu", 3, /*Wide512=*/true)};
+  RegionEstimate E = estimateRegion(N, *PD, true);
+  EXPECT_DOUBLE_EQ(E.TRes, 1.5);
+  EXPECT_TRUE(E.With512);
+  // The 512-bit op may be another node: vec_alu keeps load 3, one node 512.
+  SmallVector<CostNode> M = {load("vec_alu", 3), load("vec_shift", 0, true)};
+  E = estimateRegion(M, *PD, true);
+  EXPECT_DOUBLE_EQ(E.TRes, 1.5);
+  EXPECT_TRUE(E.With512);
+}
+
+// The rows below were computed by scripts/savio/validate_x86_ports.py from the
+// committed emeraldrapids port-info (TRes of its cost(), the loads and the
+// 512-bit flag printed for the same atoms counts as the pair CSV row).
+TEST_F(SAVIOPortSetTest, AgreesWithValidateX86Ports) {
+  struct Row {
+    const char *Name;
+    SmallVector<std::pair<const char *, double>, 3> Loads;
+    bool Wide;
+    double TRes;
+  } Rows[] = {
+      // alu+va256 (22 + 12 atoms): 34.22 / 5 on {0,1,5,6,10}.
+      {"alu+va256", {{"scalar_alu", 22.22}, {"vec_alu", 12.0}}, false, 6.844},
+      // va256+va512 (12 + 8): 20 / |{0,5}|.
+      {"va256+va512", {{"vec_alu", 20.0}}, true, 10.0},
+      // shlx+vsh512 (8 + 4): shifts on {0,6} and vec_shift on {0}: 12.16 / 2
+      // is beaten by (8.16 + 4) / 2 = 6.08 over {0,6}.
+      {"shlx+vsh512", {{"scalar_shift", 8.16}, {"vec_shift", 4.0}}, true, 6.08},
+      // va256+cvt256 (12 + 4): vec_alu, vec_cvt, vec_cvt_shuffle on {0,1,5}.
+      {"va256+cvt256",
+       {{"vec_alu", 12.0}, {"vec_cvt", 4.0}, {"vec_cvt_shuffle", 4.0}},
+       false,
+       6.666666666666667},
+  };
+  for (const Row &R : Rows) {
+    SmallVector<CostNode> N;
+    for (auto [Class, Cycles] : R.Loads)
+      N.push_back(load(Class, Cycles, R.Wide));
+    RegionEstimate E = estimateRegion(N, *PD, true);
+    EXPECT_NEAR(E.TRes, R.TRes, 1e-9) << R.Name;
+    EXPECT_EQ(E.With512, R.Wide) << R.Name;
+  }
+}
+
+} // namespace

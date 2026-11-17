@@ -150,20 +150,67 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
     if (!Classes || Classes->empty())
       return makeError(F, "'classes' must be a non-empty object");
     // The object is unordered; sort the names so class ids are deterministic.
-    SmallVector<std::pair<std::string, unsigned>, 8> Sorted;
+    struct ClassRec {
+      std::string Name;
+      unsigned Units;
+      SmallVector<unsigned, 8> Ports, Ports512;
+    };
+    SmallVector<ClassRec, 8> Sorted;
+    // "ports" / "ports_with_512": a list of distinct port numbers below 64.
+    auto readPorts = [&](StringRef Name, const json::Object &C, StringRef Key,
+                         SmallVectorImpl<unsigned> &Out) -> Error {
+      const json::Value *V = C.get(Key);
+      if (!V)
+        return Error::success();
+      const json::Array *A = V->getAsArray();
+      if (!A || A->empty())
+        return makeError(F, "class '" + Twine(Name) + "' '" + Twine(Key) +
+                                "' must be a non-empty array");
+      uint64_t Seen = 0;
+      for (const json::Value &P : *A) {
+        std::optional<int64_t> N = P.getAsInteger();
+        if (!N || *N < 0 || *N >= 64 || (Seen >> *N & 1))
+          return makeError(F, "class '" + Twine(Name) + "' '" + Twine(Key) +
+                                  "' must hold distinct integers in [0, 64)");
+        Seen |= uint64_t(1) << *N;
+        Out.push_back(*N);
+      }
+      return Error::success();
+    };
     for (const auto &KV : *Classes) {
       const json::Object *C = KV.second.getAsObject();
       std::optional<int64_t> U = C ? C->getInteger("units") : std::nullopt;
       if (!U || *U <= 0)
         return makeError(F, "class '" + Twine(StringRef(KV.first)) +
                                 "' needs a positive integer 'units'");
-      Sorted.emplace_back(std::string(StringRef(KV.first)), *U);
+      ClassRec Rec{std::string(StringRef(KV.first)), unsigned(*U), {}, {}};
+      if (Error E = readPorts(KV.first, *C, "ports", Rec.Ports))
+        return std::move(E);
+      if (Error E = readPorts(KV.first, *C, "ports_with_512", Rec.Ports512))
+        return std::move(E);
+      if (!Rec.Ports.empty() && Rec.Ports.size() != Rec.Units)
+        return makeError(F, "class '" + Twine(StringRef(KV.first)) +
+                                "' 'ports' must have 'units' entries");
+      if (Rec.Ports.empty() && !Rec.Ports512.empty())
+        return makeError(F, "class '" + Twine(StringRef(KV.first)) +
+                                "' has 'ports_with_512' without 'ports'");
+      Sorted.push_back(std::move(Rec));
     }
-    llvm::sort(Sorted);
-    for (auto &[Name, Units] : Sorted) {
-      PD->ClassNames.push_back(Name);
-      PD->ClassUnits.push_back(Units);
+    llvm::sort(Sorted, [](const ClassRec &A, const ClassRec &B) {
+      return A.Name < B.Name;
+    });
+    unsigned WithPorts = 0;
+    for (ClassRec &Rec : Sorted) {
+      WithPorts += !Rec.Ports.empty();
+      PD->ClassNames.push_back(std::move(Rec.Name));
+      PD->ClassUnits.push_back(Rec.Units);
+      PD->ClassPorts.push_back(std::move(Rec.Ports));
+      PD->ClassPorts512.push_back(std::move(Rec.Ports512));
     }
+    // The resource bound enumerates unions of the port sets.
+    if (WithPorts > 16)
+      return makeError(F, "at most 16 classes may list 'ports'");
+    PD->HasPortSets = WithPorts != 0;
   }
 
   auto ClassId = [&](StringRef Name) -> std::optional<unsigned> {

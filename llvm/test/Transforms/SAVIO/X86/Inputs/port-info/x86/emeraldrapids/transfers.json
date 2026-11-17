@@ -1,0 +1,20 @@
+{
+  "gpr_to_vec": ["VMOVDI2PDIZrr"],
+  "vec_to_gpr": ["VMOVPDI2DIZrr"],
+  "load_to_vec": ["VMOVDI2PDIZrm"],
+  "store_from_vec": ["VMOVPDI2DIZmr"],
+  "lane_to_lane0": ["VPSHUFDZ128ri"],
+  "lane_extract": ["VPEXTRDZrri"],
+  "lane_insert": ["VPINSRDZrri"],
+  "source": "llvm",
+  "evidence": {
+    "method": "Opcodes read from the MIR after -stop-after=postrapseudos of one-function IR compiled with llvm-project/build/bin/llc -mtriple=x86_64-linux-gnu -mcpu=emeraldrapids (fork llvm 23.1.5). The 128-bit EVEX forms are what emeraldrapids selects (AVX-512VL); costs come from ops.json (Task 7), not from this file.",
+    "gpr_to_vec": "define <4 x i32> @p(i32 %a) { %r = insertelement <4 x i32> poison, i32 %a, i32 0 ; ret } -> VMOVDI2PDIZrr (into an existing vector the backend emits VPINSRDZrri ..., 0 instead; the movd form is the cheaper, taken as the transfer)",
+    "vec_to_gpr": "define i32 @p(<4 x i32> %v) { %r = extractelement <4 x i32> %v, i32 0 ; ret } -> VMOVPDI2DIZrr",
+    "load_to_vec": "define <4 x i32> @p(ptr %a) { %s = load i32, ptr %a ; %r = insertelement <4 x i32> poison, i32 %s, i32 0 ; ret } -> VMOVDI2PDIZrm",
+    "store_from_vec": "define void @p(ptr %a, <4 x i32> %v) { %s = extractelement <4 x i32> %v, i32 0 ; store i32 %s, ptr %a ; ret } -> VMOVPDI2DIZmr",
+    "lane_to_lane0": "define <4 x i32> @p(<4 x i32> %v) { shufflevector %v, poison, <2, poison, poison, poison> ; ret } -> VPSHUFDZ128ri",
+    "lane_extract": "define i32 @p(<4 x i32> %v) { %r = extractelement <4 x i32> %v, i32 2 ; ret } -> VPEXTRDZrri (lane k; lane 0 is VMOVPDI2DIZrr, cheaper, so this is conservative). For i64 lanes the backend uses VPEXTRQZrri / VMOVPQIto64Zrr; the key is untyped and uses the i32 opcode for both",
+    "lane_insert": "define <4 x i32> @p(<4 x i32> %v, i32 %a) { %r = insertelement <4 x i32> %v, i32 %a, i32 2 ; ret } -> VPINSRDZrri (lane 0 into an existing vector is also VPINSRDZrri; i64 lanes use VPINSRQZrri; untyped key as on M4)"
+  }
+}
