@@ -47,9 +47,12 @@ SmallVector<std::string, 8> requiredKeys(Transform X, StringRef Op, Type *Ty,
                                          unsigned L = 0);
 
 /// The first of \p Keys that \p PD cannot cost (a probe key without irOpCost,
-/// a transfer without transferCost), or nullopt if all can.
+/// a transfer without transferCost), or nullopt if all can. "lane_extract" and
+/// "lane_insert" are also satisfied by the per-width entry for \p VTy (a
+/// typeKey such as "v8i32"; empty: untyped keys only).
 std::optional<std::string> firstMissing(const PortDescription &PD,
-                                        ArrayRef<std::string> Keys);
+                                        ArrayRef<std::string> Keys,
+                                        StringRef VTy = "");
 
 } // end namespace savio
 } // end namespace llvm

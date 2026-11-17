@@ -105,6 +105,18 @@ public:
   /// ("lane_extract", "lane_insert") are optional: a directory without them
   /// cannot cost Scalarize boundaries.
   std::optional<OpCost> transferCost(TransferKind K) const;
+  /// The whole-vector lane transfer of vector type \p VTy (a typeKey, "v8i32"):
+  /// transfers.json "lane_extract <VTy>" / "lane_insert <VTy>", the opcode
+  /// sequence the backend emits to move every lane to / from general
+  /// registers. Resource use and micro-ops are summed over the opcodes; the
+  /// latency is the sequence's critical path over the 128-bit chunks of the
+  /// vector (c chunks): for an insert, the head opcode ("VMOV*", the first
+  /// lane of a chunk) plus the other per-chunk opcodes in series (their summed
+  /// latency / c) plus ceil(log2 c) levels of the join ("VINSERT*", the
+  /// slowest); for an extract, the slowest chunk fetch ("VEXTRACT*", none when
+  /// c == 1) plus the slowest lane opcode. Nullopt for \p K other than
+  /// LaneExtract / LaneInsert or when the entry is absent.
+  std::optional<OpCost> laneTransferCost(TransferKind K, StringRef VTy) const;
   /// The concurrency table of a sequence entry, or null.
   const ConcurrencyTable *concurrency(StringRef ProbeKey) const;
   /// Instruction-window size in micro-ops (resources.json "window_uops"), or 0
@@ -124,6 +136,8 @@ private:
   StringMap<ConcurrencyTable> Concurrency;
   StringMap<OpCost> Probes;
   std::optional<OpCost> Transfers[NumTransferKinds];
+  /// Per-width lane transfers, keyed "lane_extract <vty>" / "lane_insert <vty>".
+  StringMap<OpCost> LaneTransfers;
 };
 
 /// The probe-key spelling of \p T: "i32", "i64", "v<N>i32" or "v<N>i64"; empty

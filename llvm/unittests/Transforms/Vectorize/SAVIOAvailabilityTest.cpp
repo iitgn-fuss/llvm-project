@@ -69,6 +69,24 @@ TEST(SAVIOAvailability, FirstMissing) {
   EXPECT_FALSE(firstMissing(**PD, Keys{}));
 }
 
+TEST(SAVIOAvailability, ScalarizeNeedsPerWidthOrUntypedLaneKeys) {
+  SmallString<128> Root(SAVIO_TEST_INPUTS);
+  sys::path::append(Root, "..", "X86", "Inputs", "port-info");
+  // Only per-width keys (v8i32, v16i32): they stand in for the untyped ones,
+  // for those widths only.
+  auto PD = PortDescription::load(Root, "x86", "test-avx512-lane-widths-only");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  Keys Lane{"lane_extract", "lane_insert"};
+  EXPECT_FALSE((*PD)->transferCost(TransferKind::LaneExtract).has_value());
+  EXPECT_EQ(firstMissing(**PD, Lane), "lane_extract");
+  EXPECT_FALSE(firstMissing(**PD, Lane, "v8i32"));
+  EXPECT_EQ(firstMissing(**PD, Lane, "v8i64"), "lane_extract");
+  // The untyped keys alone still satisfy any width.
+  auto Both = PortDescription::load(Root, "x86", "test-avx512-lane-widths");
+  ASSERT_TRUE(!!Both) << toString(Both.takeError());
+  EXPECT_FALSE(firstMissing(**Both, Lane, "v8i64"));
+}
+
 TEST(SAVIOAvailability, TransformNames) {
   EXPECT_EQ(transformName(Transform::SingletonVectorize), "singleton-vectorize");
   EXPECT_EQ(transformName(Transform::FpDivideLanes), "fpdiv-lanes");

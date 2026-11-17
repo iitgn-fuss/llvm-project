@@ -58,7 +58,8 @@ SmallVector<std::string, 8> savio::requiredKeys(Transform X, StringRef Op,
 }
 
 std::optional<std::string> savio::firstMissing(const PortDescription &PD,
-                                               ArrayRef<std::string> Keys) {
+                                               ArrayRef<std::string> Keys,
+                                               StringRef VTy) {
   static const std::pair<StringRef, TransferKind> Transfers[] = {
       {"gpr_to_vec", TransferKind::GprToVec},
       {"vec_to_gpr", TransferKind::VecToGpr},
@@ -68,6 +69,8 @@ std::optional<std::string> savio::firstMissing(const PortDescription &PD,
     const auto *T = find_if(Transfers, [&](auto &P) { return P.first == K; });
     bool Have = T != std::end(Transfers) ? PD.transferCost(T->second).has_value()
                                          : PD.irOpCost(K).has_value();
+    if (!Have && T != std::end(Transfers) && !VTy.empty())
+      Have = PD.laneTransferCost(T->second, VTy).has_value();
     if (!Have)
       return K;
   }

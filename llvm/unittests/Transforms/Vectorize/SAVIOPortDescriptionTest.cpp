@@ -27,6 +27,12 @@ std::string inputsRoot() {
   return std::string(Root);
 }
 
+std::string x86InputsRoot() {
+  SmallString<128> Root(SAVIO_TEST_INPUTS);
+  sys::path::append(Root, "..", "X86", "Inputs", "port-info");
+  return std::string(Root);
+}
+
 std::optional<unsigned> classId(const PortDescription &PD, StringRef Name) {
   for (unsigned C = 0; C != PD.numClasses(); ++C)
     if (PD.className(C) == Name)
@@ -146,6 +152,49 @@ TEST(SAVIOPortDescription, LaneTransfersLoaded) {
   EXPECT_EQ(I->Latency, 2u);
   // The five Part-2 kinds are unchanged.
   EXPECT_TRUE((*PD)->transferCost(TransferKind::LaneToLane0).has_value());
+}
+
+TEST(SAVIOPortDescription, PerWidthLaneTransfers) {
+  // Fixture opcodes: vmovd 1 cycle / lat 2, vpinsrd 2 / 2, vinserti 1 / 3,
+  // vpextrd 2 / 3, vextracti 1 / 3 (all on the vector class).
+  auto PD = PortDescription::load(x86InputsRoot(), "x86", "test-avx512-lane-widths");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  unsigned Vector = *classId(**PD, "vector");
+  // Insert, 8 lanes: two 4-lane chains (vmovd + 3 vpinsrd) joined by one
+  // vinserti: resource use and uops summed, latency = 2 + 3 * 2 + 1 * 3.
+  std::optional<OpCost> I8 = (*PD)->laneTransferCost(TransferKind::LaneInsert, "v8i32");
+  ASSERT_TRUE(I8.has_value());
+  ASSERT_EQ(I8->Uses.size(), 1u);
+  EXPECT_EQ(I8->Uses[0].Class, Vector);
+  EXPECT_EQ(I8->Uses[0].Cycles, 15.0);
+  EXPECT_EQ(I8->Uops, 15u);
+  EXPECT_EQ(I8->Latency, 11u);
+  // 16 lanes: four chains, a two-level join tree: 2 + 3 * 2 + 2 * 3.
+  std::optional<OpCost> I16 = (*PD)->laneTransferCost(TransferKind::LaneInsert, "v16i32");
+  ASSERT_TRUE(I16.has_value());
+  EXPECT_EQ(I16->Uses[0].Cycles, 31.0);
+  EXPECT_EQ(I16->Uops, 31u);
+  EXPECT_EQ(I16->Latency, 14u);
+  // Extract: the longest lane path, vextracti + vpextrd = 3 + 3; at 4 lanes
+  // (one chunk) there is no vextracti.
+  std::optional<OpCost> E8 = (*PD)->laneTransferCost(TransferKind::LaneExtract, "v8i32");
+  ASSERT_TRUE(E8.has_value());
+  EXPECT_EQ(E8->Uses[0].Cycles, 15.0);
+  EXPECT_EQ(E8->Uops, 15u);
+  EXPECT_EQ(E8->Latency, 6u);
+  // A width without an entry has none; the untyped kinds are still there.
+  EXPECT_FALSE((*PD)->laneTransferCost(TransferKind::LaneInsert, "v8i64").has_value());
+  EXPECT_FALSE((*PD)->laneTransferCost(TransferKind::GprToVec, "v8i32").has_value());
+  EXPECT_TRUE((*PD)->transferCost(TransferKind::LaneInsert).has_value());
+}
+
+TEST(SAVIOPortDescription, PerWidthLaneTransferBadKeyIsError) {
+  std::string Root = copyFixture();
+  rewrite(Root, "transfers.json", "\"lane_to_lane0\"",
+          "\"lane_insert v3i32\": [\"T_LANE_INS\"],\n  \"lane_to_lane0\"");
+  std::string Msg = loadError(Root);
+  EXPECT_NE(Msg.find("lane_insert v3i32"), std::string::npos) << Msg;
+  sys::fs::remove_directories(Root);
 }
 
 TEST(SAVIOPortDescription, LaneTransferUnknownOpcodeIsError) {

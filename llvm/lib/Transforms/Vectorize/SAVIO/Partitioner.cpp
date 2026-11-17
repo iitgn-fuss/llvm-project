@@ -124,7 +124,8 @@ static bool isAvailable(const PortDescription *PD, Transform X,
                                           : isImmAmount(I.getOperand(1))))
     Op += ".imm";
   SmallVector<std::string, 8> Keys = requiredKeys(X, Op, I.getType(), L);
-  std::optional<std::string> Missing = firstMissing(*PD, Keys);
+  std::optional<std::string> Missing = firstMissing(
+      *PD, Keys, X == Transform::Scalarize ? typeKey(I.getType()) : "");
   LLVM_DEBUG({
     dbgs() << "savio: " << transformName(X) << " of " << I.getOpcodeName()
            << ' ' << *I.getType();
@@ -855,18 +856,62 @@ class NodeBuilder {
   };
   SmallVector<CarriedEdge, 4> Pending;
 
-  /// A transfer node; for a Scalarize boundary \p Lanes copies (resource use
-  /// and micro-ops times Lanes; latency as is, or times Lanes when \p Chain:
-  /// the inserts into one vector depend on each other).
+  /// A transfer node. For a Scalarize boundary (\p G given, \p K a lane kind)
+  /// of \p Lanes lanes of the group's vector type: the per-width entry
+  /// ("lane_extract <vty>" / "lane_insert <vty>", the whole-vector sequence)
+  /// once, when the port-info has it. It is scaled by the part of the vector
+  /// transferred: the lanes rounded up to whole 128-bit chunks over the
+  /// chunks of the vector (resource use and micro-ops; the latency stays the
+  /// whole sequence's). Without it, the untyped key charged \p Lanes times
+  /// (resource use and micro-ops times Lanes; latency as is, or times Lanes
+  /// when \p Chain: the inserts into one vector depend on each other).
   bool addTransfer(TransferKind K, ArrayRef<unsigned> Preds, unsigned &Out,
-                   unsigned Lanes = 1, bool Chain = false) {
-    std::optional<OpCost> C = PD.transferCost(K);
-    if (!C)
-      return false;
+                   unsigned Lanes = 1, bool Chain = false,
+                   const Group *G = nullptr) {
     CostNode Nd;
-    Nd.Cost = lanes(*C, Lanes);
-    if (Chain)
-      Nd.Cost.Latency *= Lanes;
+    bool IsLane =
+        K == TransferKind::LaneExtract || K == TransferKind::LaneInsert;
+    StringRef Name = K == TransferKind::LaneExtract ? "lane_extract"
+                                                    : "lane_insert";
+    std::optional<OpCost> W;
+    std::string VTy;
+    if (G && IsLane) {
+      auto *VT = cast<FixedVectorType>(G->Ops[0]->getType());
+      VTy = typeKey(VT);
+      W = PD.laneTransferCost(K, VTy);
+      if (W) {
+        unsigned ElemBits = VT->getScalarSizeInBits();
+        unsigned Total = divideCeil(VT->getNumElements() * ElemBits, 128);
+        unsigned Used = std::min(Total, divideCeil(Lanes * ElemBits, 128));
+        Nd.Cost = *W;
+        for (ResourceUse &U : Nd.Cost.Uses)
+          U.Cycles = U.Cycles * Used / Total;
+        Nd.Cost.Uops = divideCeil(Nd.Cost.Uops * Used, Total);
+        Nd.Wide512 = VT->getNumElements() * ElemBits == 512;
+      }
+    }
+    if (!W) {
+      std::optional<OpCost> C = PD.transferCost(K);
+      if (!C)
+        return false;
+      Nd.Cost = lanes(*C, Lanes);
+      if (Chain)
+        Nd.Cost.Latency *= Lanes;
+    }
+    LLVM_DEBUG({
+      if (G && IsLane) {
+        dbgs() << "savio: transfer " << Name;
+        if (W)
+          dbgs() << ' ' << VTy << " per-width";
+        else
+          dbgs() << " per-lane x" << Lanes;
+        dbgs() << ": uops " << Nd.Cost.Uops << " latency " << Nd.Cost.Latency
+               << " uses";
+        for (const ResourceUse &U : Nd.Cost.Uses)
+          dbgs() << ' ' << PD.className(U.Class) << ' ' << U.Cycles;
+        dbgs() << '\n';
+      }
+    });
     Nd.Preds.assign(Preds.begin(), Preds.end());
     Out = Nodes.size();
     Nodes.push_back(std::move(Nd));
@@ -1017,7 +1062,8 @@ private:
             TP.push_back(scalarNode(DefV));
           bool Ok =
               Vec ? addTransfer(TransferKind::LaneExtract, TP, T,
-                                laneCount(R.Groups[GIdx]))
+                                laneCount(R.Groups[GIdx]), /*Chain=*/false,
+                                &R.Groups[GIdx])
                   : addTransfer(K == InputKind::GprToVec
                                     ? TransferKind::GprToVec
                                     : TransferKind::LaneToLane0,
@@ -1111,7 +1157,7 @@ private:
       if (is_contained(G.LiveOuts, &I) && liveOutNeedsInsert(G, I)) {
         unsigned T;
         if (!addTransfer(TransferKind::LaneInsert, {Me}, T, laneCount(G),
-                         /*Chain=*/true))
+                         /*Chain=*/true, &G))
           return false;
         OutNode[V] = T;
       }
