@@ -2,6 +2,8 @@
 ; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s 2>&1 | FileCheck %s --check-prefix=IR
 ; RUN: opt -passes=savio -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | opt -passes=verify -disable-output
 ; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -S %s | FileCheck %s --check-prefix=FORCE
+; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test2s1v -pass-remarks-output=%t.yaml -disable-output %s
+; RUN: FileCheck %s --check-prefix=YAML --input-file=%t.yaml
 ; An -O3-shaped loop: a vectorized body (<4 x i32> load, mul, xor, lshr, store) next to a scalar tail copy of the same
 ; chain. The test2s1v fixture is Part-2 format: it has no "<op> v4i32" / "<op> i32" vector probe keys and no
 ; lane_extract / lane_insert transfers, so vector slices cannot be costed and nothing is Scalarized. Singleton Vectorize
@@ -32,6 +34,12 @@
 ; FORCE:         call <4 x i32> @llvm.savio.sv.mul.v4i32
 ; FORCE:         call <4 x i32> @llvm.savio.sv.xor.v4i32
 ; FORCE:         call <4 x i32> @llvm.savio.sv.lshr.v4i32
+; Even forced, the missing vector keys, scalar-lane keys and lane transfers make every Scalarize assignment uncostable:
+; no `Scalarized` remark, only Singleton Vectorize's `Promoted` for the scalar copy. (If Scalarize ignored a missing key
+; this would fail: the vector slice would be decided and reported.)
+; YAML-NOT: Name:{{ +}}Scalarized
+; YAML:     Name:{{ +}}Promoted
+; YAML-NOT: Name:{{ +}}Scalarized
 target triple = "arm64-apple-macos"
 
 define void @f(ptr %a, ptr %b, ptr %c, ptr %d, i64 %n) {

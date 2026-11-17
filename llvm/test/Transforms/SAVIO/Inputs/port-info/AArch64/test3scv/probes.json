@@ -1,0 +1,263 @@
+{
+  "probes": {
+    "add i32": [
+      "T_ADD"
+    ],
+    "sv.add v4i32": [
+      "T_VADD"
+    ],
+    "sub i32": [
+      "T_SUB"
+    ],
+    "sv.sub v4i32": [
+      "T_VSUB"
+    ],
+    "mul i32": [
+      "T_MUL"
+    ],
+    "sv.mul v4i32": [
+      "T_VMUL"
+    ],
+    "and i32": [
+      "T_AND"
+    ],
+    "sv.and v4i32": [
+      "T_VAND"
+    ],
+    "or i32": [
+      "T_OR"
+    ],
+    "sv.or v4i32": [
+      "T_VOR"
+    ],
+    "xor i32": [
+      "T_XOR"
+    ],
+    "sv.xor v4i32": [
+      "T_VXOR"
+    ],
+    "shl i32": [
+      "T_SHL"
+    ],
+    "sv.shl v4i32": [
+      "T_VSHL"
+    ],
+    "sv.shl.imm v4i32": [
+      "T_VSHL"
+    ],
+    "lshr i32": [
+      "T_LSHR"
+    ],
+    "sv.lshr v4i32": [
+      "T_VLSHR"
+    ],
+    "sv.lshr.imm v4i32": [
+      "T_VLSHR"
+    ],
+    "ashr i32": [
+      "T_ASHR"
+    ],
+    "sv.ashr v4i32": [
+      "T_VASHR"
+    ],
+    "sv.ashr.imm v4i32": [
+      "T_VASHR"
+    ],
+    "udiv i32": [
+      "T_UDIV"
+    ],
+    "urem i32": [
+      "T_UDIV",
+      "T_MSUB"
+    ],
+    "sv.udiv v4i32": [
+      "T_VUDIV_FP",
+      "T_VUDIV_FIX"
+    ],
+    "sv.urem v4i32": [
+      "T_VUDIV_FP",
+      "T_VUDIV_FIX"
+    ],
+    "udiv v4i32": [
+      "T_UDIV",
+      "T_UDIV",
+      "T_UDIV",
+      "T_UDIV"
+    ],
+    "urem v4i32": [
+      "T_UDIV",
+      "T_MSUB",
+      "T_UDIV",
+      "T_MSUB",
+      "T_UDIV",
+      "T_MSUB",
+      "T_UDIV",
+      "T_MSUB"
+    ],
+    "fpdiv2.udiv v4i32": [
+      "T_VUDIV_FP",
+      "T_VUDIV_FIX"
+    ],
+    "fpdiv2.urem v4i32": [
+      "T_VUDIV_FP",
+      "T_VUDIV_FIX"
+    ],
+    "fpdiv4.udiv v4i32": [
+      "T_VUDIV_FP",
+      "T_VUDIV_FP",
+      "T_VUDIV_FIX"
+    ],
+    "fpdiv4.urem v4i32": [
+      "T_VUDIV_FP",
+      "T_VUDIV_FP",
+      "T_VUDIV_FIX"
+    ],
+    "add v4i32": [
+      "T_VADD"
+    ],
+    "add v2i64": [
+      "T_VADD"
+    ],
+    "add i64": [
+      "T_ADD"
+    ],
+    "sub v4i32": [
+      "T_VSUB"
+    ],
+    "sub v2i64": [
+      "T_VSUB"
+    ],
+    "sub i64": [
+      "T_SUB"
+    ],
+    "mul v4i32": [
+      "T_VMUL"
+    ],
+    "mul v2i64": [
+      "T_VMUL"
+    ],
+    "mul i64": [
+      "T_MUL"
+    ],
+    "and v4i32": [
+      "T_VAND"
+    ],
+    "and v2i64": [
+      "T_VAND"
+    ],
+    "and i64": [
+      "T_AND"
+    ],
+    "or v4i32": [
+      "T_VOR"
+    ],
+    "or v2i64": [
+      "T_VOR"
+    ],
+    "or i64": [
+      "T_OR"
+    ],
+    "xor v4i32": [
+      "T_VXOR"
+    ],
+    "xor v2i64": [
+      "T_VXOR"
+    ],
+    "xor i64": [
+      "T_XOR"
+    ],
+    "shl v4i32": [
+      "T_VSHL"
+    ],
+    "shl.imm v4i32": [
+      "T_VSHL"
+    ],
+    "shl v2i64": [
+      "T_VSHL"
+    ],
+    "shl.imm v2i64": [
+      "T_VSHL"
+    ],
+    "shl i64": [
+      "T_SHL"
+    ],
+    "shl.imm i32": [
+      "T_SHL"
+    ],
+    "shl.imm i64": [
+      "T_SHL"
+    ],
+    "lshr v4i32": [
+      "T_VLSHR"
+    ],
+    "lshr.imm v4i32": [
+      "T_VLSHR"
+    ],
+    "lshr v2i64": [
+      "T_VLSHR"
+    ],
+    "lshr.imm v2i64": [
+      "T_VLSHR"
+    ],
+    "lshr i64": [
+      "T_LSHR"
+    ],
+    "lshr.imm i32": [
+      "T_LSHR"
+    ],
+    "lshr.imm i64": [
+      "T_LSHR"
+    ],
+    "ashr v4i32": [
+      "T_VASHR"
+    ],
+    "ashr.imm v4i32": [
+      "T_VASHR"
+    ],
+    "ashr v2i64": [
+      "T_VASHR"
+    ],
+    "ashr.imm v2i64": [
+      "T_VASHR"
+    ],
+    "ashr i64": [
+      "T_ASHR"
+    ],
+    "ashr.imm i32": [
+      "T_ASHR"
+    ],
+    "ashr.imm i64": [
+      "T_ASHR"
+    ],
+    "load i32": [
+      "T_LD"
+    ],
+    "store i32": [
+      "T_ST"
+    ],
+    "load i64": [
+      "T_LD"
+    ],
+    "store i64": [
+      "T_ST"
+    ],
+    "load v4i32": [
+      "T_LDV"
+    ],
+    "store v4i32": [
+      "T_STV"
+    ],
+    "load v2i64": [
+      "T_LDV"
+    ],
+    "store v2i64": [
+      "T_STV"
+    ],
+    "xor.lshr.imm i32": [
+      "T_XORSH"
+    ],
+    "add.lshr.imm v4i32": [
+      "T_VUSRA"
+    ]
+  }
+}

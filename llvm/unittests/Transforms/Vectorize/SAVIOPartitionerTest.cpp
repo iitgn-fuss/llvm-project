@@ -957,4 +957,301 @@ TEST_F(SAVIOClassifyInputTest, VirtualUnrollMustBeatNotUnrolling) {
   EXPECT_FALSE(D.Promoted.empty());
 }
 
+// Scalarize: slices of vector candidates, and what the cost model charges at
+// their boundaries (machine test3scv: scalar 2 units, vector 1, mem 1, every
+// scalar and vector op 1 cycle, load/store 1 mem cycle, lane extract and insert
+// 3 vector cycles each; dispatch width 64, so the resource bound decides).
+
+TEST_F(SAVIOClassifyInputTest, ScalarizeSliceOwnsLoadsAndStores) {
+  // Two copies of load, mul, xor, store: two instances of one ToScalar class.
+  // A scalar i32 chain beside them is its own ToVector group, never merged.
+  Function *F = parse(R"(
+    define void @f(ptr %k, ptr %o, ptr %s, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %pk0 = getelementptr inbounds i32, ptr %k, i64 %i
+      %w0 = load <4 x i32>, ptr %pk0
+      %m0 = mul <4 x i32> %w0, splat (i32 3)
+      %x0 = xor <4 x i32> %m0, %w0
+      %po0 = getelementptr inbounds i32, ptr %o, i64 %i
+      store <4 x i32> %x0, ptr %po0
+      %pk1 = getelementptr inbounds i32, ptr %k, i64 8
+      %w1 = load <4 x i32>, ptr %pk1
+      %m1 = mul <4 x i32> %w1, splat (i32 3)
+      %x1 = xor <4 x i32> %m1, %w1
+      %po1 = getelementptr inbounds i32, ptr %o, i64 8
+      store <4 x i32> %x1, ptr %po1
+      %sl = load i32, ptr %s
+      %sm = mul i32 %sl, 3
+      store i32 %sm, ptr %s
+      %i.next = add nuw i64 %i, 4
+      %c = icmp ult i64 %i.next, %n
+      br i1 %c, label %loop, label %exit
+    exit:
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  const Region &R = Regions[0];
+  ASSERT_EQ(R.Groups.size(), 3u);
+  EXPECT_EQ(R.Groups[0].Dir, Direction::ToScalar);
+  EXPECT_EQ(R.Groups[1].Dir, Direction::ToScalar);
+  EXPECT_EQ(R.Groups[2].Dir, Direction::ToVector);
+  EXPECT_EQ(R.Groups[0].SliceClass, R.Groups[1].SliceClass);
+  EXPECT_NE(R.Groups[0].SliceClass, R.Groups[2].SliceClass);
+  ASSERT_EQ(R.Groups[0].Ops.size(), 2u);
+  ASSERT_EQ(R.Groups[0].OwnedLoads.size(), 1u);
+  EXPECT_EQ(R.Groups[0].OwnedLoads[0]->getName(), "w0");
+  ASSERT_EQ(R.Groups[0].OwnedStores.size(), 1u);
+  EXPECT_FALSE(liveOutNeedsInsert(R.Groups[0], *R.Groups[0].Ops[1]));
+}
+
+TEST_F(SAVIOClassifyInputTest, ScalarizeSliceNotMixedAndDivideExcluded) {
+  // A vector udiv is not a Scalarize candidate; a lane extracted from a vector
+  // chain feeding a scalar op stops both slices.
+  Function *F = parse(R"(
+    define void @f(<4 x i32> %a, <4 x i32> %b, ptr %o) {
+      %v = add <4 x i32> %a, %b
+      %d = udiv <4 x i32> %v, %b
+      %e = extractelement <4 x i32> %d, i32 1
+      %s = add i32 %e, 1
+      store i32 %s, ptr %o
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  unsigned Vec = 0, Scal = 0, Div = 0;
+  for (const Group &G : Regions[0].Groups) {
+    if (G.VectorDivide)
+      ++Div;
+    else if (G.Dir == Direction::ToScalar)
+      ++Vec;
+    else
+      ++Scal;
+  }
+  EXPECT_EQ(Vec, 1u);  // %v
+  EXPECT_EQ(Scal, 1u); // %s
+  EXPECT_EQ(Div, 2u);  // the two lane pairs of %d
+}
+
+/// Forces every group of the only region of \p IR and returns the decision.
+/// The machine is test3scv.
+static Decision decideForcedOn(Function *F, std::unique_ptr<PortDescription> &PD,
+                               Region &Out, SmallVector<Region, 4> &Regions,
+                               LoopInfo &LI) {
+  Regions = formRegions(*F, LI);
+  EXPECT_EQ(Regions.size(), 1u);
+  SmallString<128> Root(SAVIO_TEST_INPUTS);
+  sys::path::append(Root, "port-info");
+  auto PDOrErr = PortDescription::load(Root, "AArch64", "test3scv");
+  EXPECT_TRUE(!!PDOrErr);
+  PD = std::move(*PDOrErr);
+  auto Fallback = [](const Instruction &) {
+    OpCost C;
+    C.Latency = 1;
+    C.Uops = 1;
+    return C;
+  };
+  bool Saved = SAVIOForce;
+  SAVIOForce = true;
+  Decision D = decide(Regions[0], *PD, Fallback, 0.05);
+  SAVIOForce = Saved;
+  return D;
+}
+
+TEST_F(SAVIOClassifyInputTest, ScalarizeCostOwnsLoadsAndStores) {
+  // load, add, store, all owned: as vector 1 + 1 mem cycles (T 2, mem); as
+  // scalars 4 loads + 4 stores = 8 mem cycles, 4 adds on 2 units = 2, and no
+  // lane transfer (each would add 3 vector cycles and lift T above 8).
+  Function *F = parse(R"(
+    define void @f(ptr %k, ptr %o, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %pk = getelementptr inbounds i32, ptr %k, i64 %i
+      %w = load <4 x i32>, ptr %pk
+      %r = add <4 x i32> %w, splat (i32 1)
+      %po = getelementptr inbounds i32, ptr %o, i64 %i
+      store <4 x i32> %r, ptr %po
+      %i.next = add nuw i64 %i, 4
+      %c = icmp ult i64 %i.next, %n
+      br i1 %c, label %loop, label %exit
+    exit:
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  std::unique_ptr<PortDescription> PD;
+  Region Dummy;
+  SmallVector<Region, 4> Regions;
+  Decision D = decideForcedOn(F, PD, Dummy, Regions, LI);
+  ASSERT_EQ(D.Promoted.size(), 1u);
+  EXPECT_DOUBLE_EQ(D.Before.t(), 2.0);
+  EXPECT_DOUBLE_EQ(D.After.t(), 8.0);
+  EXPECT_EQ(PD->className(D.After.BusiestClass), "mem");
+}
+
+TEST_F(SAVIOClassifyInputTest, ScalarizeCostSharedLoad) {
+  // The load is also stored whole elsewhere, so the slice does not own it:
+  // the vector load stays (1 mem cycle) and four lane extracts (4 x 3 vector
+  // cycles) feed the lanes; the owned store is 4 scalar stores (mem 1 + 1 + 4).
+  Function *F = parse(R"(
+    define void @f(ptr %k, ptr %o, ptr %q, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %pk = getelementptr inbounds i32, ptr %k, i64 %i
+      %w = load <4 x i32>, ptr %pk
+      %r = add <4 x i32> %w, splat (i32 1)
+      %po = getelementptr inbounds i32, ptr %o, i64 %i
+      store <4 x i32> %r, ptr %po
+      store <4 x i32> %w, ptr %q
+      %i.next = add nuw i64 %i, 4
+      %c = icmp ult i64 %i.next, %n
+      br i1 %c, label %loop, label %exit
+    exit:
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  std::unique_ptr<PortDescription> PD;
+  Region Dummy;
+  SmallVector<Region, 4> Regions;
+  ASSERT_EQ(formRegions(*F, LI)[0].Groups[0].OwnedLoads.size(), 0u);
+  Decision D = decideForcedOn(F, PD, Dummy, Regions, LI);
+  ASSERT_EQ(D.Promoted.size(), 1u);
+  EXPECT_DOUBLE_EQ(D.After.t(), 12.0);
+  EXPECT_EQ(PD->className(D.After.BusiestClass), "vector");
+}
+
+TEST_F(SAVIOClassifyInputTest, ScalarizeCostLiveOut) {
+  // The result is used by a call, not only stored: four lane inserts (4 x 3
+  // vector cycles) bring it back; the load is owned (4 mem cycles).
+  Function *F = parse(R"(
+    declare void @use(<4 x i32>)
+    define void @f(ptr %k, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %pk = getelementptr inbounds i32, ptr %k, i64 %i
+      %w = load <4 x i32>, ptr %pk
+      %r = add <4 x i32> %w, splat (i32 1)
+      call void @use(<4 x i32> %r)
+      %i.next = add nuw i64 %i, 4
+      %c = icmp ult i64 %i.next, %n
+      br i1 %c, label %loop, label %exit
+    exit:
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  std::unique_ptr<PortDescription> PD;
+  Region Dummy;
+  SmallVector<Region, 4> Regions;
+  Decision D = decideForcedOn(F, PD, Dummy, Regions, LI);
+  ASSERT_EQ(D.Promoted.size(), 1u);
+  EXPECT_TRUE(liveOutNeedsInsert(Regions[0].Groups[0],
+                                 *Regions[0].Groups[0].Ops[0]));
+  EXPECT_DOUBLE_EQ(D.After.t(), 12.0);
+  EXPECT_EQ(PD->className(D.After.BusiestClass), "vector");
+}
+
+TEST_F(SAVIOClassifyInputTest, ScalarizeCostFusedShift) {
+  // Five `x = xor (lshr y, C), y` pairs: the shift is used once, by the xor, so
+  // the scalar lanes cost one fused xor.lshr.imm each (1 cycle, 4 lanes on 2
+  // units = 2 per pair, T 10) and not an lshr plus an xor (T 20).
+  Function *F = parse(R"(
+    define void @f(ptr %k, ptr %o, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %pk = getelementptr inbounds i32, ptr %k, i64 %i
+      %w = load <4 x i32>, ptr %pk
+      %s0 = lshr <4 x i32> %w, splat (i32 16)
+      %x0 = xor <4 x i32> %s0, %w
+      %s1 = lshr <4 x i32> %x0, splat (i32 13)
+      %x1 = xor <4 x i32> %s1, %x0
+      %s2 = lshr <4 x i32> %x1, splat (i32 7)
+      %x2 = xor <4 x i32> %s2, %x1
+      %s3 = lshr <4 x i32> %x2, splat (i32 5)
+      %x3 = xor <4 x i32> %s3, %x2
+      %s4 = lshr <4 x i32> %x3, splat (i32 3)
+      %x4 = xor <4 x i32> %s4, %x3
+      %po = getelementptr inbounds i32, ptr %o, i64 %i
+      store <4 x i32> %x4, ptr %po
+      %i.next = add nuw i64 %i, 4
+      %c = icmp ult i64 %i.next, %n
+      br i1 %c, label %loop, label %exit
+    exit:
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  std::unique_ptr<PortDescription> PD;
+  Region Dummy;
+  SmallVector<Region, 4> Regions;
+  Decision D = decideForcedOn(F, PD, Dummy, Regions, LI);
+  ASSERT_EQ(D.Promoted.size(), 1u);
+  EXPECT_DOUBLE_EQ(D.After.t(), 10.0);
+  EXPECT_EQ(PD->className(D.After.BusiestClass), "scalar");
+}
+
+TEST_F(SAVIOClassifyInputTest, ScalarizeMissingKeyIsNotCostable) {
+  // test2s1v (Part-2 format) has no vector, lane or load keys: forcing leaves
+  // the vector slice alone.
+  Function *F = parse(R"(
+    define void @f(ptr %k, ptr %o, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %pk = getelementptr inbounds i32, ptr %k, i64 %i
+      %w = load <4 x i32>, ptr %pk
+      %r = add <4 x i32> %w, splat (i32 1)
+      %po = getelementptr inbounds i32, ptr %o, i64 %i
+      store <4 x i32> %r, ptr %po
+      %i.next = add nuw i64 %i, 4
+      %c = icmp ult i64 %i.next, %n
+      br i1 %c, label %loop, label %exit
+    exit:
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  SmallString<128> Root(SAVIO_TEST_INPUTS);
+  sys::path::append(Root, "port-info");
+  auto PDOrErr = PortDescription::load(Root, "AArch64", "test2s1v");
+  ASSERT_TRUE(!!PDOrErr);
+  auto Fallback = [](const Instruction &) {
+    OpCost C;
+    C.Latency = 1;
+    C.Uops = 1;
+    return C;
+  };
+  bool Saved = SAVIOForce;
+  SAVIOForce = true;
+  Decision D = decide(Regions[0], **PDOrErr, Fallback, 0.05);
+  SAVIOForce = Saved;
+  EXPECT_TRUE(D.Promoted.empty());
+}
+
 } // namespace

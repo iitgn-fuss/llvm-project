@@ -7,8 +7,9 @@
 //===----------------------------------------------------------------------===//
 //
 // Splits a function into regions, grows use-def groups of in-scope scalar
-// integer operations in each region, and decides which groups to Singleton
-// Vectorize by a search over fractions of each divide class and the unroll
+// integer operations (Singleton Vectorize candidates) and of in-scope vector
+// integer operations (Scalarize candidates) in each region, and decides which
+// groups to move by a search over fractions of each slice class and the unroll
 // factor on the region cost model.
 //
 //===----------------------------------------------------------------------===//
@@ -27,7 +28,9 @@ class BasicBlock;
 class Function;
 class Instruction;
 class Loop;
+class LoadInst;
 class LoopInfo;
+class StoreInst;
 class PHINode;
 class Use;
 class User;
@@ -36,16 +39,29 @@ class Value;
 extern cl::opt<double> SAVIOMargin;
 extern cl::opt<bool> SAVIOForce;
 /// With -savio-force-count=n the first n instances of the largest slice class
-/// move; for the lane pairs of a vector divide n counts lanes (2 per pair), so
+/// move (whatever its direction); for the lane pairs of a vector divide n counts lanes (2 per pair), so
 /// an odd n is a fatal error there.
 extern cl::opt<int> SAVIOForceCount;
 
 namespace savio {
 
-/// A use-def connected set of in-scope i32 operations of one region.
+/// Which way a group moves: scalar operations to the vector unit (Singleton
+/// Vectorize), or vector operations to the scalar ports (Scalarize).
+enum class Direction { ToVector, ToScalar };
+
+/// A use-def connected set of in-scope operations of one region: i32 scalar
+/// operations (Dir ToVector), or `<4 x i32>` / `<2 x i64>` vector operations
+/// (Dir ToScalar), never both.
 struct Group {
-  /// In-scope i32 operations, in program order.
+  Direction Dir = Direction::ToVector;
+  /// In-scope operations, in program order.
   SmallVector<Instruction *, 8> Ops;
+  /// ToScalar only: the simple vector loads of the region whose users are all
+  /// in Ops (they become scalar loads with the slice), and the simple stores
+  /// of the region of a live-out of Ops whose every user outside Ops is such a
+  /// store (they become scalar stores; the live-out needs no lane insert).
+  SmallVector<LoadInst *, 2> OwnedLoads;
+  SmallVector<StoreInst *, 2> OwnedStores;
   /// Operands of Ops defined outside the group.
   SmallVector<Use *, 4> Inputs;
   /// Ops with users outside the group.
@@ -108,6 +124,10 @@ bool isInGroup(const Group &G, const User *U);
 /// outside \p G is not a simple store of it. Otherwise every such user stores
 /// lane 0 straight from the vector.
 bool liveOutNeedsGpr(const Group &G, const Instruction &I);
+
+/// ToScalar groups: true if the live-out \p I of \p G needs its lanes inserted
+/// into a vector: some user outside \p G is not one of G.OwnedStores.
+bool liveOutNeedsInsert(const Group &G, const Instruction &I);
 
 /// Regions of \p F that have at least one group: innermost single-block loops
 /// and blocks outside loops. Blocks of other loops are not regions in v1.

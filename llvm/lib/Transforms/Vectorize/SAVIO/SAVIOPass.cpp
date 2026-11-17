@@ -320,7 +320,13 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
         U *= 2;
       }
       ORE.emit([&] {
-        OptimizationRemark Rm(DEBUG_TYPE, "Promoted", Reg.Groups[G].Ops[0]);
+        // Singleton Vectorize keeps the name "Promoted"; the opposite
+        // direction is "Scalarized".
+        OptimizationRemark Rm(
+            DEBUG_TYPE,
+            Reg.Groups[G].Dir == Direction::ToScalar ? "Scalarized"
+                                                     : "Promoted",
+            Reg.Groups[G].Ops[0]);
         Rm << "T " << Before << " -> " << After << " ("
            << BoundName(D.Before.limiting()) << "), " << utostr(K) << "/"
            << utostr(U) << " of slice " << utostr(Cls);
@@ -333,6 +339,10 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
     SmallVector<std::pair<Instruction *, unsigned>, 2> Divides;
     for (unsigned G : D.Promoted) {
       const Group &Grp = Reg.Groups[G];
+      // The Scalarize rewrite does not exist yet: a decided Scalarize group is
+      // reported and the IR is left as it is.
+      if (Grp.Dir == Direction::ToScalar)
+        continue;
       if (!Grp.VectorDivide) {
         rewriteSingletonVectorize(Grp, Reg.L);
         continue;
@@ -345,7 +355,9 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
     }
     for (auto &[I, Mask] : Divides)
       rewriteVectorDivide(I, Mask);
-    Changed = true;
+    Changed |= any_of(D.Promoted, [&](unsigned G) {
+      return Reg.Groups[G].Dir != Direction::ToScalar;
+    });
   };
 
   bool Forced = SAVIOForce || SAVIOForceCount >= 0 || SAVIONoUnroll;
@@ -360,6 +372,12 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
     if (!Forced && Reg.L) {
       SE = &FAM.getResult<ScalarEvolutionAnalysis>(F);
       CanUnroll = mayUnroll(*Reg.L, *SE);
+      // Until the Scalarize rewrite exists a Scalarize decision is only
+      // reported: do not unroll a loop for the fraction it would reach.
+      if (any_of(Reg.Groups, [](const Group &G) {
+            return G.Dir == Direction::ToScalar;
+          }))
+        CanUnroll = false;
     }
     Decision D = decide(Reg, *R.PD, Fallback, SAVIOMargin, CanUnroll);
     if (D.Unroll > 1) {
