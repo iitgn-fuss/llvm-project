@@ -4,19 +4,24 @@
 ; RUN: FileCheck %s --check-prefix=YAML --input-file=%t.yaml
 ; One loop with a scalar urem chain (Singleton Vectorize candidate) and an independent vectorized <4 x i32> chain
 ; (Scalarize candidate): both directions are candidates of one region, forcing moves both, and no group is in both
-; directions: the scalar slice is "Promoted" and rewritten, the vector slice is "Scalarized" (reported; the IR of the
-; vector chain is unchanged until the rewrite exists).
+; directions: the scalar slice (class 0, numbered first) is "Promoted" and rewritten, the vector slice (class 1) is
+; "Scalarized" and rewritten.
 ; CHECK-DAG: savio: group of 2 ops (slice, class [[S:[0-9]+]]) in %loop
 ; CHECK-DAG: savio: group of 2 ops (scalarize slice, class [[V:[0-9]+]]) in %loop
 ; CHECK-DAG: remark: {{.*}}: T {{.*}} of slice [[S]]
 ; CHECK-DAG: remark: {{.*}}: T {{.*}} of slice [[V]]
 ; CHECK: define void @f(
-; The scalar chain was rewritten, the vector chain was not.
+; The scalar chain became a vector chain and the vector chain became scalar operations.
 ; CHECK: call <4 x i32> @llvm.savio.sv.
-; CHECK: mul <4 x i32>
-; CHECK: xor <4 x i32>
-; YAML-DAG: Name:{{ +}}Promoted
-; YAML-DAG: Name:{{ +}}Scalarized
+; CHECK-COUNT-4: mul i32
+; CHECK-COUNT-4: xor i32
+; The remark name goes with its own slice class.
+; YAML: Name:{{ +}}Promoted
+; YAML: ' of slice '
+; YAML-NEXT: String:{{ +}}'0'
+; YAML: Name:{{ +}}Scalarized
+; YAML: ' of slice '
+; YAML-NEXT: String:{{ +}}'1'
 target triple = "arm64-apple-macos"
 
 define void @f(ptr noalias %a, ptr noalias %b, ptr noalias %c, ptr noalias %d, i32 %dv, i64 %n) {

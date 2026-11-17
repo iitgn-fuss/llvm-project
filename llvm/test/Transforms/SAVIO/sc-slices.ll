@@ -2,7 +2,7 @@
 ; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -debug-only=savio -disable-output %s 2>&1 | FileCheck %s
 ; RUN: opt -passes=savio -savio-force -savio-port-info=%S/Inputs/port-info -savio-cpu=test3scv -S %s | FileCheck %s --check-prefix=IR
 ; The -O3 vector body of fmix32 (bench/savio-pass/isolation/scalarize/k.c) with four interleaved copies, as the loop
-; vectorizer leaves it at interleave count 4: each copy is a <4 x i32> load, nine vector operations, a <4 x i32> store.
+; vectorizer leaves it at interleave count 4: each copy is a <4 x i32> load, eight vector operations, a <4 x i32> store.
 ; Every copy is one Scalarize slice, all four are instances of one class (same operations, constants, owned load and
 ; store). The class is not Singleton Vectorize's; the scalar index arithmetic forms no group.
 ; CHECK: savio: group of 8 ops (scalarize slice, class [[C:[0-9]+]]) in %vector.body
@@ -22,8 +22,9 @@
 ; CHECK-NEXT: liveout: %h3 (stored)
 ; CHECK-NEXT: store: %po3
 ; CHECK-NOT: savio: group
-; The rewrite is not implemented yet: the decision is reported, the IR is unchanged.
-; IR: load <4 x i32>
+; All four copies are Scalarized: 16 scalar loads and stores, no vector operation or memory access left.
+; IR-COUNT-16: load i32
+; IR-NOT: <4 x i32>
 ; IR-NOT: @llvm.savio
 target triple = "arm64-apple-macos"
 

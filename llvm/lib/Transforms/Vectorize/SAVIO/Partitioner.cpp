@@ -34,13 +34,16 @@ cl::opt<double> llvm::SAVIOMargin(
 
 cl::opt<bool> llvm::SAVIOForce(
     "savio-force", cl::init(false), cl::Hidden,
-    cl::desc("Singleton Vectorize every candidate group regardless of cost "
+    cl::desc("Move every candidate group regardless of cost, in either "
+             "direction: scalar groups to the vector unit (Singleton "
+             "Vectorize), vector groups to scalar operations (Scalarize) "
              "(for correctness tests only)"));
 
 cl::opt<int> llvm::SAVIOForceCount(
     "savio-force-count", cl::init(-1), cl::Hidden,
-    cl::desc("Singleton Vectorize the first k instances (program order) of "
-             "the slice class with the most instances in each region, and "
+    cl::desc("Move the first k instances (program order) of the slice class "
+             "with the most instances in each region, whichever direction "
+             "that class moves (Singleton Vectorize or Scalarize), and "
              "nothing else (-1 = off; for calibration sweeps)"));
 
 static bool isShift(unsigned Opc) {

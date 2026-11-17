@@ -31,6 +31,7 @@
 #include "llvm/Transforms/Utils/UnrollLoop.h"
 #include "llvm/Transforms/Vectorize/SAVIO/Partitioner.h"
 #include "llvm/Transforms/Vectorize/SAVIO/PortDescription.h"
+#include "llvm/Transforms/Vectorize/SAVIO/Scalarize.h"
 #include "llvm/Transforms/Vectorize/SAVIO/SingletonVectorize.h"
 #include <map>
 
@@ -339,10 +340,10 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
     SmallVector<std::pair<Instruction *, unsigned>, 2> Divides;
     for (unsigned G : D.Promoted) {
       const Group &Grp = Reg.Groups[G];
-      // The Scalarize rewrite does not exist yet: a decided Scalarize group is
-      // reported and the IR is left as it is.
-      if (Grp.Dir == Direction::ToScalar)
+      if (Grp.Dir == Direction::ToScalar) {
+        rewriteScalarize(Grp, Reg.L);
         continue;
+      }
       if (!Grp.VectorDivide) {
         rewriteSingletonVectorize(Grp, Reg.L);
         continue;
@@ -355,9 +356,7 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
     }
     for (auto &[I, Mask] : Divides)
       rewriteVectorDivide(I, Mask);
-    Changed |= any_of(D.Promoted, [&](unsigned G) {
-      return Reg.Groups[G].Dir != Direction::ToScalar;
-    });
+    Changed = true;
   };
 
   bool Forced = SAVIOForce || SAVIOForceCount >= 0 || SAVIONoUnroll;
@@ -372,12 +371,6 @@ PreservedAnalyses SAVIOPass::run(Function &F, FunctionAnalysisManager &FAM) {
     if (!Forced && Reg.L) {
       SE = &FAM.getResult<ScalarEvolutionAnalysis>(F);
       CanUnroll = mayUnroll(*Reg.L, *SE);
-      // Until the Scalarize rewrite exists a Scalarize decision is only
-      // reported: do not unroll a loop for the fraction it would reach.
-      if (any_of(Reg.Groups, [](const Group &G) {
-            return G.Dir == Direction::ToScalar;
-          }))
-        CanUnroll = false;
     }
     Decision D = decide(Reg, *R.PD, Fallback, SAVIOMargin, CanUnroll);
     if (D.Unroll > 1) {
