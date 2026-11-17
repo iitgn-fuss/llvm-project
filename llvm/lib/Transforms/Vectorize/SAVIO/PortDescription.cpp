@@ -15,6 +15,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/TargetParser/Triple.h"
 #include <algorithm>
+#include <tuple>
 
 using namespace llvm;
 using namespace llvm::savio;
@@ -293,13 +294,18 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
     Expected<json::Object> T = readObject(Dir, "transfers.json");
     if (!T)
       return T.takeError();
-    static constexpr std::pair<StringLiteral, TransferKind> Kinds[] = {
-        {"gpr_to_vec", TransferKind::GprToVec},
-        {"vec_to_gpr", TransferKind::VecToGpr},
-        {"load_to_vec", TransferKind::LoadToVec},
-        {"store_from_vec", TransferKind::StoreFromVec},
-        {"lane_to_lane0", TransferKind::LaneToLane0}};
-    for (const auto &[Key, Kind] : Kinds) {
+    // Required: the Part 2 keys. Optional (Part 3, Scalarize): the lane keys.
+    static constexpr std::tuple<StringLiteral, TransferKind, bool> Kinds[] = {
+        {"gpr_to_vec", TransferKind::GprToVec, true},
+        {"vec_to_gpr", TransferKind::VecToGpr, true},
+        {"load_to_vec", TransferKind::LoadToVec, true},
+        {"store_from_vec", TransferKind::StoreFromVec, true},
+        {"lane_to_lane0", TransferKind::LaneToLane0, true},
+        {"lane_extract", TransferKind::LaneExtract, false},
+        {"lane_insert", TransferKind::LaneInsert, false}};
+    for (const auto &[Key, Kind, Required] : Kinds) {
+      if (!Required && !T->get(Key))
+        continue;
       Expected<OpCost> C = costOfOpcodes("transfers.json", "key '" + Key + "'",
                                          T->get(Key), Ops);
       if (!C)

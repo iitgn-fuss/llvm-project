@@ -120,6 +120,42 @@ TEST(SAVIOPortDescription, Transfers) {
   EXPECT_EQ(L->Latency, 0u);
 }
 
+TEST(SAVIOPortDescription, LaneTransfersOptional) {
+  // A Part-2 format directory has no lane_extract / lane_insert: it loads, and
+  // Scalarize boundaries simply cannot be costed.
+  auto PD = PortDescription::load(inputsRoot(), "AArch64", "test2s1v");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  EXPECT_FALSE((*PD)->transferCost(TransferKind::LaneExtract).has_value());
+  EXPECT_FALSE((*PD)->transferCost(TransferKind::LaneInsert).has_value());
+  EXPECT_TRUE((*PD)->transferCost(TransferKind::GprToVec).has_value());
+}
+
+TEST(SAVIOPortDescription, LaneTransfersLoaded) {
+  auto PD = PortDescription::load(inputsRoot(), "AArch64", "test3sc");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  unsigned Vector = *classId(**PD, "vector");
+  std::optional<OpCost> E = (*PD)->transferCost(TransferKind::LaneExtract);
+  ASSERT_TRUE(E.has_value());
+  EXPECT_EQ(E->Latency, 3u);
+  ASSERT_EQ(E->Uses.size(), 1u);
+  EXPECT_EQ(E->Uses[0].Class, Vector);
+  std::optional<OpCost> I = (*PD)->transferCost(TransferKind::LaneInsert);
+  ASSERT_TRUE(I.has_value());
+  EXPECT_EQ(I->Latency, 2u);
+  // The five Part-2 kinds are unchanged.
+  EXPECT_TRUE((*PD)->transferCost(TransferKind::LaneToLane0).has_value());
+}
+
+TEST(SAVIOPortDescription, LaneTransferUnknownOpcodeIsError) {
+  std::string Root = copyFixture();
+  rewrite(Root, "transfers.json", "\"lane_to_lane0\"",
+          "\"lane_extract\": [\"NOPE\"],\n  \"lane_to_lane0\"");
+  std::string Msg = loadError(Root);
+  EXPECT_NE(Msg.find("lane_extract"), std::string::npos) << Msg;
+  EXPECT_NE(Msg.find("NOPE"), std::string::npos) << Msg;
+  sys::fs::remove_directories(Root);
+}
+
 TEST(SAVIOPortDescription, MissingCPUIsNotFound) {
   auto PD = PortDescription::load(inputsRoot(), "AArch64", "nope");
   ASSERT_FALSE(!!PD);

@@ -56,8 +56,14 @@ enum class TransferKind {
   VecToGpr,
   LoadToVec,
   StoreFromVec,
-  LaneToLane0
+  LaneToLane0,
+  /// Vector lane k to a general register (umov / fmov); optional, Scalarize.
+  LaneExtract,
+  /// General register to vector lane k (ins); optional, Scalarize.
+  LaneInsert
 };
+
+constexpr unsigned NumTransferKinds = 7;
 
 class PortDescription {
 public:
@@ -77,6 +83,10 @@ public:
   /// key in ops.json when one exists (measured whole), else the sum over the
   /// machine opcodes listed for it in probes.json.
   std::optional<OpCost> irOpCost(StringRef ProbeKey) const;
+  /// Cost of a transfer, or nullopt when transfers.json has no such key. The
+  /// five Part-2 kinds are required keys; LaneExtract and LaneInsert
+  /// ("lane_extract", "lane_insert") are optional: a directory without them
+  /// cannot cost Scalarize boundaries.
   std::optional<OpCost> transferCost(TransferKind K) const;
   /// The concurrency table of a sequence entry, or null.
   const ConcurrencyTable *concurrency(StringRef ProbeKey) const;
@@ -93,7 +103,7 @@ private:
   unsigned WindowUops = 0;
   StringMap<ConcurrencyTable> Concurrency;
   StringMap<OpCost> Probes;
-  std::optional<OpCost> Transfers[5];
+  std::optional<OpCost> Transfers[NumTransferKinds];
 };
 
 /// Port-info directory name for a target triple: "AArch64" or "".

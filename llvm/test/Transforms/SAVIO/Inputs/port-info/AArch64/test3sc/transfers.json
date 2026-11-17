@@ -1,0 +1,23 @@
+{
+  "gpr_to_vec": [
+    "T_GPR_TO_VEC"
+  ],
+  "vec_to_gpr": [
+    "T_VEC_TO_GPR"
+  ],
+  "load_to_vec": [
+    "T_LD_VEC"
+  ],
+  "store_from_vec": [
+    "T_ST_VEC"
+  ],
+  "lane_to_lane0": [
+    "T_LANE0"
+  ],
+  "lane_extract": [
+    "T_LANE_EXT"
+  ],
+  "lane_insert": [
+    "T_LANE_INS"
+  ]
+}
