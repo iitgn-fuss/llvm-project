@@ -9,6 +9,7 @@
 #include "llvm/Transforms/Vectorize/SAVIO/Partitioner.h"
 #include "llvm/Transforms/Vectorize/SAVIO/Availability.h"
 #include "llvm/Transforms/Vectorize/SAVIO/PortDescription.h"
+#include "llvm/Transforms/Vectorize/SAVIO/SearchCore.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -29,6 +30,7 @@
 #include <tuple>
 #include <string>
 #include <utility>
+#include <cfloat>
 
 using namespace llvm;
 using namespace llvm::savio;
@@ -56,6 +58,24 @@ cl::opt<int> llvm::SAVIOForceCount(
 static bool isShift(unsigned Opc) {
   return Opc == Instruction::Shl || Opc == Instruction::LShr ||
          Opc == Instruction::AShr;
+}
+
+/// Singleton Vectorize gives no intrinsic flag operands.  Refuse operations
+/// whose poison/undef semantics are stronger than an ordinary scalar
+/// operation, rather than silently dropping nuw/nsw/exact.
+static bool hasPoisonFlag(const Instruction &I) {
+  if (isa<OverflowingBinaryOperator>(&I))
+    if (I.hasNoUnsignedWrap() || I.hasNoSignedWrap())
+      return true;
+  switch (I.getOpcode()) {
+  case Instruction::LShr:
+  case Instruction::AShr:
+  case Instruction::UDiv:
+  case Instruction::SDiv:
+    return I.isExact();
+  default:
+    return false;
+  }
 }
 
 /// The name of the count operation a call to llvm.ctpop.i32 / llvm.ctlz.i32
@@ -101,6 +121,8 @@ dataOperands(const Instruction &I) {
 /// is_zero_poison; the flag is an immediate, so it is always a constant).
 static bool isScalarCandidate(const Instruction &I) {
   if (!I.getType()->isIntegerTy(32))
+    return false;
+  if (hasPoisonFlag(I))
     return false;
   if (StringRef BC = bitCountName(I); !BC.empty())
     return BC == "ctpop" || isa<ConstantInt>(I.getOperand(1));
@@ -1503,6 +1525,17 @@ struct SearchResult {
   bool any() const { return !Moves.empty(); }
 };
 
+struct SearchCoreState {
+  const Region *R;
+  const RegionGraph *RG;
+  const PortDescription *PD;
+  FallbackCostFn Fallback;
+  ArrayRef<unsigned> Classes;
+  const DenseMap<unsigned, SmallVector<unsigned, 4>> *Members;
+  SmallVector<bool, 8> *Promoted;
+  unsigned Copies;
+};
+
 } // namespace
 
 /// Estimate of an assignment on the region unrolled \p Copies times, per
@@ -1537,6 +1570,30 @@ estimateAssignment(const Region &R, const RegionGraph &RG,
   return E;
 }
 
+extern "C" double savioSearchCoreEstimate(void *Raw,
+                                         const unsigned *MovedPerClass,
+                                         unsigned NumClasses) {
+  auto *State = static_cast<SearchCoreState *>(Raw);
+  for (bool &P : *State->Promoted)
+    P = false;
+  for (unsigned I = 0; I != NumClasses; ++I) {
+    unsigned C = State->Classes[I];
+    auto It = State->Members->find(C);
+    if (It == State->Members->end())
+      return DBL_MAX;
+    ArrayRef<unsigned> M = It->second;
+    unsigned K = MovedPerClass[I];
+    for (unsigned J = 0; J != K; ++J)
+      (*State->Promoted)[M[size_t(J) * M.size() / K]] = true;
+  }
+  if (std::optional<RegionEstimate> E =
+          estimateAssignment(*State->R, *State->RG, *State->PD,
+                             State->Fallback, *State->Promoted,
+                             State->Copies))
+    return E->t();
+  return DBL_MAX;
+}
+
 /// Fraction search. Unlike the greedy loop it replaces, there is no "only
 /// while the resource bound limits" precondition: any bound may be lowered,
 /// guarded by the margin. Per slice class, estimate every k of its U instances
@@ -1562,56 +1619,46 @@ static SearchResult searchFraction(const Region &R, const RegionGraph &RG,
   // the unrolled body.
   SmallVector<unsigned, 4> Classes;
   DenseMap<unsigned, SmallVector<unsigned, 4>> Members;
+  DenseSet<unsigned> RecurrenceClasses;
   for (unsigned J = 0; J != Copies; ++J)
     for (unsigned G = 0; G != NG; ++G) {
       const Group &Grp = R.Groups[G];
       if (Grp.Recurrence && J != 0)
         continue;
       unsigned C = Grp.SliceClass;
+      if (Grp.Recurrence)
+        RecurrenceClasses.insert(C);
       if (Members[C].empty())
         Classes.push_back(C);
       Members[C].push_back(Grp.Recurrence ? G : J * NG + G);
     }
-  DenseMap<unsigned, unsigned> Current;
-  auto Apply = [&](ArrayRef<unsigned> M, unsigned K) {
+  SmallVector<unsigned, 8> Sizes;
+  SmallVector<unsigned, 8> Recurrence;
+  SmallVector<unsigned, 8> Current(Classes.size(), 0);
+  for (unsigned C : Classes) {
+    Sizes.push_back(Members[C].size());
+    Recurrence.push_back(R.Groups[Members[C][0]].Recurrence ? 1 : 0);
+  }
+  SearchCoreState State{
+      &R, &RG, &PD, Fallback, Classes, &Members, &Promoted, Copies};
+  savio_search_fraction(
+      Classes.size(), Sizes.data(), Recurrence.data(), Current.data(),
+      Res.After.t(), Margin, &State, savioSearchCoreEstimate, 4);
+  for (unsigned I = 0; I != Classes.size(); ++I) {
+    unsigned C = Classes[I];
+    unsigned K = Current[I];
+    ArrayRef<unsigned> M = Members[C];
     for (unsigned G : M)
       Promoted[G] = false;
-    for (unsigned I = 0; I != K; ++I)
-      Promoted[M[size_t(I) * M.size() / K]] = true;
-  };
-  for (unsigned Round = 0; Round != 4; ++Round) {
-    bool Changed = false;
-    for (unsigned C : Classes) {
-      ArrayRef<unsigned> M = Members[C];
-      unsigned U = M.size(), Cur = Current[C];
-      std::optional<RegionEstimate> Best;
-      unsigned BestK = Cur;
-      for (unsigned K = 0; K <= U; ++K) {
-        if (K == Cur)
-          continue;
-        Apply(M, K);
-        std::optional<RegionEstimate> E = Estimate();
-        if (E && (!Best || E->t() < Best->t())) {
-          Best = E;
-          BestK = K;
-        }
-      }
-      if (Best && Res.After.t() - Best->t() > 0 &&
-          Res.After.t() - Best->t() >= Margin * Res.After.t()) {
-        Apply(M, BestK);
-        Current[C] = BestK;
-        Res.After = *Best;
-        Changed = true;
-      } else {
-        Apply(M, Cur);
-      }
-    }
-    if (!Changed)
-      break;
+    for (unsigned J = 0; J != K; ++J)
+      Promoted[M[size_t(J) * M.size() / K]] = true;
   }
-  for (unsigned C : Classes)
-    if (Current[C])
-      Res.Moves.push_back({C, Current[C], unsigned(Members[C].size())});
+  if (std::optional<RegionEstimate> Final = Estimate())
+    Res.After = *Final;
+  for (unsigned I = 0; I != Classes.size(); ++I)
+    if (Current[I])
+      Res.Moves.push_back(
+          {Classes[I], Current[I], unsigned(Members[Classes[I]].size())});
   return Res;
 }
 

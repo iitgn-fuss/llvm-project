@@ -28,6 +28,7 @@ add_llvm_component_library(LLVMVectorize
   SAVIO/Partitioner.cpp
   SAVIO/PortDescription.cpp
   SAVIO/RegionCost.cpp
+  SAVIO/SearchCore.c
   SAVIO/Scalarize.cpp
   SAVIO/SAVIOIR.cpp
   SAVIO/SingletonVectorize.cpp

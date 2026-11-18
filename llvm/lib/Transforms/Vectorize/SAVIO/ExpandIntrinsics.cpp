@@ -44,6 +44,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Module.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 
@@ -114,10 +115,15 @@ Value *expandOne(IntrinsicInst *II, Instruction::BinaryOps Opc, unsigned Lanes,
   IRBuilder<> B(II);
   if (isUnaryCount(II->getIntrinsicID())) {
     Value *A = II->getArgOperand(0);
+    auto *VecTy = cast<FixedVectorType>(II->getType());
+    Value *Lane0 = B.CreateExtractElement(A, uint64_t(0));
+    Value *Count;
     if (II->getIntrinsicID() == Intrinsic::savio_sv_ctpop)
-      return B.CreateUnaryIntrinsic(Intrinsic::ctpop, A);
-    return B.CreateIntrinsic(Intrinsic::ctlz, {A->getType()},
-                             {A, B.getFalse()});
+      Count = B.CreateUnaryIntrinsic(Intrinsic::ctpop, Lane0);
+    else
+      Count = B.CreateIntrinsic(Intrinsic::ctlz, {B.getInt32Ty()},
+                                {Lane0, B.getFalse()});
+    return B.CreateInsertElement(PoisonValue::get(VecTy), Count, uint64_t(0));
   }
   Value *A = II->getArgOperand(0), *D = II->getArgOperand(1);
   auto *VecTy = cast<FixedVectorType>(II->getType());

@@ -114,6 +114,38 @@ LoadResult loadPortInfo(StringRef Root, StringRef Arch, StringRef CPU) {
 /// Most instructions in a loop body SAVIO will unroll.
 constexpr unsigned MaxUnrollBodySize = 64;
 
+/// True if the loop header already contains a fixed-width integer vector
+/// operation that Scalarize can split.  Loop metadata alone is not enough:
+/// LLVM can mark a scalar loop remainder as isvectorized even though it contains
+/// no vector body.  In that case unrolling would only duplicate scalar work.
+static bool hasVectorCandidateBody(const BasicBlock &BB) {
+  for (const Instruction &I : BB) {
+    auto *VT = dyn_cast<FixedVectorType>(I.getType());
+    if (!VT || !(VT->getElementType()->isIntegerTy(32) ||
+                 VT->getElementType()->isIntegerTy(64)))
+      continue;
+    unsigned Bits =
+        VT->getPrimitiveSizeInBits().getFixedValue();
+    if (Bits != 128 && Bits != 256 && Bits != 512)
+      continue;
+    switch (I.getOpcode()) {
+    case Instruction::Add:
+    case Instruction::Sub:
+    case Instruction::Mul:
+    case Instruction::And:
+    case Instruction::Or:
+    case Instruction::Xor:
+    case Instruction::Shl:
+    case Instruction::LShr:
+    case Instruction::AShr:
+      return true;
+    default:
+      break;
+    }
+  }
+  return false;
+}
+
 /// True if SAVIO may unroll the single-block innermost loop \p L: a small
 /// body, no explicit unroll request or prohibition in its metadata, and a trip
 /// count ScalarEvolution can express (a loop that runs at most 8 times is left
@@ -140,11 +172,10 @@ bool mayUnroll(const Loop &L, ScalarEvolution &SE) {
     return false;
   if (MaxTC != 0 && MaxTC <= 8)
     return false;
-  // The scalar remainder of a loop the vectorizer already vectorized runs
-  // fewer than VF times: unrolling it only adds dead code.
-  if (getBooleanLoopAttribute(&L, "llvm.loop.isvectorized") ||
-      findStringMetadataForLoop(&L, "llvm.loop.vectorize.epilogue") ||
-      findStringMetadataForLoop(&L, "llvm.loop.isvectorized"))
+  if ((getBooleanLoopAttribute(&L, "llvm.loop.isvectorized") ||
+       findStringMetadataForLoop(&L, "llvm.loop.vectorize.epilogue") ||
+       findStringMetadataForLoop(&L, "llvm.loop.isvectorized")) &&
+      !hasVectorCandidateBody(*L.getHeader()))
     return false;
   return true;
 }

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Vectorize/SAVIO/Partitioner.h"
+#include "llvm/Transforms/Vectorize/SAVIO/SearchCore.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/IR/Dominators.h"
@@ -56,6 +57,68 @@ protected:
     return G;
   }
 };
+
+namespace {
+struct SearchCoreCost {
+  double Initial;
+};
+
+extern "C" double searchCoreTestEstimate(void *Raw,
+                                         const unsigned *Moved,
+                                         unsigned NumClasses) {
+  if (NumClasses != 2)
+    return 100.0;
+  double D0 = double(Moved[0]) - 2.0;
+  double D1 = double(Moved[1]) - 1.0;
+  return D0 * D0 + D1 * D1;
+}
+
+struct SearchCoreCounter {
+  unsigned Calls;
+};
+
+extern "C" double searchCoreCounterEstimate(void *Raw,
+                                             const unsigned *Moved,
+                                             unsigned NumClasses) {
+  auto *Counter = static_cast<SearchCoreCounter *>(Raw);
+  ++Counter->Calls;
+  return Moved[0] == 1 ? 1.0 : 2.0;
+}
+}
+
+TEST_F(SAVIOClassifyInputTest, CSearchCorePairSearch) {
+  const unsigned Sizes[] = {3, 2};
+  const unsigned Recurrence[] = {0, 0};
+  unsigned Moved[] = {0, 0};
+  double Best = savio_search_fraction(
+      2, Sizes, Recurrence, Moved, 5.0, 0.0, nullptr,
+      searchCoreTestEstimate, 4);
+  EXPECT_DOUBLE_EQ(Best, 0.0);
+  EXPECT_EQ(Moved[0], 2u);
+  EXPECT_EQ(Moved[1], 1u);
+}
+
+TEST_F(SAVIOClassifyInputTest, CSearchCoreRecurrenceAndCallbackCount) {
+  const unsigned Sizes[] = {8};
+  const unsigned Recurrence[] = {1};
+  unsigned Moved[] = {0};
+  SearchCoreCounter Counter{0};
+  double Best = savio_search_fraction(
+      1, Sizes, Recurrence, Moved, 2.0, 0.0, &Counter,
+      searchCoreCounterEstimate, 4);
+  EXPECT_DOUBLE_EQ(Best, 1.0);
+  EXPECT_EQ(Moved[0], 1u);
+  EXPECT_EQ(Counter.Calls, 2u);
+}
+
+TEST_F(SAVIOClassifyInputTest, CSearchCoreNullEstimateIsNoOp) {
+  const unsigned Sizes[] = {4};
+  unsigned Moved[] = {0};
+  double Best = savio_search_fraction(
+      1, Sizes, nullptr, Moved, 3.25, 0.05, nullptr, nullptr, 4);
+  EXPECT_DOUBLE_EQ(Best, 3.25);
+  EXPECT_EQ(Moved[0], 0u);
+}
 
 TEST_F(SAVIOClassifyInputTest, Constant) {
   Function *F = parse(R"(
