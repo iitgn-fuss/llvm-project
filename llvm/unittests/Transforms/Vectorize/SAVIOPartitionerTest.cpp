@@ -1254,4 +1254,122 @@ TEST_F(SAVIOClassifyInputTest, ScalarizeMissingKeyIsNotCostable) {
   EXPECT_TRUE(D.Promoted.empty());
 }
 
+/// Four counts (ctpop or ctlz, \p Fn) of loaded values, each stored: one slice,
+/// four instances. The fixture test-avx512-bitcount (x86 layout: two scalar
+/// units, one vector unit; scalar count 2 port-cycles, vector count 1; one
+/// cycle per transfer) has the keys; test-avx512 lacks 'sv.ctpop v4i32' and
+/// 'sv.ctlz v4i32'.
+static std::string bitCountLoop(const char *Fn) {
+  std::string IR = std::string("declare i32 @llvm.") + Fn + ".i32(i32" +
+                   (StringRef(Fn) == "ctlz" ? ", i1 immarg" : "") + ")\n";
+  IR += "define void @f(ptr %b, ptr %o, i64 %n) {\nentry:\n  br label %loop\n"
+        "loop:\n  %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]\n";
+  for (int K = 0; K != 4; ++K) {
+    std::string N = std::to_string(K);
+    IR += "  %pb" + N + " = getelementptr inbounds i32, ptr %b, i64 " + N + "\n";
+    IR += "  %b" + N + " = load i32, ptr %pb" + N + "\n";
+    IR += "  %r" + N + " = call i32 @llvm." + Fn + ".i32(i32 %b" + N +
+          (StringRef(Fn) == "ctlz" ? ", i1 false" : "") + ")\n";
+    IR += "  %po" + N + " = getelementptr inbounds i32, ptr %o, i64 " + N + "\n";
+    IR += "  store i32 %r" + N + ", ptr %po" + N + "\n";
+  }
+  IR += "  %i.next = add nuw i64 %i, 1\n  %cmp = icmp ult i64 %i.next, %n\n"
+        "  br i1 %cmp, label %loop, label %exit\nexit:\n  ret void\n}\n";
+  return IR;
+}
+
+static Expected<std::unique_ptr<PortDescription>> loadX86Fixture(StringRef Cpu) {
+  SmallString<128> Root(SAVIO_TEST_INPUTS);
+  sys::path::append(Root, "..", "X86", "Inputs", "port-info");
+  return PortDescription::load(Root, "x86", Cpu);
+}
+
+TEST_F(SAVIOClassifyInputTest, BitCountCandidatesMoveAFraction) {
+  for (const char *Fn : {"ctpop", "ctlz"}) {
+    SCOPED_TRACE(Fn);
+    Function *F = parse(bitCountLoop(Fn));
+    ASSERT_TRUE(F);
+    DominatorTree DT(*F);
+    LoopInfo LI(DT);
+    auto PDOrErr = loadX86Fixture("test-avx512-bitcount");
+    ASSERT_TRUE(!!PDOrErr) << toString(PDOrErr.takeError());
+    SmallVector<Region, 4> Regions = formRegions(*F, LI, 4, PDOrErr->get());
+    ASSERT_EQ(Regions.size(), 1u);
+    const Region &R = Regions[0];
+    ASSERT_EQ(R.Groups.size(), 4u);
+    for (const Group &G : R.Groups) {
+      ASSERT_EQ(G.Ops.size(), 1u);
+      EXPECT_EQ(G.Dir, Direction::ToVector);
+      EXPECT_EQ(G.SliceClass, R.Groups[0].SliceClass);
+      // One data operand: the load; the callee and the ctlz flag are no input.
+      EXPECT_EQ(G.Inputs.size(), 1u);
+    }
+    auto Fallback = [](const Instruction &) {
+      OpCost C;
+      C.Latency = 1;
+      C.Uops = 1;
+      return C;
+    };
+    // The loaded values feed the vector counts directly and the results are
+    // stored from lane 0, so no transfer is charged: T(k) = max(2 (4 - k) / 2
+    // scalar units, k vector cycles) = 4, 3, 2, 3, 4 for k = 0..4: k = 2.
+    Decision D = decide(R, **PDOrErr, Fallback, 0.05);
+    ASSERT_EQ(D.MovedPerClass.size(), 1u);
+    EXPECT_EQ(D.MovedPerClass[0].K, 2u);
+    EXPECT_EQ(D.MovedPerClass[0].U, 4u);
+    EXPECT_DOUBLE_EQ(D.Before.t(), 4.0);
+    EXPECT_DOUBLE_EQ(D.After.t(), 2.0);
+  }
+}
+
+TEST_F(SAVIOClassifyInputTest, BitCountWithoutVectorKeyIsNotACandidate) {
+  for (const char *Fn : {"ctpop", "ctlz"}) {
+    SCOPED_TRACE(Fn);
+    Function *F = parse(bitCountLoop(Fn));
+    ASSERT_TRUE(F);
+    DominatorTree DT(*F);
+    LoopInfo LI(DT);
+    auto PDOrErr = loadX86Fixture("test-avx512");
+    ASSERT_TRUE(!!PDOrErr) << toString(PDOrErr.takeError());
+    // Not available: no group, so no region and nothing moves (k = 0 of U).
+    EXPECT_TRUE(formRegions(*F, LI, 4, PDOrErr->get()).empty());
+  }
+}
+
+TEST_F(SAVIOClassifyInputTest, BitCountOnALoopCarriedChainStaysScalar) {
+  // s = ctpop(s) + a[i]: the count is on the chain, so the chain is not a
+  // candidate; the off-chain count of the loaded value is.
+  Function *F = parse(R"(
+    declare i32 @llvm.ctpop.i32(i32)
+    define void @f(ptr %b, ptr %o, i64 %n) {
+    entry:
+      br label %loop
+    loop:
+      %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+      %s = phi i32 [ 0, %entry ], [ %s.next, %loop ]
+      %pb = getelementptr inbounds i32, ptr %b, i64 %i
+      %v = load i32, ptr %pb
+      %c = call i32 @llvm.ctpop.i32(i32 %s)
+      %s.next = add i32 %c, %v
+      %w = call i32 @llvm.ctpop.i32(i32 %v)
+      %po = getelementptr inbounds i32, ptr %o, i64 %i
+      store i32 %w, ptr %po
+      store i32 %s.next, ptr %o
+      %i.next = add nuw i64 %i, 1
+      %cmp = icmp ult i64 %i.next, %n
+      br i1 %cmp, label %loop, label %exit
+    exit:
+      ret void
+    })");
+  ASSERT_TRUE(F);
+  DominatorTree DT(*F);
+  LoopInfo LI(DT);
+  SmallVector<Region, 4> Regions = formRegions(*F, LI);
+  ASSERT_EQ(Regions.size(), 1u);
+  ASSERT_EQ(Regions[0].Groups.size(), 1u);
+  EXPECT_FALSE(Regions[0].Groups[0].Recurrence);
+  ASSERT_EQ(Regions[0].Groups[0].Ops.size(), 1u);
+  EXPECT_EQ(Regions[0].Groups[0].Ops[0]->getName(), "w");
+}
+
 } // namespace

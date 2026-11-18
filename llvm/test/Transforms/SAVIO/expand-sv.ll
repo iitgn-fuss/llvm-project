@@ -1,4 +1,5 @@
 ; RUN: opt -passes=savio-expand -S %s | FileCheck %s
+; RUN: opt -passes=savio-expand,instsimplify -S %s | FileCheck %s --check-prefix=CONST
 
 declare <4 x i32> @llvm.savio.sv.add.v4i32(<4 x i32>, <4 x i32>)
 declare <4 x i32> @llvm.savio.sv.shl.v4i32(<4 x i32>, <4 x i32>)
@@ -67,5 +68,23 @@ define <4 x i32> @ctpop(<4 x i32> %a) {
 ; CHECK-NOT: llvm.savio
 define <4 x i32> @ctlz(<4 x i32> %a) {
   %r = call <4 x i32> @llvm.savio.sv.ctlz.v4i32(<4 x i32> %a)
+  ret <4 x i32> %r
+}
+
+; A constant vector through the expansion and constant folding. Only lane 0 is
+; what the intrinsic defines (ctlz of 0 is 32, ctpop of 0 is 0); the other lanes
+; are poison by the LangRef and here show what the whole-vector expansion
+; computes: they are not part of the semantics.
+; CONST-LABEL: @ctlz_const(
+; CONST: ret <4 x i32> <i32 32, i32 0, i32 31, i32 32>
+define <4 x i32> @ctlz_const() {
+  %r = call <4 x i32> @llvm.savio.sv.ctlz.v4i32(<4 x i32> <i32 0, i32 -1, i32 1, i32 0>)
+  ret <4 x i32> %r
+}
+
+; CONST-LABEL: @ctpop_const(
+; CONST: ret <4 x i32> <i32 0, i32 32, i32 1, i32 0>
+define <4 x i32> @ctpop_const() {
+  %r = call <4 x i32> @llvm.savio.sv.ctpop.v4i32(<4 x i32> <i32 0, i32 -1, i32 1, i32 0>)
   ret <4 x i32> %r
 }

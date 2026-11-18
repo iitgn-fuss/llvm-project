@@ -180,8 +180,8 @@ bool expandFunction(Function &F, const SAVIOKeepFn &Keep) {
     if (!II)
       continue;
     Instruction::BinaryOps Opc = Instruction::Add;
-    unsigned Lanes;
-    bool IsDiv;
+    unsigned Lanes = 0;
+    bool IsDiv = false;
     if (!isUnaryCount(II->getIntrinsicID()) &&
         !classify(II->getIntrinsicID(), Opc, Lanes, IsDiv))
       continue;

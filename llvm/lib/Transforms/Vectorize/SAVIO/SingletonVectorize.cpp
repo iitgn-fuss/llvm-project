@@ -21,8 +21,20 @@
 using namespace llvm;
 using namespace llvm::savio;
 
-static Intrinsic::ID svIntrinsicFor(unsigned Opcode) {
-  switch (Opcode) {
+/// The llvm.savio.sv.* intrinsic of the in-scope operation \p I (see
+/// isScalarCandidate in Partitioner.cpp).
+static Intrinsic::ID svIntrinsicFor(const Instruction &I) {
+  if (auto *C = dyn_cast<CallInst>(&I)) {
+    switch (C->getIntrinsicID()) {
+    case Intrinsic::ctpop:
+      return Intrinsic::savio_sv_ctpop;
+    case Intrinsic::ctlz:
+      return Intrinsic::savio_sv_ctlz;
+    default:
+      llvm_unreachable("call is not in scope of Singleton Vectorize");
+    }
+  }
+  switch (I.getOpcode()) {
   case Instruction::Add:
     return Intrinsic::savio_sv_add;
   case Instruction::Sub:
@@ -138,7 +150,11 @@ public:
 
     for (Instruction *Op : G.Ops) {
       Value *Args[2];
-      for (unsigned I = 0; I != 2; ++I) {
+      // llvm.ctpop / llvm.ctlz have one data operand (the flag of llvm.ctlz
+      // is an immediate that the one-operand llvm.savio.sv.ctlz does not
+      // take); every other operation is binary.
+      unsigned NumArgs = isa<CallInst>(Op) ? 1 : 2;
+      for (unsigned I = 0; I != NumArgs; ++I) {
         Value *V = Op->getOperand(I);
         // Arguments and constants are never in the group; they may be cached
         // in VecOf as inputs, which enter() reuses.
@@ -157,9 +173,9 @@ public:
       B.SetInsertPoint(Op);
       B.SetCurrentDebugLocation(Op->getDebugLoc());
       Function *Decl =
-          Intrinsic::getOrInsertDeclaration(M, svIntrinsicFor(Op->getOpcode()),
-                                            {VecTy});
-      VecOf[Op] = B.CreateCall(Decl, Args, Op->getName() + ".sv");
+          Intrinsic::getOrInsertDeclaration(M, svIntrinsicFor(*Op), {VecTy});
+      VecOf[Op] = B.CreateCall(Decl, ArrayRef(Args, NumArgs),
+                               Op->getName() + ".sv");
     }
 
     // One incoming per edge from the latch: a switch may reach the header

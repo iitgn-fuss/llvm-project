@@ -25957,7 +25957,7 @@ program changes meaning.
 ##### Syntax:
 
 These are overloaded intrinsics with one operand; the result and the operand
-have the same type.
+have the same type. The element type must be `i32`.
 
 ```
 declare <4 x i32> @llvm.savio.sv.ctpop.v4i32(<4 x i32> %a)
@@ -25966,8 +25966,8 @@ declare <4 x i32> @llvm.savio.sv.ctlz.v4i32(<4 x i32> %a)
 
 ##### Overview:
 
-Each intrinsic performs the scalar `i32` operation of the same name
-(`llvm.ctpop`, `llvm.ctlz`) on lane 0 of its operand.
+Each intrinsic performs the scalar operation of the same name (`llvm.ctpop`,
+`llvm.ctlz` on an `i32`) on lane 0 of its operand.
 
 ##### Semantics:
 

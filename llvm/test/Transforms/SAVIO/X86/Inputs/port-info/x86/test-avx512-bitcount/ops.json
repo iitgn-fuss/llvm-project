@@ -1,0 +1,501 @@
+{
+  "ops": [
+    {
+      "opcode": "T_ADD",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VADD",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_SUB",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VSUB",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_MUL",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VMUL",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_AND",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VAND",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_OR",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VOR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_XOR",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VXOR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_SHL",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VSHL",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_LSHR",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VLSHR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_ASHR",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VASHR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_UDIV",
+      "uses": [
+        {
+          "class": "int_div",
+          "cycles": 4
+        }
+      ],
+      "latency": 9,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_MSUB",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VUDIV_FP",
+      "uses": [
+        {
+          "class": "fp_div",
+          "cycles": 4
+        }
+      ],
+      "latency": 11,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VUDIV_FIX",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 3
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_GPR_TO_VEC",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VEC_TO_GPR",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_LANE0",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_LD_VEC",
+      "uses": [],
+      "latency": 0,
+      "uops": 0,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_ST_VEC",
+      "uses": [],
+      "latency": 0,
+      "uops": 0,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_LANE_EXT",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 3
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_LANE_INS",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 3
+        }
+      ],
+      "latency": 2,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_LD",
+      "uses": [
+        {
+          "class": "mem",
+          "cycles": 1
+        }
+      ],
+      "latency": 4,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_ST",
+      "uses": [
+        {
+          "class": "mem",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_LDV",
+      "uses": [
+        {
+          "class": "mem",
+          "cycles": 1
+        }
+      ],
+      "latency": 4,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_STV",
+      "uses": [
+        {
+          "class": "mem",
+          "cycles": 1
+        }
+      ],
+      "latency": 1,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VUSRA",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_XORSH",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 1
+        }
+      ],
+      "latency": 2,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_POPCNT",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 2
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VPOPCNT",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_LZCNT",
+      "uses": [
+        {
+          "class": "scalar",
+          "cycles": 2
+        }
+      ],
+      "latency": 3,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    },
+    {
+      "opcode": "T_VLZCNT",
+      "uses": [
+        {
+          "class": "vector",
+          "cycles": 1
+        }
+      ],
+      "latency": 4,
+      "uops": 1,
+      "source": "estimate",
+      "evidence": "synthetic fixture, not measured: numbers are consistent for the SAVIO lit tests only"
+    }
+  ]
+}

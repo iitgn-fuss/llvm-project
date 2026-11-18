@@ -18,6 +18,8 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/MathExtras.h"
@@ -56,11 +58,52 @@ static bool isShift(unsigned Opc) {
          Opc == Instruction::AShr;
 }
 
+/// The name of the count operation a call to llvm.ctpop.i32 / llvm.ctlz.i32
+/// is ("ctpop" / "ctlz"; any is_zero_poison flag), else empty. These are the
+/// only calls SAVIO prices or moves; they have one data operand (the second
+/// operand of llvm.ctlz is the immediate flag, and the callee is an operand of
+/// every call: use dataOperands, not operands()).
+static StringRef bitCountName(const Instruction &I) {
+  if (!I.getType()->isIntegerTy(32))
+    return "";
+  switch (I.getOpcode() == Instruction::Call
+              ? cast<CallInst>(I).getIntrinsicID()
+              : Intrinsic::not_intrinsic) {
+  case Intrinsic::ctpop:
+    return "ctpop";
+  case Intrinsic::ctlz:
+    return "ctlz";
+  default:
+    return "";
+  }
+}
+
+/// The operation name of \p I as the port-info keys spell it: the opcode name,
+/// or "ctpop" / "ctlz" for those calls.
+static std::string opName(const Instruction &I) {
+  StringRef BC = bitCountName(I);
+  return BC.empty() ? std::string(I.getOpcodeName()) : BC.str();
+}
+
+/// The operands of \p I that are data: all of them, except for a call, where
+/// the callee (and the immediate flag of llvm.ctlz, which is no data) are left
+/// out.
+static iterator_range<User::const_op_iterator>
+dataOperands(const Instruction &I) {
+  if (!bitCountName(I).empty())
+    return make_range(I.op_begin(), I.op_begin() + 1);
+  return I.operands();
+}
+
 /// Singleton Vectorize candidates: i32 add sub mul and or xor shl lshr ashr
-/// udiv urem.
+/// udiv urem, and calls to llvm.ctpop.i32 / llvm.ctlz.i32 (the latter's
+/// lane-0 form defines the zero case as 32, which is exact for both values of
+/// is_zero_poison; the flag is an immediate, so it is always a constant).
 static bool isScalarCandidate(const Instruction &I) {
   if (!I.getType()->isIntegerTy(32))
     return false;
+  if (StringRef BC = bitCountName(I); !BC.empty())
+    return BC == "ctpop" || isa<ConstantInt>(I.getOperand(1));
   switch (I.getOpcode()) {
   case Instruction::Add:
   case Instruction::Sub:
@@ -120,7 +163,7 @@ static bool isAvailable(const PortDescription *PD, Transform X,
                         const Instruction &I, unsigned L = 0) {
   if (!PD)
     return true;
-  std::string Op = I.getOpcodeName();
+  std::string Op = opName(I);
   if (isShift(I.getOpcode()) &&
       (X == Transform::SingletonVectorize ? isa<ConstantInt>(I.getOperand(1))
                                           : isImmAmount(I.getOperand(1))))
@@ -129,8 +172,8 @@ static bool isAvailable(const PortDescription *PD, Transform X,
   std::optional<std::string> Missing = firstMissing(
       *PD, Keys, X == Transform::Scalarize ? typeKey(I.getType()) : "");
   LLVM_DEBUG({
-    dbgs() << "savio: " << transformName(X) << " of " << I.getOpcodeName()
-           << ' ' << *I.getType();
+    dbgs() << "savio: " << transformName(X) << " of " << opName(I) << ' '
+           << *I.getType();
     if (Missing) {
       dbgs() << " not available: missing '" << *Missing << "'\n";
     } else {
@@ -314,9 +357,9 @@ static std::string sliceKey(const Group &G, const Loop *L, unsigned RegionNo) {
   if (G.Dir == Direction::ToScalar)
     OS << "scalarize " << *G.Ops[0]->getType() << ':';
   for (const Instruction *I : G.Ops) {
-    OS << I->getOpcodeName() << '(';
+    OS << opName(*I) << '(';
     bool First = true;
-    for (const Value *V : I->operands()) {
+    for (const Value *V : dataOperands(*I)) {
       if (!First)
         OS << ',';
       First = false;
@@ -397,6 +440,12 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
   SmallVector<SmallVector<unsigned, 4>, 8> CompNodes(CompCycle.size());
   for (unsigned I = 0; I != N; ++I)
     CompNodes[Comp[I]].push_back(I);
+  // A bit count on a loop-carried chain stays scalar (v1: such chains are
+  // pinned unless every member is a plain arithmetic operation); the rest of
+  // that chain is then pinned with it. Bit counts off every chain move.
+  for (unsigned I = 0; I != N; ++I)
+    if (CompCycle[Comp[I]] && !bitCountName(*RG.Insts[I]).empty())
+      InScope[I] = false;
 
   // Group number of each node, or none: a recurrence is one group, the other
   // candidates group by use-def.
@@ -499,9 +548,11 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
       return P && is_contained(Grp.CarriedPhis, P);
     };
     for (Instruction *I : Grp.Ops) {
-      for (Use &U : I->operands())
+      for (unsigned K = 0, E = size(dataOperands(*I)); K != E; ++K) {
+        Use &U = I->getOperandUse(K);
         if (!InGroup(U.get()))
           Grp.Inputs.push_back(&U);
+      }
       if (any_of(I->users(), [&](User *U) { return !InGroup(U); }))
         Grp.LiveOuts.push_back(I);
     }
@@ -916,6 +967,8 @@ static std::optional<OpCost> outOfGroupOpCost(const PortDescription &PD,
   } else if (auto *ST = dyn_cast<StoreInst>(&I)) {
     C = PD.irOpCost(
         "store " + typeKey(ST->getValueOperand()->getType()));
+  } else if (!bitCountName(I).empty()) {
+    C = PD.irOpCost(opName(I) + " i32");
   } else if (I.isBinaryOp() && !I.getType()->isFPOrFPVectorTy()) {
     bool Imm = isa<ConstantInt>(I.getOperand(1)) &&
                (I.getOpcode() == Instruction::Shl ||
@@ -1238,15 +1291,10 @@ private:
     } else if (InGroup) {
       std::string Key;
       if (P) {
-        bool Imm = isa<ConstantInt>(I.getOperand(1)) &&
-                   (I.getOpcode() == Instruction::Shl ||
-                    I.getOpcode() == Instruction::LShr ||
-                    I.getOpcode() == Instruction::AShr);
-        Key = ("sv." + Twine(I.getOpcodeName()) +
-               (Imm ? ".imm v4i32" : " v4i32"))
-                  .str();
+        bool Imm = isShift(I.getOpcode()) && isa<ConstantInt>(I.getOperand(1));
+        Key = "sv." + opName(I) + (Imm ? ".imm v4i32" : " v4i32");
       } else {
-        Key = (Twine(I.getOpcodeName()) + " i32").str();
+        Key = opName(I) + " i32";
       }
       C = PD.irOpCost(Key);
       if (!C && P)
