@@ -3218,6 +3218,16 @@ foreach Op = ["add", "sub", "mul", "and", "or", "xor", "shl", "lshr", "ashr",
                               [LLVMMatchType<0>, LLVMMatchType<0>],
                               [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
+// One-operand forms: lane 0 of the result is ctpop / ctlz of lane 0 of the
+// operand (ctlz of 0 is the element width: is_zero_poison is false); the other
+// lanes are poison. Same type rules and attributes as the two-operand forms
+// above; the mangled name of the <4 x i32> form is llvm.savio.sv.<op>.v4i32.
+foreach Op = ["ctpop", "ctlz"] in
+  def int_savio_sv_#Op
+      : DefaultAttrsIntrinsic<[llvm_anyvector_ty],
+                              [LLVMMatchType<0>],
+                              [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
 // Lanes 0 .. L-1 of the result are the exact unsigned quotient (udiv) or
 // remainder (urem) of lanes 0 .. L-1 of the operands; the other lanes are
 // poison. The element type must be i32 and L at most the number of lanes (the

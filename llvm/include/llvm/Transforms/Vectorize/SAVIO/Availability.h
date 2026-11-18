@@ -37,7 +37,8 @@ StringRef transformName(Transform X);
 /// appended for a shift by a constant amount) on type \p Ty: the scalar type
 /// for Singleton Vectorize, the fixed vector type for the other two. \p L is
 /// the lane count of the fp-divide sequence (FpDivideLanes only).
-///   SingletonVectorize: "sv.<op> v4i32", "gpr_to_vec", "vec_to_gpr".
+///   SingletonVectorize: "sv.<op> v4i32", "gpr_to_vec", "vec_to_gpr"
+///     (<op> may also be "ctpop" or "ctlz", the one-operand sv forms).
 ///   FpDivideLanes:      "<op> v<N>i32", fpDivideKey(L lanes, group of L).
 ///   Scalarize:          "<op> v<N>i<W>", "<op> i<W>", "load"/"store" of both
 ///                       types, "lane_extract", "lane_insert".

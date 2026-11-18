@@ -13,6 +13,10 @@
 //    refinement. (Shifts: a lane whose count is out of range is poison in IR
 //    too, which only touches that lane.)
 //
+//  sv.ctpop / sv.ctlz (one operand): llvm.ctpop / llvm.ctlz(x, false) of the
+//    whole vector. Lane 0 is exactly the scalar result (ctlz of 0 is the
+//    element width); the other lanes are poison in the intrinsic.
+//
 //  sv.udiv / sv.urem: lane 0 only, through double precision:
 //    extract, uitofp i32 -> double, fdiv, fptoui, [urem: a - q*b], insert into
 //    poison. A zero divisor gives inf/NaN, whose fptoui is poison in IR; that
@@ -49,8 +53,14 @@ using namespace llvm;
 
 namespace {
 
+/// True for the one-operand sv forms (sv.ctpop, sv.ctlz).
+bool isUnaryCount(Intrinsic::ID ID) {
+  return ID == Intrinsic::savio_sv_ctpop || ID == Intrinsic::savio_sv_ctlz;
+}
+
 /// Binary opcode of an sv.<op> / fpdiv.<op> intrinsic; false if \p ID is not
-/// one. \p Lanes is 0 for sv.*, L for fpdiv<L>.*.
+/// one. \p Lanes is 0 for sv.*, L for fpdiv<L>.*. The one-operand count forms
+/// are not binary: see isUnaryCount.
 bool classify(Intrinsic::ID ID, Instruction::BinaryOps &Opc, unsigned &Lanes,
               bool &IsDiv) {
   Lanes = 0;
@@ -102,6 +112,13 @@ bool classify(Intrinsic::ID ID, Instruction::BinaryOps &Opc, unsigned &Lanes,
 Value *expandOne(IntrinsicInst *II, Instruction::BinaryOps Opc, unsigned Lanes,
                  bool IsDiv) {
   IRBuilder<> B(II);
+  if (isUnaryCount(II->getIntrinsicID())) {
+    Value *A = II->getArgOperand(0);
+    if (II->getIntrinsicID() == Intrinsic::savio_sv_ctpop)
+      return B.CreateUnaryIntrinsic(Intrinsic::ctpop, A);
+    return B.CreateIntrinsic(Intrinsic::ctlz, {A->getType()},
+                             {A, B.getFalse()});
+  }
   Value *A = II->getArgOperand(0), *D = II->getArgOperand(1);
   auto *VecTy = cast<FixedVectorType>(II->getType());
   if (!IsDiv)
@@ -150,7 +167,8 @@ bool moduleDeclaresSAVIO(const Module &M) {
   bool IsDiv;
   for (const Function &Fn : M)
     if (Fn.isIntrinsic() &&
-        classify(Fn.getIntrinsicID(), Opc, Lanes, IsDiv))
+        (isUnaryCount(Fn.getIntrinsicID()) ||
+         classify(Fn.getIntrinsicID(), Opc, Lanes, IsDiv)))
       return true;
   return false;
 }
@@ -161,10 +179,11 @@ bool expandFunction(Function &F, const SAVIOKeepFn &Keep) {
     auto *II = dyn_cast<IntrinsicInst>(&I);
     if (!II)
       continue;
-    Instruction::BinaryOps Opc;
+    Instruction::BinaryOps Opc = Instruction::Add;
     unsigned Lanes;
     bool IsDiv;
-    if (!classify(II->getIntrinsicID(), Opc, Lanes, IsDiv))
+    if (!isUnaryCount(II->getIntrinsicID()) &&
+        !classify(II->getIntrinsicID(), Opc, Lanes, IsDiv))
       continue;
     if (Keep && Keep(II->getIntrinsicID()))
       continue;

@@ -25952,6 +25952,31 @@ behavior), so the intrinsics are speculatable. SAVIO only creates them from
 scalar operations that were already undefined on a zero divisor, so no defined
 program changes meaning.
 
+#### '`llvm.savio.sv.ctpop`' and '`llvm.savio.sv.ctlz`' Intrinsics
+
+##### Syntax:
+
+These are overloaded intrinsics with one operand; the result and the operand
+have the same type.
+
+```
+declare <4 x i32> @llvm.savio.sv.ctpop.v4i32(<4 x i32> %a)
+declare <4 x i32> @llvm.savio.sv.ctlz.v4i32(<4 x i32> %a)
+```
+
+##### Overview:
+
+Each intrinsic performs the scalar `i32` operation of the same name
+(`llvm.ctpop`, `llvm.ctlz`) on lane 0 of its operand.
+
+##### Semantics:
+
+Lane 0 of the result is `ctpop i32 %a[0]`, or `ctlz i32 %a[0], i1 false` (a zero
+value gives 32). The other lanes of the result are `poison`; the other lanes of
+the operand are ignored and may be `poison`. The intrinsics never have
+undefined behavior, for any operand lanes. On x86 they lower to the vector
+`llvm.ctpop` / `llvm.ctlz` (`vpopcntd`, `vplzcntd` with AVX512).
+
 #### '`llvm.savio.fpdiv<L>.*`' Intrinsics
 
 ##### Syntax:

@@ -35,6 +35,15 @@ TEST(SAVIOAvailability, RequiredKeysSingletonVectorize) {
             (Keys{"sv.shl.imm v4i32", "gpr_to_vec", "vec_to_gpr"}));
 }
 
+TEST(SAVIOAvailability, SingletonVectorizeCtpopKeys) {
+  LLVMContext Ctx;
+  Type *I32 = Type::getInt32Ty(Ctx);
+  EXPECT_EQ(requiredKeys(Transform::SingletonVectorize, "ctpop", I32, 0),
+            (Keys{"sv.ctpop v4i32", "gpr_to_vec", "vec_to_gpr"}));
+  EXPECT_EQ(requiredKeys(Transform::SingletonVectorize, "ctlz", I32, 0),
+            (Keys{"sv.ctlz v4i32", "gpr_to_vec", "vec_to_gpr"}));
+}
+
 TEST(SAVIOAvailability, RequiredKeysFpDivideLanes) {
   LLVMContext Ctx;
   Type *V8 = FixedVectorType::get(Type::getInt32Ty(Ctx), 8);

@@ -48,3 +48,24 @@ define <4 x i32> @urem(<4 x i32> %a, <4 x i32> %b) {
   %r = call <4 x i32> @llvm.savio.sv.urem.v4i32(<4 x i32> %a, <4 x i32> %b)
   ret <4 x i32> %r
 }
+
+; One-operand counts: the whole-vector llvm.ctpop / llvm.ctlz (zero gives the
+; element width, so is_zero_poison is false).
+declare <4 x i32> @llvm.savio.sv.ctpop.v4i32(<4 x i32>)
+declare <4 x i32> @llvm.savio.sv.ctlz.v4i32(<4 x i32>)
+
+; CHECK-LABEL: @ctpop(
+; CHECK: call <4 x i32> @llvm.ctpop.v4i32(<4 x i32> %a)
+; CHECK-NOT: llvm.savio
+define <4 x i32> @ctpop(<4 x i32> %a) {
+  %r = call <4 x i32> @llvm.savio.sv.ctpop.v4i32(<4 x i32> %a)
+  ret <4 x i32> %r
+}
+
+; CHECK-LABEL: @ctlz(
+; CHECK: call <4 x i32> @llvm.ctlz.v4i32(<4 x i32> %a, i1 false)
+; CHECK-NOT: llvm.savio
+define <4 x i32> @ctlz(<4 x i32> %a) {
+  %r = call <4 x i32> @llvm.savio.sv.ctlz.v4i32(<4 x i32> %a)
+  ret <4 x i32> %r
+}
