@@ -3,8 +3,9 @@
 ; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -mcpu=pentium4 -savio-cpu=nope -pass-remarks-missed=savio -S %t.i386.ll -o %t.out1.ll 2>&1 | FileCheck %s --check-prefix=I386
 ; RUN: FileCheck %s --input-file=%t.out1.ll
 ; RUN: sed 's/@TRIPLE@/riscv64-unknown-linux-gnu/' %s > %t.rv.ll
-; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -savio-cpu=nope -pass-remarks-missed=savio -S %t.rv.ll -o %t.out2.ll 2>&1 | FileCheck %s --check-prefix=RV64
+; RUN: opt -passes=savio-ir -savio-port-info=%S/Inputs/port-info -mattr=+v -savio-cpu=nope -pass-remarks-missed=savio -S %t.rv.ll -o %t.out2.ll 2>&1 | FileCheck %s --check-prefix=RV64
 ; RUN: FileCheck %s --input-file=%t.out2.ll
+; (riscv64 likewise needs +v: with a RISC-V target built in, it has no vector registers without it and SAVIO bails first.)
 ; An architecture with no port-info directory: the remark names the architecture, IR unchanged.
 target triple = "@TRIPLE@"
 

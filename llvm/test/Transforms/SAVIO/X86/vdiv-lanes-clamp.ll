@@ -1,15 +1,10 @@
-; RUN: opt -passes=savio-ir,verify -savio-force-count=8 -mtriple=x86_64-unknown-linux-gnu -mcpu=haswell -savio-port-info=%S/Inputs/port-info -savio-cpu=test-avx512 -debug-only=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir,verify -savio-force-count=8 -mtriple=x86_64-unknown-linux-gnu -mcpu=haswell -savio-port-info=%S/Inputs/port-info -savio-cpu=test-avx512 -debug-only=savio -S %s 2>&1 | FileCheck %s --implicit-check-not=v16i32 --implicit-check-not=fpdiv16
 ; test-avx512 is a 512-bit vector machine but the target (haswell) has 256-bit vector registers: the lane group is
 ; clamped to 256 / 64 = 4. A <8 x i32> divide moves at most fpdiv8 as two groups, never fpdiv16, and the 512-bit
 ; <16 x i32> divide is not a candidate at all (no key of it is looked up).
-; The keys looked up are logged (-debug-only=savio): those of the <8 x i32> divide, none of v16i32.
-; CHECK-NOT: v16i32
-; CHECK-NOT: fpdiv16
+; The keys looked up are logged (-debug-only=savio): those of the <8 x i32> divide, none of v16i32 (--implicit-check-not: neither v16i32 nor fpdiv16 appears anywhere, debug output and IR alike).
 ; CHECK: savio: fpdiv-lanes of udiv <8 x i32> keys: 'udiv v8i32' 'fpdiv4.udiv v8i32'
-; CHECK-NOT: v16i32
 ; CHECK: call <8 x i32> @llvm.savio.fpdiv8.udiv.v8i32(
-; CHECK-NOT: llvm.savio.fpdiv16
-; CHECK-NOT: v16i32
 ; REQUIRES: asserts
 define void @f(ptr %b, ptr %c, ptr %o, ptr %b2, ptr %c2, ptr %o2, i64 %n) {
 entry:

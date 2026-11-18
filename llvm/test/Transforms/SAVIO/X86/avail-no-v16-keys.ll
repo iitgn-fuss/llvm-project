@@ -1,10 +1,10 @@
 ; REQUIRES: asserts
-; RUN: opt -passes=savio-ir,verify -savio-force -mtriple=x86_64-unknown-linux-gnu -mcpu=skylake-avx512 -savio-port-info=%S/Inputs/port-info -savio-cpu=test-avx512-no-v16i32 -debug-only=savio -S %s 2>&1 | FileCheck %s
+; RUN: opt -passes=savio-ir,verify -savio-force -mtriple=x86_64-unknown-linux-gnu -mcpu=skylake-avx512 -savio-port-info=%S/Inputs/port-info -savio-cpu=test-avx512-no-v16i32 -debug-only=savio -S %s 2>&1 | FileCheck %s --implicit-check-not="group of"
 ; A <16 x i32> loop (512-bit: a Scalarize candidate by width, a udiv lane-group candidate with 512-bit registers) with
-; every v16i32 key removed from the port-info: no candidate is formed, the IR is unchanged, no crash.
+; every v16i32 key removed from the port-info: no candidate is formed (no "group of" line anywhere in the debug output:
+; --implicit-check-not, because the debug output precedes the IR), the IR is unchanged, no crash.
 ; CHECK-DAG: savio: scalarize of mul <16 x i32> not available: missing 'mul v16i32'
 ; CHECK-DAG: savio: fpdiv-lanes of udiv <16 x i32> not available: missing 'udiv v16i32'
-; CHECK-NOT: group of
 ; CHECK-LABEL: define void @f(
 ; CHECK: load <16 x i32>
 ; CHECK: load <16 x i32>

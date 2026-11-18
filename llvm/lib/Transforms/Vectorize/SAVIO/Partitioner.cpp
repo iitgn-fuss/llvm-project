@@ -1276,7 +1276,24 @@ private:
     // every user outside the group is a store the group owns.
     if (P && R.Groups[GIdx].Dir == Direction::ToScalar) {
       const Group &G = R.Groups[GIdx];
-      if (is_contained(G.LiveOuts, &I) && liveOutNeedsInsert(G, I)) {
+      // Not when every user outside the group is a constant-lane extract the
+      // out-of-group charge already prices (the SLP vectorizer's lane
+      // extracts): the backend folds extract-of-insert, so the lane insert
+      // would charge the same lanes twice.
+      auto IsChargedExtract = [&](const User *U) {
+        auto *EE = dyn_cast<ExtractElementInst>(U);
+        return EE && isa<ConstantInt>(EE->getIndexOperand()) &&
+               !isInGroup(G, U);
+      };
+      bool ExtractsOnly = PD.chargeOutOfGroup() &&
+                          all_of(I.users(), [&](const User *U) {
+                            return isInGroup(G, U) ||
+                                   is_contained(G.OwnedStores,
+                                                dyn_cast<StoreInst>(U)) ||
+                                   IsChargedExtract(U);
+                          });
+      if (is_contained(G.LiveOuts, &I) && liveOutNeedsInsert(G, I) &&
+          !ExtractsOnly) {
         unsigned T;
         if (!addTransfer(TransferKind::LaneInsert, {Me}, T, laneCount(G),
                          /*Chain=*/true, I.getType()))
