@@ -144,6 +144,12 @@ public:
   /// description calibrated without that accounting leaves it off).
   bool chargeOutOfGroup() const { return ChargeOutOfGroup; }
 
+  /// False when resources.json has "critical_path_outside_loops": {value:
+  /// false, ...}: a region outside loops then has no recurrence bound (its
+  /// critical path overlaps with the neighbouring code, which is a throughput
+  /// question). Default true: the critical path is the bound.
+  bool criticalPathOutsideLoops() const { return CriticalPathOutsideLoops; }
+
 private:
   PortDescription() = default;
 
@@ -157,6 +163,7 @@ private:
   IndirectAccessCost IndirectAccess;
   bool HasIndirectAccess = false;
   bool ChargeOutOfGroup = false;
+  bool CriticalPathOutsideLoops = true;
   StringMap<ConcurrencyTable> Concurrency;
   StringMap<OpCost> Probes;
   std::optional<OpCost> Transfers[NumTransferKinds];

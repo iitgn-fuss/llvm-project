@@ -497,6 +497,30 @@ TEST(SAVIOPortDescription, ChargeOutOfGroupOptInAndValidated) {
   sys::fs::remove_directories(Root);
 }
 
+TEST(SAVIOPortDescription, CriticalPathOutsideLoopsOptOutAndValidated) {
+  auto None = PortDescription::load(inputsRoot(), "AArch64", "test2s1v");
+  ASSERT_TRUE(!!None) << toString(None.takeError());
+  EXPECT_TRUE((*None)->criticalPathOutsideLoops());
+
+  std::string Root = copyFixture();
+  rewrite(Root, "resources.json", "\"dispatch_width\"",
+          "\"critical_path_outside_loops\": {\"value\": false, \"source\": "
+          "\"measured\", \"evidence\": \"unit test\"},\n  "
+          "\"dispatch_width\"");
+  auto PD = PortDescription::load(Root, "AArch64", "test2s1v");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  EXPECT_FALSE((*PD)->criticalPathOutsideLoops());
+  sys::fs::remove_directories(Root);
+
+  Root = copyFixture();
+  rewrite(Root, "resources.json", "\"dispatch_width\"",
+          "\"critical_path_outside_loops\": {\"value\": false},\n  "
+          "\"dispatch_width\"");
+  EXPECT_NE(loadError(Root).find("critical_path_outside_loops"),
+            std::string::npos);
+  sys::fs::remove_directories(Root);
+}
+
 TEST(SAVIOPortDescription, IndirectAccessNeedsNumbersAndEvidence) {
   std::string Root = copyFixture();
   rewrite(Root, "resources.json", "\"dispatch_width\"",

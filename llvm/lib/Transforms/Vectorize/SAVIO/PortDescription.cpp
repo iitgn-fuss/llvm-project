@@ -219,6 +219,18 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
         return makeError(F, "'charge_out_of_group' needs a boolean 'value'");
       PD->ChargeOutOfGroup = *B;
     }
+    if (const json::Value *CV = R->get("critical_path_outside_loops")) {
+      const json::Object *CO = CV->getAsObject();
+      if (!CO)
+        return makeError(F, "'critical_path_outside_loops' must be an object");
+      if (Error E = requireProvenance(F, *CO, "'critical_path_outside_loops'"))
+        return std::move(E);
+      std::optional<bool> B = CO->getBoolean("value");
+      if (!B)
+        return makeError(
+            F, "'critical_path_outside_loops' needs a boolean 'value'");
+      PD->CriticalPathOutsideLoops = *B;
+    }
     const json::Object *Classes = R->getObject("classes");
     if (!Classes || Classes->empty())
       return makeError(F, "'classes' must be a non-empty object");

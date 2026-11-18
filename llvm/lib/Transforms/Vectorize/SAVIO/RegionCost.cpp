@@ -241,8 +241,9 @@ RegionEstimate savio::estimateRegion(ArrayRef<CostNode> Nodes,
   // cycle of the dependence graph, however many carried edges it crosses.
   if (IsLoop) {
     E.TRec = maxCycleRatio(Nodes);
-  } else {
-    // Longest latency path in the region.
+  } else if (PD.criticalPathOutsideLoops()) {
+    // Longest latency path in the region. (A description may drop it for
+    // regions outside loops: critical_path_outside_loops.)
     SmallVector<double, 16> Dist(Nodes.size(), 0.0);
     for (unsigned I = 0; I != Nodes.size(); ++I) {
       double Best = 0;
