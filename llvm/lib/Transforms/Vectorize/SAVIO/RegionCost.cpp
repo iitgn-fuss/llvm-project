@@ -132,8 +132,10 @@ void resourceBoundOverPorts(const PortDescription &PD, ArrayRef<double> Load,
       Mask |= uint64_t(1) << P;
     Sets.push_back({Mask, C});
   }
-  // The distinct sets; every union is a union of a subset of them (at most 16
-  // classes list ports, so at most 2^16 subsets).
+  // The distinct sets; every union is a union of a subset of them. The loader
+  // allows at most 16 distinct port sets over 'ports' and 'ports_with_512'
+  // (PortDescription::load), so Distinct has at most 16 entries and there are
+  // at most 2^16 subsets.
   SmallVector<uint64_t, 16> Distinct;
   for (auto &[Mask, C] : Sets)
     if (!is_contained(Distinct, Mask))

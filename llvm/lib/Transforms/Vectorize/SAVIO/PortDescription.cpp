@@ -285,16 +285,32 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
       return A.Name < B.Name;
     });
     unsigned WithPorts = 0;
+    // The distinct port sets over 'ports' and 'ports_with_512' (a class with
+    // both can return either from PortDescription::ports).
+    SmallVector<uint64_t, 16> DistinctSets;
+    auto noteSet = [&](ArrayRef<unsigned> Ports) {
+      if (Ports.empty())
+        return;
+      uint64_t Mask = 0;
+      for (unsigned P : Ports)
+        Mask |= uint64_t(1) << P;
+      if (!is_contained(DistinctSets, Mask))
+        DistinctSets.push_back(Mask);
+    };
     for (ClassRec &Rec : Sorted) {
       WithPorts += !Rec.Ports.empty();
+      noteSet(Rec.Ports);
+      noteSet(Rec.Ports512);
       PD->ClassNames.push_back(std::move(Rec.Name));
       PD->ClassUnits.push_back(Rec.Units);
       PD->ClassPorts.push_back(std::move(Rec.Ports));
       PD->ClassPorts512.push_back(std::move(Rec.Ports512));
     }
-    // The resource bound enumerates unions of the port sets.
-    if (WithPorts > 16)
-      return makeError(F, "at most 16 classes may list 'ports'");
+    // The resource bound enumerates subsets of the distinct port sets (2^n),
+    // so the number of distinct sets is limited, not the number of classes.
+    if (DistinctSets.size() > 16)
+      return makeError(F, "at most 16 distinct port sets may be listed in "
+                          "'ports' / 'ports_with_512'");
     PD->HasPortSets = WithPorts != 0;
   }
 

@@ -234,6 +234,71 @@ TEST(SAVIOPortDescription, PerWidthLaneTransferPathMustBeInOpcodes) {
   EXPECT_NE(Msg.find("not in 'opcodes'"), std::string::npos) << Msg;
 }
 
+/// Replaces the fixture's resources.json by one with the four fixture classes
+/// (no ports) plus NumClasses classes "p00", "p01", ... Class I lists
+/// ports [PortOf(I)] and, when With512Of(I) >= 0, ports_with_512 [With512Of(I)].
+template <typename F, typename G>
+void writePortClasses(StringRef Root, unsigned NumClasses, F PortOf,
+                      G With512Of) {
+  std::string S = R"({
+  "cpu": "test2s1v", "arch": "AArch64", "complete": true,
+  "dispatch_width": 4,
+  "classes": {
+    "scalar": {"units": 2}, "vector": {"units": 1},
+    "int_div": {"units": 1}, "fp_div": {"units": 1})";
+  for (unsigned I = 0; I != NumClasses; ++I) {
+    S += ",\n    \"p" + std::string(I < 10 ? "0" : "") + std::to_string(I) +
+         "\": {\"units\": 1, \"ports\": [" + std::to_string(PortOf(I)) + "]";
+    int P512 = With512Of(I);
+    if (P512 >= 0)
+      S += ", \"ports_with_512\": [" + std::to_string(P512) + "]";
+    S += "}";
+  }
+  S += R"(
+  },
+  "registers": {"gpr": 31, "vec": 32, "vec_callee_saved": 8},
+  "source": "estimate", "evidence": "synthetic port-set limit fixture"
+})";
+  SmallString<128> P(Root);
+  sys::path::append(P, "AArch64", "test2s1v", "resources.json");
+  std::error_code EC;
+  raw_fd_ostream OS(P, EC);
+  ASSERT_FALSE(EC);
+  OS << S;
+}
+
+TEST(SAVIOPortDescription, ManyClassesFewDistinctPortSetsLoad) {
+  // 17 classes list 'ports' but they share 16 distinct port sets: the resource
+  // bound enumerates distinct sets, so this is fine.
+  std::string Root = copyFixture();
+  writePortClasses(Root, 17, [](unsigned I) { return I % 16; },
+                   [](unsigned) { return -1; });
+  auto PD = PortDescription::load(Root, "AArch64", "test2s1v");
+  ASSERT_TRUE(!!PD) << toString(PD.takeError());
+  EXPECT_TRUE((*PD)->hasPortSets());
+  sys::fs::remove_directories(Root);
+}
+
+TEST(SAVIOPortDescription, TooManyDistinctPortSetsIsError) {
+  std::string Root = copyFixture();
+  writePortClasses(Root, 17, [](unsigned I) { return I; },
+                   [](unsigned) { return -1; });
+  std::string Msg = loadError(Root);
+  EXPECT_NE(Msg.find("distinct port sets"), std::string::npos) << Msg;
+  sys::fs::remove_directories(Root);
+}
+
+TEST(SAVIOPortDescription, PortsWith512CountAsDistinctPortSets) {
+  // 16 distinct 'ports' sets are fine; a 17th set only in 'ports_with_512'
+  // (port 20 is not a 'ports' set) pushes the count over the limit.
+  std::string Root = copyFixture();
+  writePortClasses(Root, 16, [](unsigned I) { return I; },
+                   [](unsigned I) { return I == 0 ? 20 : -1; });
+  std::string Msg = loadError(Root);
+  EXPECT_NE(Msg.find("distinct port sets"), std::string::npos) << Msg;
+  sys::fs::remove_directories(Root);
+}
+
 TEST(SAVIOPortDescription, LaneTransferUnknownOpcodeIsError) {
   std::string Root = copyFixture();
   rewrite(Root, "transfers.json", "\"lane_to_lane0\"",
