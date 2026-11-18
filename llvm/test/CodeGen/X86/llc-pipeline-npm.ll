@@ -29,6 +29,7 @@
 ; O0-NEXT:   ee-instrument<post-inline>
 ; O0-NEXT:   scalarize-masked-mem-intrin
 ; O0-NEXT:   expand-reductions
+; O0-NEXT:   savio-expand
 ; O0-NEXT:   indirectbr-expand
 ; O0-NEXT:   dwarf-eh-prepare
 ; O0-NEXT:   inline-asm-prepare
@@ -107,6 +108,7 @@
 ; O2-NEXT:   ee-instrument<post-inline>
 ; O2-NEXT:   scalarize-masked-mem-intrin
 ; O2-NEXT:   expand-reductions
+; O2-NEXT:   savio-expand
 ; O2-NEXT:   interleaved-access
 ; O2-NEXT:   x86-partial-reduction
 ; O2-NEXT:   indirectbr-expand
@@ -225,6 +227,7 @@
 ; O0-WINDOWS-NEXT:   ee-instrument<post-inline>
 ; O0-WINDOWS-NEXT:   scalarize-masked-mem-intrin
 ; O0-WINDOWS-NEXT:   expand-reductions
+; O0-WINDOWS-NEXT:   savio-expand
 ; O0-WINDOWS-NEXT:   indirectbr-expand
 ; O0-WINDOWS-NEXT:   cfguard
 ; O0-WINDOWS-NEXT:   win-eh-prepare
@@ -307,6 +310,7 @@
 ; O3-WINDOWS-NEXT:   ee-instrument<post-inline>
 ; O3-WINDOWS-NEXT:   scalarize-masked-mem-intrin
 ; O3-WINDOWS-NEXT:   expand-reductions
+; O3-WINDOWS-NEXT:   savio-expand
 ; O3-WINDOWS-NEXT:   interleaved-access
 ; O3-WINDOWS-NEXT:   x86-partial-reduction
 ; O3-WINDOWS-NEXT:   indirectbr-expand

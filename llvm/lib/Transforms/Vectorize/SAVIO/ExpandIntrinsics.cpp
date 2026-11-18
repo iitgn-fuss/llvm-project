@@ -142,6 +142,19 @@ Value *expandOne(IntrinsicInst *II, Instruction::BinaryOps Opc, unsigned Lanes,
   return B.CreateShuffleVector(R, Widen);
 }
 
+/// True if \p M declares any llvm.savio.* function the pass could expand. A
+/// module without one (stock llc input) skips the per-instruction scan.
+bool moduleDeclaresSAVIO(const Module &M) {
+  Instruction::BinaryOps Opc;
+  unsigned Lanes;
+  bool IsDiv;
+  for (const Function &Fn : M)
+    if (Fn.isIntrinsic() &&
+        classify(Fn.getIntrinsicID(), Opc, Lanes, IsDiv))
+      return true;
+  return false;
+}
+
 bool expandFunction(Function &F, const SAVIOKeepFn &Keep) {
   SmallVector<std::pair<IntrinsicInst *, Value *>, 8> Work;
   for (Instruction &I : instructions(F)) {
@@ -166,6 +179,7 @@ bool expandFunction(Function &F, const SAVIOKeepFn &Keep) {
 
 class SAVIOExpandIntrinsicsLegacyPass : public FunctionPass {
   SAVIOKeepFn Keep;
+  bool HasSAVIO = true;
 
 public:
   static char ID;
@@ -174,7 +188,13 @@ public:
     initializeSAVIOExpandIntrinsicsLegacyPassPass(
         *PassRegistry::getPassRegistry());
   }
-  bool runOnFunction(Function &F) override { return expandFunction(F, Keep); }
+  bool doInitialization(Module &M) override {
+    HasSAVIO = moduleDeclaresSAVIO(M);
+    return false;
+  }
+  bool runOnFunction(Function &F) override {
+    return HasSAVIO && expandFunction(F, Keep);
+  }
   StringRef getPassName() const override { return "SAVIO expand intrinsics"; }
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
@@ -189,7 +209,13 @@ INITIALIZE_PASS(SAVIOExpandIntrinsicsLegacyPass, DEBUG_TYPE,
 
 PreservedAnalyses SAVIOExpandIntrinsicsPass::run(Function &F,
                                                  FunctionAnalysisManager &) {
-  if (!expandFunction(F, Keep))
+  // The module scan is cached per module: the pass runs once per function and
+  // llvm.savio.* declarations are never added once codegen has started.
+  if (CachedModule != F.getParent()) {
+    CachedModule = F.getParent();
+    HasSAVIO = moduleDeclaresSAVIO(*CachedModule);
+  }
+  if (!HasSAVIO || !expandFunction(F, Keep))
     return PreservedAnalyses::all();
   PreservedAnalyses PA;
   PA.preserveSet<CFGAnalyses>();

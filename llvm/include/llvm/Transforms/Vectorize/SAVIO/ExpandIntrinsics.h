@@ -24,6 +24,7 @@
 namespace llvm {
 
 class FunctionPass;
+class Module;
 class PassRegistry;
 
 /// Intrinsics for which \p Keep returns true are left alone.
@@ -32,6 +33,9 @@ using SAVIOKeepFn = std::function<bool(Intrinsic::ID)>;
 class SAVIOExpandIntrinsicsPass
     : public PassInfoMixin<SAVIOExpandIntrinsicsPass> {
   SAVIOKeepFn Keep;
+  // Module-level "declares an llvm.savio.* function" scan, cached per module.
+  const Module *CachedModule = nullptr;
+  bool HasSAVIO = true;
 
 public:
   SAVIOExpandIntrinsicsPass(SAVIOKeepFn Keep = nullptr)
