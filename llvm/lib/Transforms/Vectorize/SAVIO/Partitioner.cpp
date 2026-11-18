@@ -194,7 +194,10 @@ static bool isSimpleStoreOf(const User *U, const Value *V) {
 
 /// True if the value of \p I reaches an address (a GEP operand or an inttoptr)
 /// through casts, phis and other in-scope operations: addresses must stay in
-/// GPRs, so such an operation is not a candidate.
+/// GPRs, so such an operation is not a candidate. The walk stops at a bit count
+/// (a call: whether it is in scope depends on the port information, which this
+/// walk does not see; stopping keeps the behaviour of the code before bit counts
+/// were candidates, on every target).
 static bool reachesAddress(const Instruction &I) {
   SmallVector<const Instruction *, 8> Work{&I};
   SmallPtrSet<const Instruction *, 8> Seen{&I};
@@ -204,7 +207,9 @@ static bool reachesAddress(const Instruction &I) {
       if (isa<GetElementPtrInst>(U) || isa<IntToPtrInst>(U))
         return true;
       if (isa<SExtInst>(U) || isa<ZExtInst>(U) || isa<TruncInst>(U) ||
-          isa<PHINode>(U) || isCandidate(*cast<Instruction>(U))) {
+          isa<PHINode>(U) ||
+          (isCandidate(*cast<Instruction>(U)) &&
+           bitCountName(*cast<Instruction>(U)).empty())) {
         auto *UI = cast<Instruction>(U);
         if (Seen.insert(UI).second)
           Work.push_back(UI);
