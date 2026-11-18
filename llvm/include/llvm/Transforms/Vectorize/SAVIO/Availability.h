@@ -38,13 +38,23 @@ StringRef transformName(Transform X);
 /// for Singleton Vectorize, the fixed vector type for the other two. \p L is
 /// the lane count of the fp-divide sequence (FpDivideLanes only).
 ///   SingletonVectorize: "sv.<op> v4i32", "gpr_to_vec", "vec_to_gpr".
-///   FpDivideLanes:      "<op> v<N>i32", "fpdiv<L>.<op> v<N>i32".
+///   FpDivideLanes:      "<op> v<N>i32", fpDivideKey(L lanes, group of L).
 ///   Scalarize:          "<op> v<N>i<W>", "<op> i<W>", "load"/"store" of both
 ///                       types, "lane_extract", "lane_insert".
 /// A key naming a transfer ("gpr_to_vec", "vec_to_gpr", "lane_extract",
 /// "lane_insert") is looked up in transfers.json, any other in probes.json.
 SmallVector<std::string, 8> requiredKeys(Transform X, StringRef Op, Type *Ty,
                                          unsigned L = 0);
+
+/// The probes.json key of the fp-divide sequence of \p Lanes lanes of vector
+/// type \p Ty ("fpdiv<Lanes>.<op> v<N>i32"). \p GroupLanes is the lane group G
+/// (fpDivideGroup). The key names what the backend emits for the sequence: a
+/// function that holds a 512-bit vector (v16i32) gets zmm divides, any other
+/// splits <Lanes x double> into ymm divides, except that a 512-bit lane group
+/// (G = 8, prefer-vector-width=512) keeps the 8-lane sequence on a v8i32 in one
+/// zmm divide: that sequence has its own key, "fpdiv8.512.<op> v8i32".
+std::string fpDivideKey(StringRef Op, Type *Ty, unsigned Lanes,
+                        unsigned GroupLanes);
 
 /// The first of \p Keys that \p PD cannot cost (a probe key without irOpCost,
 /// a transfer without transferCost), or nullopt if all can. "lane_extract" and

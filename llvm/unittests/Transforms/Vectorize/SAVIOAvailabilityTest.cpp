@@ -41,7 +41,21 @@ TEST(SAVIOAvailability, RequiredKeysFpDivideLanes) {
   EXPECT_EQ(requiredKeys(Transform::FpDivideLanes, "udiv", V8, 4),
             (Keys{"udiv v8i32", "fpdiv4.udiv v8i32"}));
   EXPECT_EQ(requiredKeys(Transform::FpDivideLanes, "urem", V8, 8),
-            (Keys{"urem v8i32", "fpdiv8.urem v8i32"}));
+            (Keys{"urem v8i32", "fpdiv8.512.urem v8i32"}));
+}
+
+TEST(SAVIOAvailability, FpDivideKeyNamesTheEmittedWidth) {
+  LLVMContext Ctx;
+  Type *I32 = Type::getInt32Ty(Ctx);
+  Type *V8 = FixedVectorType::get(I32, 8), *V16 = FixedVectorType::get(I32, 16);
+  // G = 4: fpdiv8 on a v8i32 is two ymm sequences, the plain key.
+  EXPECT_EQ(fpDivideKey("udiv", V8, 8, 4), "fpdiv8.udiv v8i32");
+  // G = 8: one zmm divide, its own key.
+  EXPECT_EQ(fpDivideKey("udiv", V8, 8, 8), "fpdiv8.512.udiv v8i32");
+  // A 512-bit vector is zmm code at any G: the plain key.
+  EXPECT_EQ(fpDivideKey("urem", V16, 8, 4), "fpdiv8.urem v16i32");
+  EXPECT_EQ(fpDivideKey("urem", V16, 8, 8), "fpdiv8.urem v16i32");
+  EXPECT_EQ(fpDivideKey("urem", V16, 16, 8), "fpdiv16.urem v16i32");
 }
 
 TEST(SAVIOAvailability, RequiredKeysScalarize) {

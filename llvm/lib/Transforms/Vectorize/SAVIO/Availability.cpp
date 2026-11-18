@@ -25,6 +25,15 @@ StringRef savio::transformName(Transform X) {
   llvm_unreachable("unknown transformation");
 }
 
+std::string savio::fpDivideKey(StringRef Op, Type *Ty, unsigned Lanes,
+                               unsigned GroupLanes) {
+  bool Zmm = GroupLanes * 64 == 512 && Lanes * 64 == 512 &&
+             Ty->getPrimitiveSizeInBits().getFixedValue() < 512;
+  return ("fpdiv" + Twine(Lanes) + (Zmm ? ".512." : ".") + Op + " " +
+          typeKey(Ty))
+      .str();
+}
+
 SmallVector<std::string, 8> savio::requiredKeys(Transform X, StringRef Op,
                                                 Type *Ty, unsigned L) {
   SmallVector<std::string, 8> Keys;
@@ -37,7 +46,7 @@ SmallVector<std::string, 8> savio::requiredKeys(Transform X, StringRef Op,
   case Transform::FpDivideLanes: {
     std::string T = typeKey(Ty);
     Keys.push_back((Op + " " + T).str());
-    Keys.push_back(("fpdiv" + Twine(L) + "." + Op + " " + T).str());
+    Keys.push_back(fpDivideKey(Op, Ty, L, L));
     break;
   }
   case Transform::Scalarize: {

@@ -529,6 +529,13 @@
       "T_VUDIV_FP",
       "T_VUDIV_FIX"
     ],
+    "fpdiv8.512.udiv v8i32": [
+      "T_VUDIV_FP",
+      "T_VUDIV_FP",
+      "T_VUDIV_FP",
+      "T_VUDIV_FP",
+      "T_VUDIV_FIX"
+    ],
     "fpdiv2.udiv v16i32": [
       "T_VUDIV_FP",
       "T_VUDIV_FIX"
@@ -566,6 +573,13 @@
       "T_VUDIV_FIX"
     ],
     "fpdiv8.urem v8i32": [
+      "T_VUDIV_FP",
+      "T_VUDIV_FP",
+      "T_VUDIV_FP",
+      "T_VUDIV_FP",
+      "T_VUDIV_FIX"
+    ],
+    "fpdiv8.512.urem v8i32": [
       "T_VUDIV_FP",
       "T_VUDIV_FP",
       "T_VUDIV_FP",

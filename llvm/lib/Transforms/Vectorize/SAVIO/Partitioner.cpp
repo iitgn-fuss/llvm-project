@@ -81,8 +81,8 @@ static bool isScalarCandidate(const Instruction &I) {
 
 /// Scalarize candidates: add sub mul and or xor shl lshr ashr on fixed vectors
 /// of i32 or i64 that are 128, 256 or 512 bits wide (whether the port-info has
-/// the keys is decided when the group is costed). Vector udiv/urem stay with
-/// the lane-group path.
+/// the keys is decided at candidacy, by isAvailable). Vector udiv/urem stay
+/// with the lane-group path.
 static bool isVectorCandidate(const Instruction &I) {
   auto *VT = dyn_cast<FixedVectorType>(I.getType());
   if (!VT || !(VT->getElementType()->isIntegerTy(32) ||
@@ -1347,9 +1347,8 @@ private:
     std::optional<OpCost> Seq;
     const ConcurrencyTable *SeqConc = nullptr;
     if (Moved) {
-      std::string Key = ("fpdiv" + Twine(MovedLanes) + "." +
-                         I.getOpcodeName() + " " + Ty)
-                            .str();
+      std::string Key =
+          fpDivideKey(I.getOpcodeName(), I.getType(), MovedLanes, Size);
       Seq = PD.irOpCost(Key);
       if (!Seq)
         return false;
@@ -1365,8 +1364,13 @@ private:
         if (P == 0) {
           PN.Cost = *Seq;
           PN.Conc = SeqConc;
-          // fpdiv8 of 64-bit lanes is a 512-bit sequence.
-          PN.Wide512 = MovedLanes * 64 == 512;
+          // A zmm divide is emitted only where the backend uses zmm: the
+          // function holds a 512-bit vector, or the lane group is 512 bits
+          // (G = 8). Two ymm divides (G = 4 on a v8i32) are not 512-bit.
+          PN.Wide512 =
+              MovedLanes * 64 >= 512 &&
+              (Size * 64 == 512 ||
+               I.getType()->getPrimitiveSizeInBits().getFixedValue() >= 512);
         } else {
           PN.Cost = OpCost{{}, 0, 0};
         }
