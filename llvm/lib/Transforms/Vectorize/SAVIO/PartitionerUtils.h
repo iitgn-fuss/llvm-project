@@ -32,11 +32,12 @@ inline bool isShift(unsigned Opcode) {
          Opcode == Instruction::AShr;
 }
 
-/// Identifies supported bit-counting intrinsics (`llvm.ctpop.i32` or
-/// `llvm.ctlz.i32`), returning their canonical key name ("ctpop" / "ctlz").
+/// Identifies supported bit-counting intrinsics (`llvm.ctpop.i32`,
+/// `llvm.ctpop.i64`, `llvm.ctlz.i32`, or `llvm.ctlz.i64`), returning their
+/// canonical key name ("ctpop" / "ctlz").
 /// Returns empty StringRef for any other instruction.
 inline StringRef bitCountName(const Instruction &I) {
-  if (!I.getType()->isIntegerTy(32))
+  if (!I.getType()->isIntegerTy(32) && !I.getType()->isIntegerTy(64))
     return "";
   switch (I.getOpcode() == Instruction::Call
               ? cast<CallInst>(I).getIntrinsicID()

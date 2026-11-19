@@ -407,11 +407,15 @@ private:
         C = lanes(*C, laneCount(G));
     } else if (InGroup) {
       std::string Key;
+      bool Imm = isShift(I.getOpcode()) && isa<ConstantInt>(I.getOperand(1));
       if (P) {
-        bool Imm = isShift(I.getOpcode()) && isa<ConstantInt>(I.getOperand(1));
-        Key = "sv." + opName(I) + (Imm ? ".imm v4i32" : " v4i32");
+        if (I.getType()->isIntegerTy(64))
+          Key = opName(I) + (Imm ? ".imm " : " ") + "v2i64";
+        else
+          Key = "sv." + opName(I) + (Imm ? ".imm " : " ") + "v4i32";
       } else {
-        Key = opName(I) + " i32";
+        std::string ElemTyStr = typeKey(I.getType());
+        Key = opName(I) + (Imm ? ".imm " : " ") + ElemTyStr;
       }
       C = PD.irOpCost(Key);
       if (!C && P)

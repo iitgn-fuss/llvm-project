@@ -121,7 +121,7 @@ Value *expandOne(IntrinsicInst *II, Instruction::BinaryOps Opc, unsigned Lanes,
     if (II->getIntrinsicID() == Intrinsic::savio_sv_ctpop)
       Count = B.CreateUnaryIntrinsic(Intrinsic::ctpop, Lane0);
     else
-      Count = B.CreateIntrinsic(Intrinsic::ctlz, {B.getInt32Ty()},
+      Count = B.CreateIntrinsic(Intrinsic::ctlz, {Lane0->getType()},
                                 {Lane0, B.getFalse()});
     return B.CreateInsertElement(PoisonValue::get(VecTy), Count, uint64_t(0));
   }

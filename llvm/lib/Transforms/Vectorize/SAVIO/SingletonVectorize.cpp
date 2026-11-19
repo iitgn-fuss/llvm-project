@@ -69,6 +69,7 @@ class Rewriter {
   Loop *L;
   BasicBlock *BB;
   IRBuilder<> B;
+  Type *EltTy;
   FixedVectorType *VecTy;
   Value *Lane0;
 
@@ -102,7 +103,8 @@ class Rewriter {
       auto *EE = cast<ExtractElementInst>(V);
       B.SetInsertPoint(Op);
       uint64_t Idx = cast<ConstantInt>(EE->getIndexOperand())->getZExtValue();
-      int Mask[4] = {int(Idx), PoisonMaskElem, PoisonMaskElem, PoisonMaskElem};
+      SmallVector<int, 4> Mask(VecTy->getNumElements(), PoisonMaskElem);
+      Mask[0] = int(Idx);
       Vec = B.CreateShuffleVector(EE->getVectorOperand(),
                                   PoisonValue::get(EE->getVectorOperand()
                                                        ->getType()),
@@ -119,8 +121,9 @@ class Rewriter {
 public:
   Rewriter(const Group &G, Loop *L)
       : G(G), L(L), BB(G.Ops.front()->getParent()), B(BB->getContext()),
-        VecTy(FixedVectorType::get(B.getInt32Ty(), 4)),
-        Lane0(B.getInt32(0)) {}
+        EltTy(G.Ops.front()->getType()),
+        VecTy(FixedVectorType::get(EltTy, EltTy->isIntegerTy(64) ? 2 : 4)),
+        Lane0(ConstantInt::get(EltTy, 0)) {}
 
   void run() {
     Module *M = BB->getModule();
@@ -164,7 +167,7 @@ public:
           Args[I] = It->second;
         } else if (I == 1 && Op->isShift() && isa<ConstantInt>(V)) {
           // Constant shift count: a splat the backend matches to an immediate.
-          Args[I] = ConstantVector::getSplat(ElementCount::getFixed(4),
+          Args[I] = ConstantVector::getSplat(VecTy->getElementCount(),
                                              cast<ConstantInt>(V));
         } else {
           Args[I] = enter(Op, V);

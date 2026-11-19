@@ -98,6 +98,33 @@ static bool reachesAddress(const Instruction &I) {
   return false;
 }
 
+/// Returns true if all users of \p I outside its recurrence group only feed
+/// branch comparisons or terminators (i.e. loop branch control). Vectorizing
+/// pure loop-counter recurrences provides no data computation and forces
+/// expensive vector-to-GPR transfers on every loop iteration.
+/// Returns true if all users of \p I outside its recurrence group (including
+/// carried PHIs) only feed branch comparisons or terminators (i.e. loop branch
+/// control). Vectorizing pure loop-counter recurrences provides no data
+/// computation and forces expensive vector-to-GPR transfers on every loop
+/// iteration.
+static bool onlyFeedsLoopControl(const Instruction *I,
+                                 ArrayRef<Instruction *> Ops,
+                                 ArrayRef<PHINode *> Phis) {
+  for (const User *U : I->users()) {
+    if (is_contained(Ops, U) || is_contained(Phis, U))
+      continue;
+    auto *Cmp = dyn_cast<CmpInst>(U);
+    if (!Cmp)
+      return false;
+    for (const User *CU : Cmp->users()) {
+      auto *CUI = dyn_cast<Instruction>(CU);
+      if (!CUI || !CUI->isTerminator())
+        return false;
+    }
+  }
+  return true;
+}
+
 namespace {
 
 /// Disjoint-set data structure (Union-Find with path compression) over integer indices.
@@ -456,8 +483,9 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
   if (L) {
     for (PHINode &Phi : BB.phis()) {
       auto LatchIt = RG.PhiLatch.find(&Phi);
-      if (!Phi.getType()->isIntegerTy(32) || Phi.use_empty() ||
-          LatchIt == RG.PhiLatch.end())
+      if ((!Phi.getType()->isIntegerTy(32) &&
+           !Phi.getType()->isIntegerTy(64)) ||
+          Phi.use_empty() || LatchIt == RG.PhiLatch.end())
         continue;
 
       auto GroupIt = InstToGroupIndex.find(RG.Insts[LatchIt->second.first]);
@@ -480,6 +508,18 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
       } else if (any_of(Phi.users(), IsUserInThisGroup)) {
         DiscardGroup[GrpIdx] = true;
       }
+    }
+
+    // Discard recurrence groups whose instructions only serve as loop control
+    // counters (i.e. their only external uses feed branch comparisons).
+    for (unsigned GrpIdx = 0; GrpIdx != Groups.size(); ++GrpIdx) {
+      if (!Groups[GrpIdx].Recurrence || DiscardGroup[GrpIdx])
+        continue;
+      if (all_of(Groups[GrpIdx].Ops, [&](Instruction *I) {
+            return onlyFeedsLoopControl(I, Groups[GrpIdx].Ops,
+                                        Groups[GrpIdx].CarriedPhis);
+          }))
+        DiscardGroup[GrpIdx] = true;
     }
   }
 

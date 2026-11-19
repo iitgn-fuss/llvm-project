@@ -50,20 +50,24 @@ static bool hasPoisonFlag(const Instruction &I) {
 }
 
 /// Identifies scalar operations eligible for Singleton Vectorization:
-/// 32-bit integer arithmetic (add, sub, mul), bitwise logic (and, or, xor),
-/// bit shifts (shl, lshr, ashr), integer divide/remainder (udiv, urem), and
-/// bit-counting calls (llvm.ctpop.i32, llvm.ctlz.i32).
+/// 32-bit and 64-bit integer arithmetic (add, sub, mul), bitwise logic
+/// (and, or, xor), bit shifts (shl, lshr, ashr), and bit-counting calls
+/// (llvm.ctpop, llvm.ctlz). 32-bit integer divide/remainder (udiv, urem)
+/// are supported; 64-bit divide/remainder are strictly excluded for exactness.
 ///
 /// Disqualifies instructions that carry poison flags or non-constant ctlz
 /// zero-poison flags.
 bool isScalarCandidate(const Instruction &I) {
-  if (!I.getType()->isIntegerTy(32))
+  Type *Ty = I.getType();
+  bool IsI32 = Ty->isIntegerTy(32);
+  bool IsI64 = Ty->isIntegerTy(64);
+  if (!IsI32 && !IsI64)
     return false;
   if (hasPoisonFlag(I))
     return false;
-  // Calls: llvm.ctpop.i32 has 1 operand; llvm.ctlz.i32 has (val, is_zero_poison).
-  // The lane-0 vector ctlz intrinsic always produces 32 for zero input, which
-  // is exact regardless of the is_zero_poison flag value.
+  // Calls: llvm.ctpop has 1 operand; llvm.ctlz has (val, is_zero_poison).
+  // The lane-0 vector ctlz intrinsic always produces bitwidth for zero input,
+  // which is exact regardless of the is_zero_poison flag value.
   if (StringRef BC = bitCountName(I); !BC.empty())
     return BC == "ctpop" || isa<ConstantInt>(I.getOperand(1));
   switch (I.getOpcode()) {
@@ -76,9 +80,13 @@ bool isScalarCandidate(const Instruction &I) {
   case Instruction::Shl:
   case Instruction::LShr:
   case Instruction::AShr:
+    return true;
   case Instruction::UDiv:
   case Instruction::URem:
-    return true;
+    // UDiv and URem are strictly restricted to i32: 32-bit integer division
+    // through double-precision float divide is exact, but 64-bit integer
+    // division exceeds float64's 53-bit mantissa and would lose precision.
+    return IsI32;
   default:
     return false;
   }

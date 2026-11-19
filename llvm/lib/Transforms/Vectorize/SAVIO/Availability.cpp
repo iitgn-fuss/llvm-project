@@ -38,11 +38,15 @@ SmallVector<std::string, 8> savio::requiredKeys(Transform X, StringRef Op,
                                                 Type *Ty, unsigned L) {
   SmallVector<std::string, 8> Keys;
   switch (X) {
-  case Transform::SingletonVectorize:
-    Keys.push_back(("sv." + Op + " v4i32").str());
+  case Transform::SingletonVectorize: {
+    if (Ty->isIntegerTy(64))
+      Keys.push_back((Op + " v2i64").str());
+    else
+      Keys.push_back(("sv." + Op + " v4i32").str());
     Keys.push_back("gpr_to_vec");
     Keys.push_back("vec_to_gpr");
     break;
+  }
   case Transform::FpDivideLanes: {
     std::string T = typeKey(Ty);
     Keys.push_back((Op + " " + T).str());
