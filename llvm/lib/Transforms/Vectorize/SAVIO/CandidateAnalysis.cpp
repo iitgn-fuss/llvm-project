@@ -13,6 +13,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Operator.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include <optional>
@@ -22,6 +23,10 @@ using namespace llvm;
 using namespace llvm::savio;
 
 #define DEBUG_TYPE "savio"
+
+static cl::opt<bool> RelaxPoisonFlags(
+    "savio-relax-poison-flags", cl::init(false),
+    cl::desc("Allow singleton vectorization of instructions with poison-generating flags (nsw/nuw/exact)"));
 
 namespace llvm {
 namespace savio {
@@ -63,7 +68,7 @@ bool isScalarCandidate(const Instruction &I) {
   bool IsI64 = Ty->isIntegerTy(64);
   if (!IsI32 && !IsI64)
     return false;
-  if (hasPoisonFlag(I))
+  if (!RelaxPoisonFlags && hasPoisonFlag(I))
     return false;
   // Calls: llvm.ctpop has 1 operand; llvm.ctlz has (val, is_zero_poison).
   // The lane-0 vector ctlz intrinsic always produces bitwidth for zero input,
