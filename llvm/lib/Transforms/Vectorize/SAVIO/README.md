@@ -1,33 +1,26 @@
-# SAVIO: a human guide
+# SAVIO
 
-SAVIO looks at a small part of a function and decides whether some work
-should run on the scalar units or the vector units.
+SAVIO partitions eligible instructions between scalar and vector execution
+units. It analyzes candidate instructions, constructs regions and assignment
+graphs, estimates alternatives, selects a partition, and rewrites the LLVM IR.
 
-You normally do **not** need to understand the whole pass. Find the task you
-want to change below and open the listed file.
+## Processing pipeline
 
-## The five steps
-
-SAVIO follows this path:
-
-1. **Find usable instructions.** Candidate analysis rejects operations whose
-   types, flags, addresses, or target costs are not safe.
-2. **Make groups.** The partitioner joins connected scalar or vector
-   instructions into groups and makes one region graph.
-3. **Price one choice.** The cost model asks, “what would this region cost if
-   these groups moved?”
-4. **Try different choices.** The search tries different fractions of each
-   group class and optional virtual unrolling.
-5. **Rewrite the IR.** The selected decision is changed into scalar or vector
-   instructions.
+1. **Candidate analysis** - validates instruction types, flags, addresses, and
+   target-operation availability.
+2. **Partitioning** - forms connected instruction groups and region graphs.
+3. **Assignment costing** - constructs and estimates scalar/vector assignments.
+4. **Fraction search** - evaluates group-class fractions and optional virtual
+   unrolling.
+5. **IR rewriting** - materializes the selected scalar and vector operations.
 
 ```text
 IR
  |
- +--> CandidateAnalysis.cpp --> Partitioner.cpp
++--> CandidateAnalysis.cpp --> Partitioner.cpp
                                   |
                                   +--> OperationCosts.cpp
-                                  |       operation and transfer prices
+                                  |       operation and transfer costs
                                   |
                                   +--> CostModel.cpp
                                           assignment graph and estimates
@@ -37,81 +30,79 @@ IR
                                                   |
                                                   v
                                            SAVIOIR.cpp
-                                      Scalarize / Vectorize rewrites
+                                      scalarize/vectorize rewrites
 ```
 
-## Which file should I edit?
+## Source map
 
-| I want to... | Start here | Also read |
+| Responsibility | Primary source | Related source |
 | --- | --- | --- |
-| Allow or reject an instruction | `CandidateAnalysis.cpp` | `Availability.cpp`, `PartitionerUtils.h` |
-| Change how instructions become groups | `Partitioner.cpp` | `Partitioner.h` |
-| Change the price of an add, shift, load, or transfer | `OperationCosts.cpp` | `PortDescription.h` |
-| Change how a complete assignment is built and priced | `CostModel.cpp` | `RegionCost.cpp` |
-| Change how many groups are tried | `FractionSearch.cpp` | `SearchCore.h` |
-| Change scalarization | `Scalarize.cpp` | `OperationCosts.cpp` |
-| Change singleton vectorization or vector divides | `SingletonVectorize.cpp` | `Availability.cpp` |
-| Change SAVIO's pass-level loop | `SAVIOIR.cpp` | `Partitioner.h` |
-| Add or validate CPU data | `PortDescription.cpp` | `src/port-info/README.md` |
-| Understand the target-independent timing estimate | `RegionCost.cpp` | `RegionCost.h` |
+| Candidate eligibility and target-key checks | `CandidateAnalysis.cpp` | `Availability.cpp`, `PartitionerUtils.h` |
+| Region and group formation | `Partitioner.cpp` | `Partitioner.h` |
+| Individual operation and transfer costs | `OperationCosts.cpp` | `PortDescription.h` |
+| Assignment graph construction and estimation | `CostModel.cpp` | `RegionCost.cpp` |
+| Group-fraction search policy | `FractionSearch.cpp` | `SearchCore.h` |
+| Scalarization | `Scalarize.cpp` | `OperationCosts.cpp` |
+| Singleton vectorization and vector divides | `SingletonVectorize.cpp` | `Availability.cpp` |
+| Pass-level loop and function orchestration | `SAVIOIR.cpp` | `Partitioner.h` |
+| CPU data loading and queries | `PortDescription.cpp` | `src/port-info/README.md` |
+| Target-independent graph bounds | `RegionCost.cpp` | `RegionCost.h` |
 
-## Cost-model changes
+## Cost model extension points
 
-There are three separate layers:
+The costing implementation has three layers:
 
-* **`OperationCosts.cpp`** converts one operation or transfer into an
-  `OpCost`. This is the best place to try a different instruction-price rule.
-* **`CostModel.cpp`** builds the dependency graph for a proposed scalar/vector
-  assignment. It handles inputs, live-outs, recurrence edges, virtual
-  unrolling, and vector divides.
-* **`RegionCost.cpp`** turns the finished graph into resource, recurrence,
-  dispatch, and memory bounds.
+* **`OperationCosts.cpp`** maps an operation or transfer to an `OpCost`.
+  Modify this file for instruction-price rules.
+* **`CostModel.cpp`** builds the dependency graph for a proposed assignment.
+  It handles inputs, live-outs, recurrence edges, virtual unrolling, and
+  vector divides.
+* **`RegionCost.cpp`** computes resource, recurrence, dispatch, and memory
+  bounds from the completed graph.
 
-To experiment with a new cost model, keep the `Region`, `RegionGraph`,
-`Decision`, and `RegionEstimate` interfaces unchanged. Replace or extend the
-operation pricing in `OperationCosts.cpp`, or add a new assignment builder
-beside `CostModel.cpp`. Keep `FractionSearch.cpp` unchanged unless the search
-policy itself is changing.
+Alternative cost models should preserve the existing `Region`, `RegionGraph`,
+`Decision`, and `RegionEstimate` interfaces. Operation pricing can be replaced
+or extended in `OperationCosts.cpp`; assignment-graph behavior belongs in
+`CostModel.cpp`. Search-policy changes belong in `FractionSearch.cpp`.
 
-The private headers have deliberately small jobs:
+Private implementation interfaces:
 
-* `PartitionerUtils.h`: instruction and candidate helpers shared by analysis,
-  partitioning, and costing.
-* `CostModelUtils.h`: operation-pricing helpers shared by the assignment
-  builder and operation-cost module.
+* `PartitionerUtils.h` - shared instruction, candidate, and partitioning
+  helpers.
+* `CostModelUtils.h` - operation-pricing helpers shared with the assignment
+  builder.
 
-They are implementation headers. The public data structures and entry points
-are in `llvm/include/llvm/Transforms/Vectorize/SAVIO/`.
+Public SAVIO data structures and entry points are under
+`llvm/include/llvm/Transforms/Vectorize/SAVIO/`.
 
-## Rewrites
+## IR rewriting
 
-The cost model only chooses a `Decision`; it does not change LLVM IR.
+The cost model produces a `Decision`; it does not modify LLVM IR.
 
-* `SingletonVectorize.cpp` moves scalar work into vector lane 0 and handles
-  vector divide lane groups.
-* `Scalarize.cpp` turns selected vector work into scalar operations.
-* `ExpandIntrinsics.cpp` lowers SAVIO-specific intrinsics to ordinary target
-  IR.
+* `SingletonVectorize.cpp` materializes scalar work in vector lane zero and
+  handles vector-divide lane groups.
+* `Scalarize.cpp` converts selected vector work into scalar operations.
+* `ExpandIntrinsics.cpp` lowers SAVIO-specific intrinsics to target IR.
 
-When changing a decision, check the matching rewrite. A cost-model choice must
-describe an operation that the rewrite can actually produce.
+Changes to decision semantics must be compatible with the corresponding
+rewriter.
 
 ## Tests
 
-Build:
+Build the relevant targets:
 
 ```sh
 ninja -C llvm-project/build LLVMVectorize VectorizeTests
 ```
 
-Run all SAVIO unit tests:
+Run SAVIO unit tests:
 
 ```sh
 llvm-project/build/unittests/Transforms/Vectorize/VectorizeTests \
   --gtest_filter='SAVIO*'
 ```
 
-Run compiler tests:
+Run focused compiler tests:
 
 ```sh
 llvm-project/build/bin/llvm-lit -q \
@@ -120,40 +111,31 @@ llvm-project/build/bin/llvm-lit -q \
   llvm-project/llvm/test/CodeGen/X86/savio-*.ll
 ```
 
-Test files follow the same responsibilities:
+| Test source | Coverage |
+| --- | --- |
+| `SAVIOGroupingTest.cpp` | Candidates, groups, regions, and graph shape |
+| `SAVIOCostModelTest.cpp` | Assignment costs, fractions, scalarization, and bit counts |
+| `SAVIOPortDescriptionTest.cpp` | JSON loading and target queries |
+| `SAVIORegionCostTest.cpp` | Graph scheduling and bounds |
 
-* `SAVIOGroupingTest.cpp`: candidates, groups, regions, and graph shape.
-* `SAVIOCostModelTest.cpp`: assignment costs, fractions, scalarization, and
-  bit counts.
-* `SAVIOPortDescriptionTest.cpp`: JSON loading and target queries.
-* `SAVIORegionCostTest.cpp`: graph scheduling and bounds.
+Add behavior tests to the file covering the changed responsibility. Use the
+focused lit tests for IR and code-generation behavior.
 
-When adding behavior, add the smallest test in the matching file. Run the
-unit test before and after the change; the focused lit tests catch IR and
-code-generation changes.
+## Debugging
 
-## Common debugging questions
+Enable SAVIO diagnostics with `-debug-only=savio`.
 
-**Why was an instruction not selected?**
-Use `-debug-only=savio`. Candidate analysis reports missing target keys and
-the reason an operation is unavailable.
+| Symptom | First locations to inspect |
+| --- | --- |
+| Candidate is rejected | `CandidateAnalysis.cpp`, target data under `src/port-info/<arch>/<cpu>/` |
+| Assignment loses | Cost estimate in `CostModel.cpp`, then target port data |
+| No partition is selected | `FractionSearch.cpp` and its margin/availability checks |
+| Rewrite output is unexpected | `Partitioner.h` decision flow, `FractionSearch.cpp`, `SAVIOIR.cpp`, and the selected rewriter |
 
-**Why did a choice lose?**
-Inspect the estimate printed by the cost model, then compare it with the
-target data under `src/port-info/<arch>/<cpu>/`.
+## Invariants
 
-**Why did the output not change?**
-Check `FractionSearch.cpp` first. The search requires a margin, and an
-unavailable cost rejects a move rather than silently guessing.
-
-**Why is a test about a different file failing?**
-Decisions cross module boundaries. Check the `Decision` in `Partitioner.h`,
-then follow it from `FractionSearch.cpp` to `SAVIOIR.cpp` and the rewrite.
-
-## Rules to keep
-
-* Do not silently invent a missing operation cost.
-* Keep recurrence edges and live-out transfers intact.
-* Keep generated port-information files generated.
-* Preserve public headers unless the behavior change requires an API change.
-* Record a focused test for every new decision or rewrite rule.
+* Missing operation costs must not be silently invented.
+* Recurrence edges and live-out transfers must remain represented.
+* Port-information files must be regenerated by their scripts.
+* Public headers should remain stable unless an API change is required.
+* New decision or rewrite rules require focused tests.
