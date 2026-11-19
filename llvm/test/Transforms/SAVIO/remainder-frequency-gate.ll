@@ -19,8 +19,31 @@ cold_block:
   ret void
 }
 
+define void @cold_loop(ptr %p, i64 %n) "target-cpu"="emeraldrapids" {
+entry:
+  %hot = icmp slt i64 %n, 0
+  br i1 %hot, label %exit, label %cold_loop, !prof !1
+
+cold_loop:
+  %i = phi i64 [ 0, %entry ], [ %i.next, %cold_loop ]
+  %q = mul i64 %i, 5
+  %pa = getelementptr i32, ptr %p, i64 %q
+  %va = load i32, ptr %pa
+  %vb = add i32 %va, 7
+  store i32 %vb, ptr %pa
+  %i.next = add i64 %i, 1
+  %cmp = icmp slt i64 %i.next, %n
+  br i1 %cmp, label %cold_loop, label %exit
+
+exit:
+  ret void
+}
+
 ; CHECK: define void @cold_remainder
 ; CHECK-NOT: llvm.savio
 ; CHECK-NOT: remark:
+; CHECK: define void @cold_loop
+; CHECK-NOT: llvm.savio
 
 !0 = !{!"branch_weights", i32 1000, i32 1}
+!1 = !{!"branch_weights", i32 1000, i32 1}

@@ -71,8 +71,8 @@ static cl::opt<double> SAVIOColdFraction(
 
 static cl::opt<double> SAVIORemainderFraction(
     "savio-remainder-fraction", cl::init(0.50), cl::Hidden,
-    cl::desc("Minimum entry-block frequency for a straight-line or remainder "
-             "region. Cold regions avoid code growth from SAVIO"));
+    cl::desc("Minimum entry-block frequency for a loop, straight-line, or "
+             "remainder region. Cold regions avoid code growth from SAVIO"));
 
 namespace {
 
@@ -411,8 +411,7 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
     double RegionFrequency =
         double(BFI.getBlockFreq(Reg.BB).getFrequency()) / EntryFreq;
     if (RegionFrequency < SAVIOColdFraction ||
-        (!Forced && !Reg.L &&
-         RegionFrequency < SAVIORemainderFraction))
+        (!Forced && RegionFrequency < SAVIORemainderFraction))
       continue;
     // Unrolling is only for the cost-driven search; the force flags act on
     // the region as it is.
