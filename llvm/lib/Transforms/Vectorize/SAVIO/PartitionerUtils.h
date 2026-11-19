@@ -13,6 +13,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/Transforms/Vectorize/SAVIO/Availability.h"
 #include "llvm/Transforms/Vectorize/SAVIO/RegionCost.h"
 #include <optional>
 
@@ -55,6 +56,12 @@ inline bool isImmAmount(const Value *V) {
   auto *C = dyn_cast<Constant>(V);
   return C && (isa<ConstantInt>(C) || C->getSplatValue());
 }
+
+bool isScalarCandidate(const Instruction &I);
+bool isVectorCandidate(const Instruction &I);
+bool isCandidate(const Instruction &I);
+bool isAvailable(const PortDescription *PD, Transform X,
+                 const Instruction &I, unsigned L = 0);
 
 std::optional<RegionEstimate>
 estimateAssignment(const Region &R, const RegionGraph &RG,

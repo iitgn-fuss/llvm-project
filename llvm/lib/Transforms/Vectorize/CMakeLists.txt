@@ -24,9 +24,11 @@ add_llvm_component_library(LLVMVectorize
   SandboxVectorizer/SeedCollector.cpp
   SandboxVectorizer/VecUtils.cpp
   SAVIO/Availability.cpp
+  SAVIO/CandidateAnalysis.cpp
   SAVIO/CostModel.cpp
   SAVIO/ExpandIntrinsics.cpp
   SAVIO/FractionSearch.cpp
+  SAVIO/OperationCosts.cpp
   SAVIO/Partitioner.cpp
   SAVIO/PortDescription.cpp
   SAVIO/RegionCost.cpp
