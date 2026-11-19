@@ -1,0 +1,714 @@
+//===- CostModel.cpp - SAVIO assignment costing --------------------------===//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//===----------------------------------------------------------------------===//
+
+// Costing and fraction search are kept separate from region formation so the
+// cost model can be read and tested without navigating the grouping logic.
+//===----------------------------------------------------------------------===//
+
+#include "llvm/Transforms/Vectorize/SAVIO/Partitioner.h"
+#include "llvm/Transforms/Vectorize/SAVIO/Availability.h"
+#include "PartitionerUtils.h"
+#include "llvm/Transforms/Vectorize/SAVIO/PortDescription.h"
+#include "llvm/Transforms/Vectorize/SAVIO/RegionCost.h"
+#include "llvm/Transforms/Vectorize/SAVIO/SearchCore.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MathExtras.h"
+#include "llvm/Support/raw_ostream.h"
+#include <cfloat>
+#include <optional>
+#include <tuple>
+#include <utility>
+
+using namespace llvm;
+using namespace llvm::savio;
+
+#define DEBUG_TYPE "savio"
+
+static unsigned laneCount(const Group &G) {
+  return cast<FixedVectorType>(G.Ops[0]->getType())->getNumElements();
+}
+
+/// "v4i32" / "v8i32" / "v2i64" ... (vector form) or "i32" / "i64" (scalar lane
+/// form).
+static std::string laneTypeName(const Group &G, bool Vector) {
+  auto *VT = cast<FixedVectorType>(G.Ops[0]->getType());
+  return typeKey(Vector ? static_cast<Type *>(VT) : VT->getElementType());
+}
+
+/// The shift of \p U's operands that the backend folds into \p U (shifted-
+/// register form, or USRA/SSRA for the vector add of a right shift): a shift
+/// of the group by a constant amount whose only user is \p U. The shifted
+/// operand of `sub` must be the second. Null if none. \p Vector selects the
+/// vector form, in which only `add` of a right shift fuses.
+static const Instruction *fusibleShift(const Instruction &U, const Group &G,
+                                       bool Vector) {
+  switch (U.getOpcode()) {
+  case Instruction::Add:
+  case Instruction::And:
+  case Instruction::Or:
+  case Instruction::Xor:
+    break;
+  case Instruction::Sub:
+    if (Vector)
+      return nullptr;
+    break;
+  default:
+    return nullptr;
+  }
+  for (unsigned K : {1u, 0u}) {
+    if (K == 0 && U.getOpcode() == Instruction::Sub)
+      break;
+    auto *S = dyn_cast<Instruction>(U.getOperand(K));
+    if (!S || !isShift(S->getOpcode()) || !S->hasOneUse() ||
+        !is_contained(G.Ops, S) || !isImmAmount(S->getOperand(1)))
+      continue;
+    if (Vector && !(U.getOpcode() == Instruction::Add &&
+                    S->getOpcode() != Instruction::Shl))
+      continue;
+    return S;
+  }
+  return nullptr;
+}
+
+/// Cost of the operation \p I of the ToScalar group \p G in its vector form
+/// (\p Vector, as LLVM left it) or as one scalar operation of a lane (not yet
+/// multiplied by the lane count). A shift by a constant uses the ".imm" key. A
+/// shift folded into its user is charged once, with the fused key, on the user
+/// (the shift then costs nothing); if the port-info has no fused key the two
+/// operations are charged separately. Null if a needed key is missing.
+static std::optional<OpCost> scalarizeOpCost(const PortDescription &PD,
+                                              const Instruction &I,
+                                              const Group &G, bool Vector) {
+  std::string Ty = laneTypeName(G, Vector);
+  auto Fused = [&](const Instruction &U, const Instruction &S) {
+    return (Twine(U.getOpcodeName()) + "." + S.getOpcodeName() + ".imm " + Ty)
+        .str();
+  };
+  // A shift folded into its (only) user.
+  if (isShift(I.getOpcode()) && I.hasOneUse())
+    if (auto *U = dyn_cast<Instruction>(*I.user_begin()))
+      if (is_contained(G.Ops, U) && fusibleShift(*U, G, Vector) == &I &&
+          PD.irOpCost(Fused(*U, I)))
+        return OpCost{{}, 0, 0};
+  if (const Instruction *S = fusibleShift(I, G, Vector))
+    if (std::optional<OpCost> C = PD.irOpCost(Fused(I, *S)))
+      return C;
+  bool Imm = isShift(I.getOpcode()) && isImmAmount(I.getOperand(1));
+  return PD.irOpCost(
+      (Twine(I.getOpcodeName()) + (Imm ? ".imm " : " ") + Ty).str());
+}
+
+/// Cost of \p Lanes copies of \p C issued side by side: resource use and
+/// micro-ops add up, latency does not (the lanes are independent).
+static OpCost lanes(OpCost C, unsigned Lanes) {
+  for (ResourceUse &U : C.Uses)
+    U.Cycles *= Lanes;
+  C.Uops *= Lanes;
+  return C;
+}
+
+/// True if the operand \p V of the Scalarized group \p G reaches its lanes
+/// without a lane extract: a constant (splat or not: immediates), a vector load
+/// the slice owns (split into scalar loads), or, in a loop with a preheader, a
+/// loop-invariant value (its lanes are extracted once in the preheader).
+static bool scalarizeInputIsFree(const Loop *L, const Group &G,
+                                 const Value *V) {
+  if (isa<Constant>(V))
+    return true;
+  if (auto *LD = dyn_cast<LoadInst>(V))
+    if (is_contained(G.OwnedLoads, LD))
+      return true;
+  return L && L->getLoopPreheader() && L->isLoopInvariant(V);
+}
+
+namespace {
+
+/// Whether \p I is an operation on a 512-bit vector type: it produces one, or
+/// is a store of one.
+static bool is512BitOp(const Instruction &I) {
+  Type *T = I.getType();
+  if (auto *SI = dyn_cast<StoreInst>(&I))
+    T = SI->getValueOperand()->getType();
+  auto *VT = dyn_cast<FixedVectorType>(T);
+  return VT && VT->getPrimitiveSizeInBits().getFixedValue() == 512;
+}
+
+/// The port-info cost of an instruction that is in no group: it stays as it
+/// is before and after the move, so it adds a fixed load to the resource and
+/// dispatch bounds. Loads, stores, the lane extracts / inserts the SLP
+/// vectorizer leaves at the scalar boundary, and the arithmetic and logic ops
+/// that have an "<op> <type>" key. Nullopt (the caller's latency-only
+/// fallback, logged under -debug-only=savio) for anything without a key.
+static std::optional<OpCost> outOfGroupOpCost(const PortDescription &PD,
+                                              const Instruction &I) {
+  std::optional<OpCost> C;
+  if (auto *EE = dyn_cast<ExtractElementInst>(&I)) {
+    auto *VT = dyn_cast<FixedVectorType>(EE->getVectorOperand()->getType());
+    auto *Idx = dyn_cast<ConstantInt>(EE->getIndexOperand());
+    if (VT && Idx && VT->getElementType()->isIntegerTy())
+      C = PD.transferCost(Idx->isZero() ? TransferKind::VecToGpr
+                                        : TransferKind::LaneExtract);
+  } else if (auto *IE = dyn_cast<InsertElementInst>(&I)) {
+    auto *VT = dyn_cast<FixedVectorType>(IE->getType());
+    auto *Idx = dyn_cast<ConstantInt>(IE->getOperand(2));
+    if (VT && Idx && VT->getElementType()->isIntegerTy())
+      C = PD.transferCost(Idx->isZero() && isa<PoisonValue>(IE->getOperand(0))
+                              ? TransferKind::GprToVec
+                              : TransferKind::LaneInsert);
+  } else if (auto *LD = dyn_cast<LoadInst>(&I)) {
+    C = PD.irOpCost("load " + typeKey(LD->getType()));
+  } else if (auto *ST = dyn_cast<StoreInst>(&I)) {
+    C = PD.irOpCost(
+        "store " + typeKey(ST->getValueOperand()->getType()));
+  } else if (!bitCountName(I).empty()) {
+    C = PD.irOpCost(opName(I) + " i32");
+  } else if (I.isBinaryOp() && !I.getType()->isFPOrFPVectorTy()) {
+    bool Imm = isa<ConstantInt>(I.getOperand(1)) &&
+               (I.getOpcode() == Instruction::Shl ||
+                I.getOpcode() == Instruction::LShr ||
+                I.getOpcode() == Instruction::AShr);
+    C = PD.irOpCost((Twine(I.getOpcodeName()) + (Imm ? ".imm " : " ") +
+                     typeKey(I.getType()))
+                        .str());
+  } else {
+    return std::nullopt;
+  }
+  LLVM_DEBUG(if (!C) dbgs() << "savio: no port-info cost for out-of-group "
+                            << I << "\n");
+  LLVM_DEBUG(if (C) dbgs() << "savio: out-of-group charge: " << I << "\n");
+  return C;
+}
+
+/// Cost model nodes of a region for one assignment, one node per instruction
+/// of the region graph plus the transfers a Singleton Vectorized group needs.
+///
+/// In-scope operations of groups are priced from the port description (scalar
+/// or lane-0 vector form); every other instruction (loads, stores, address
+/// arithmetic, calls, compares, branches, other types) from the fallback, which
+/// gives it latency and micro-ops but no resource use (unless the port
+/// description sets chargeOutOfGroup(): then outOfGroupOpCost prices loads,
+/// stores, lane extracts / inserts and integer ops). So a dependence through
+/// any instruction is kept, and T bounds the whole block.
+///
+/// The builder can also model the region unrolled \p Copies times without
+/// touching the IR ("virtual unroll"): the body is laid out Copies times, the
+/// carried edge of distance d from copy j goes to copy j-d (a same-iteration
+/// edge) or, past the first copy, wraps to the last copies with a distance in
+/// unrolled iterations; the loop-control branch and the compare that only
+/// feeds it appear once, in the last copy. Groups of a copy are separate
+/// instances (virtual group j * NumGroups + g), except a recurrence, which is
+/// one chain through all copies and keeps the virtual group g.
+class NodeBuilder {
+  const Region &R;
+  const RegionGraph &RG;
+  const PortDescription &PD;
+  FallbackCostFn Fallback;
+  ArrayRef<bool> Promoted; // Indexed by virtual group.
+  unsigned Copies;
+  unsigned N;  // Nodes of the region graph.
+  unsigned NG; // Groups of the region.
+
+  SmallVector<CostNode, 32> Nodes;
+  /// Node of each virtual instruction (copy * N + graph node), or None.
+  SmallVector<unsigned, 32> NodeOf, OutNode;
+  /// Group of each graph node, or None.
+  SmallVector<unsigned, 32> GroupOfNode;
+  /// The lane groups of each vector divide node, by group index.
+  DenseMap<unsigned, SmallVector<unsigned, 4>> LaneGroups;
+  SmallVector<bool, 32> ControlOnly;
+  /// The ToScalar group owning each load/store node, if any.
+  DenseMap<unsigned, unsigned> MemOwner;
+  DenseMap<std::tuple<unsigned, const Value *, unsigned>, unsigned> InNode;
+  static constexpr unsigned None = ~0u;
+  /// A loop-carried edge to add once all nodes exist: the value of virtual
+  /// instruction Latch, Dist unrolled iterations earlier, reaches node Dest.
+  /// Through a phi kept in vector form (Joined) it stays in the vector domain;
+  /// otherwise it is the scalar value, i.e. the VecToGpr node if the latch
+  /// operation has one.
+  struct CarriedEdge {
+    unsigned Dest;
+    unsigned Latch;
+    bool Joined;
+    unsigned Dist;
+  };
+  SmallVector<CarriedEdge, 4> Pending;
+
+  /// A transfer node. For a Scalarize boundary (\p VecTy given, \p K a lane
+  /// kind): the per-width entry for \p VecTy ("lane_extract <vty>" /
+  /// "lane_insert <vty>", the whole-vector sequence) once, when the port-info
+  /// has it; every boundary moves all the lanes (partial transfers are a
+  /// follow-up). Without it, the untyped key charged \p Lanes times (resource
+  /// use and micro-ops times Lanes; latency as is, or times Lanes when
+  /// \p Chain: the inserts into one vector depend on each other).
+  bool addTransfer(TransferKind K, ArrayRef<unsigned> Preds, unsigned &Out,
+                   unsigned Lanes = 1, bool Chain = false,
+                   Type *VecTy = nullptr) {
+    CostNode Nd;
+    bool IsLane =
+        K == TransferKind::LaneExtract || K == TransferKind::LaneInsert;
+    std::optional<OpCost> W;
+    if (VecTy && IsLane) {
+      W = PD.laneTransferCost(K, typeKey(VecTy));
+      if (W) {
+        Nd.Cost = *W;
+        Nd.Wide512 = VecTy->getPrimitiveSizeInBits().getFixedValue() == 512;
+      }
+    }
+    if (!W) {
+      std::optional<OpCost> C = PD.transferCost(K);
+      if (!C)
+        return false;
+      Nd.Cost = lanes(*C, Lanes);
+      if (Chain)
+        Nd.Cost.Latency *= Lanes;
+    }
+    LLVM_DEBUG({
+      if (VecTy && IsLane) {
+        dbgs() << "savio: transfer "
+               << (K == TransferKind::LaneExtract ? "lane_extract"
+                                                  : "lane_insert");
+        if (W)
+          dbgs() << ' ' << typeKey(VecTy) << " per-width";
+        else
+          dbgs() << " per-lane x" << Lanes;
+        dbgs() << ": uops " << Nd.Cost.Uops << " latency " << Nd.Cost.Latency
+               << " uses";
+        for (const ResourceUse &U : Nd.Cost.Uses)
+          dbgs() << ' ' << PD.className(U.Class) << ' ' << U.Cycles;
+        dbgs() << '\n';
+      }
+    });
+    Nd.Preds.assign(Preds.begin(), Preds.end());
+    Out = Nodes.size();
+    Nodes.push_back(std::move(Nd));
+    return true;
+  }
+
+public:
+  NodeBuilder(const Region &R, const RegionGraph &RG, const PortDescription &PD,
+              FallbackCostFn Fallback, ArrayRef<bool> Promoted,
+              unsigned Copies = 1)
+      : R(R), RG(RG), PD(PD), Fallback(Fallback), Promoted(Promoted),
+        Copies(Copies), N(RG.Insts.size()), NG(R.Groups.size()),
+        NodeOf(size_t(Copies) * N, None), OutNode(size_t(Copies) * N, None),
+        GroupOfNode(N, None), ControlOnly(N, false) {
+    for (unsigned G = 0; G != NG; ++G) {
+      for (LoadInst *LD : R.Groups[G].OwnedLoads)
+        MemOwner[RG.Index.lookup(LD)] = G;
+      for (StoreInst *S : R.Groups[G].OwnedStores)
+        MemOwner[RG.Index.lookup(S)] = G;
+    }
+    for (unsigned G = 0; G != NG; ++G)
+      for (Instruction *I : R.Groups[G].Ops) {
+        unsigned NI = RG.Index.lookup(I);
+        if (!R.Groups[G].VectorDivide) {
+          GroupOfNode[NI] = G;
+        } else {
+          SmallVector<unsigned, 4> &LG = LaneGroups[NI];
+          LG.resize(std::max<size_t>(LG.size(), R.Groups[G].LaneGroup + 1));
+          LG[R.Groups[G].LaneGroup] = G;
+        }
+      }
+    // In a loop, the terminator and what only feeds it (the exit test).
+    if (R.L)
+      for (unsigned I = 0; I != N; ++I) {
+        const Instruction *In = RG.Insts[I];
+        ControlOnly[I] = In->isTerminator() ||
+                         (!In->use_empty() &&
+                          all_of(In->users(), [](const User *U) {
+                            return cast<Instruction>(U)->isTerminator();
+                          }));
+      }
+  }
+
+  /// The virtual group of group \p G in copy \p J.
+  unsigned virtualGroup(unsigned G, unsigned J) const {
+    return R.Groups[G].Recurrence ? G : J * NG + G;
+  }
+
+  /// Fills the nodes; false if the assignment needs a cost the port
+  /// description lacks.
+  bool build() {
+    for (unsigned J = 0; J != Copies; ++J)
+      for (unsigned NI = 0; NI != N; ++NI)
+        if ((J + 1 == Copies || !ControlOnly[NI]) && !buildNode(J, NI))
+          return false;
+
+    for (const CarriedEdge &E : Pending) {
+      unsigned Src = E.Joined ? NodeOf[E.Latch] : scalarNode(E.Latch);
+      Nodes[E.Dest].Carried.push_back({Src, E.Dist});
+    }
+    return true;
+  }
+
+  ArrayRef<CostNode> nodes() const { return Nodes; }
+
+private:
+  bool buildNode(unsigned J, unsigned NI) {
+    const Instruction &I = *RG.Insts[NI];
+    unsigned V = J * N + NI;
+    // The region graph holds one edge per operand defined in the block, in
+    // operand order: same-iteration in Preds, through a header phi in
+    // Carried.
+    unsigned PredCur = 0, CarriedCur = 0;
+    bool InGroup = GroupOfNode[NI] != None;
+    unsigned GIdx = InGroup ? GroupOfNode[NI] : 0;
+    unsigned VG = virtualGroup(GIdx, J);
+    bool P = InGroup && Promoted[VG];
+
+    CostNode Nd;
+    // Carried edges whose destination is this instruction, resolved below.
+    SmallVector<CarriedEdge, 2> OwnEdges;
+    for (const Use &U : I.operands()) {
+      const Value *Op = U.get();
+      unsigned DefV = None;   // Same-iteration producer, as a virtual id.
+      unsigned LatchV = None; // Carried producer (a phi wrapped past copy 0).
+      unsigned Dist = 1, SrcCopy = 0;
+      bool Joined = false;
+      if (auto *Phi = dyn_cast<PHINode>(Op)) {
+        // A loop phi closes a recurrence through this operand when its latch
+        // value is an instruction of the block: a carried edge.
+        if (RG.PhiLatch.count(Phi)) {
+          assert(CarriedCur < RG.Carried[NI].size() && "missing carried edge");
+          auto [LatchNode, D] = RG.Carried[NI][CarriedCur++];
+          if (J >= D) {
+            // The value of an earlier copy of this unrolled iteration.
+            SrcCopy = J - D;
+            DefV = SrcCopy * N + LatchNode;
+            Op = RG.Insts[LatchNode];
+          } else {
+            SrcCopy = ((int(J) - int(D)) % int(Copies) + int(Copies)) %
+                      int(Copies);
+            LatchV = SrcCopy * N + LatchNode;
+            Dist = (D - J + Copies - 1) / Copies;
+            Joined = InGroup && is_contained(R.Groups[GIdx].CarriedPhis, Phi);
+          }
+        }
+      } else if (auto *OpI = dyn_cast<Instruction>(Op)) {
+        if (RG.Index.count(OpI)) {
+          assert(PredCur < RG.Preds[NI].size() && "missing pred edge");
+          unsigned DefNode = RG.Preds[NI][PredCur++];
+          assert(RG.Insts[DefNode] == OpI && "region graph edge order differs");
+          SrcCopy = J;
+          DefV = J * N + DefNode;
+        }
+      }
+
+      if (Joined) {
+        OwnEdges.push_back({0, LatchV, true, Dist});
+        continue;
+      }
+      // The operand's value in this instruction's domain: another
+      // instruction of the same group is read as is; anything else is the
+      // scalar value, i.e. through the VecToGpr node of a live-out.
+      bool SameGroup = false;
+      if (DefV != None && InGroup) {
+        unsigned DG = GroupOfNode[DefV % N];
+        SameGroup = DG != None && DG == GIdx &&
+                    virtualGroup(DG, DefV / N) == VG;
+      }
+      // A ToScalar group's non-free input is a lane extract of the vector.
+      bool Vec = InGroup && R.Groups[GIdx].Dir == Direction::ToScalar;
+      InputKind K = InputKind::Free;
+      if (P && !SameGroup) {
+        if (!Vec)
+          K = classifyInput(R.L, R.Groups[GIdx], Op);
+        else if (!scalarizeInputIsFree(R.L, R.Groups[GIdx], Op))
+          K = InputKind::GprToVec; // Stands for "needs a transfer".
+      }
+      if (P && !SameGroup && K != InputKind::Free) {
+        auto Key = std::make_tuple(VG, Op, SrcCopy);
+        auto It = InNode.find(Key);
+        unsigned T;
+        if (It != InNode.end()) {
+          T = It->second;
+        } else {
+          SmallVector<unsigned, 1> TP;
+          if (DefV != None)
+            TP.push_back(scalarNode(DefV));
+          bool Ok =
+              Vec ? addTransfer(TransferKind::LaneExtract, TP, T,
+                                laneCount(R.Groups[GIdx]), /*Chain=*/false,
+                                I.getType())
+                  : addTransfer(K == InputKind::GprToVec
+                                    ? TransferKind::GprToVec
+                                    : TransferKind::LaneToLane0,
+                                TP, T);
+          if (!Ok)
+            return false;
+          InNode[Key] = T;
+          if (LatchV != None)
+            Pending.push_back({T, LatchV, false, Dist});
+        }
+        Nd.Preds.push_back(T);
+        continue;
+      }
+      if (DefV != None)
+        Nd.Preds.push_back(SameGroup ? NodeOf[DefV] : scalarNode(DefV));
+      else if (LatchV != None)
+        OwnEdges.push_back({0, LatchV, false, Dist});
+    }
+
+    assert(PredCur == RG.Preds[NI].size() &&
+           CarriedCur == RG.Carried[NI].size() && "unconsumed graph edges");
+    if (auto LG = LaneGroups.find(NI); LaneGroups.end() != LG)
+      return buildVectorDivide(J, NI, LG->second, Nd, OwnEdges);
+    std::optional<OpCost> C;
+    const ConcurrencyTable *Conc = nullptr;
+    auto OwnerIt = MemOwner.find(NI);
+    if (InGroup && R.Groups[GIdx].Dir == Direction::ToScalar) {
+      // Scalarize candidate: its vector form as LLVM left it, or one scalar
+      // operation per lane. An unpromoted one without a key costs what the
+      // fallback says; a promoted one cannot be costed.
+      const Group &G = R.Groups[GIdx];
+      C = scalarizeOpCost(PD, I, G, /*Vector=*/!P);
+      if (!C && P)
+        return false;
+      if (C && P)
+        C = lanes(*C, laneCount(G));
+    } else if (OwnerIt != MemOwner.end()) {
+      // A load or store owned by a ToScalar group: a vector access, or one
+      // scalar access per lane when the group is Scalarized. (The scalar
+      // accesses are charged per op by their summed address-unit use, which
+      // over-charges a split copy by about 15% against measured pairs: a known
+      // limitation of the key-per-op model.)
+      const Group &G = R.Groups[OwnerIt->second];
+      bool MP = Promoted[virtualGroup(OwnerIt->second, J)];
+      C = PD.irOpCost((Twine(isa<LoadInst>(I) ? "load " : "store ") +
+                       laneTypeName(G, !MP))
+                          .str());
+      if (!C && MP)
+        return false;
+      if (C && MP)
+        C = lanes(*C, laneCount(G));
+    } else if (InGroup) {
+      std::string Key;
+      if (P) {
+        bool Imm = isShift(I.getOpcode()) && isa<ConstantInt>(I.getOperand(1));
+        Key = "sv." + opName(I) + (Imm ? ".imm v4i32" : " v4i32");
+      } else {
+        Key = opName(I) + " i32";
+      }
+      C = PD.irOpCost(Key);
+      if (!C && P)
+        return false;
+      if (C && P)
+        Conc = PD.concurrency(Key);
+    }
+    if (!C && !InGroup && PD.chargeOutOfGroup())
+      C = outOfGroupOpCost(PD, I);
+    Nd.Cost = C ? *C : Fallback(I);
+    Nd.Conc = Conc;
+    // A Scalarized operation is scalar code, whatever the IR type says.
+    bool Scalarized =
+        (InGroup && R.Groups[GIdx].Dir == Direction::ToScalar && P) ||
+        (OwnerIt != MemOwner.end() &&
+         Promoted[virtualGroup(OwnerIt->second, J)]);
+    Nd.Wide512 = !Scalarized && is512BitOp(I);
+    unsigned Me = Nodes.size();
+    Nodes.push_back(std::move(Nd));
+    NodeOf[V] = Me;
+    for (CarriedEdge &E : OwnEdges) {
+      E.Dest = Me;
+      Pending.push_back(E);
+    }
+
+    // Live-out of a Scalarized group: its lanes back into a vector, unless
+    // every user outside the group is a store the group owns.
+    if (P && R.Groups[GIdx].Dir == Direction::ToScalar) {
+      const Group &G = R.Groups[GIdx];
+      // Not when every user outside the group is a constant-lane extract the
+      // out-of-group charge already prices (the SLP vectorizer's lane
+      // extracts): the backend folds extract-of-insert, so the lane insert
+      // would charge the same lanes twice.
+      auto IsChargedExtract = [&](const User *U) {
+        auto *EE = dyn_cast<ExtractElementInst>(U);
+        return EE && isa<ConstantInt>(EE->getIndexOperand()) &&
+               !isInGroup(G, U);
+      };
+      bool ExtractsOnly = PD.chargeOutOfGroup() &&
+                          all_of(I.users(), [&](const User *U) {
+                            return isInGroup(G, U) ||
+                                   is_contained(G.OwnedStores,
+                                                dyn_cast<StoreInst>(U)) ||
+                                   IsChargedExtract(U);
+                          });
+      if (is_contained(G.LiveOuts, &I) && liveOutNeedsInsert(G, I) &&
+          !ExtractsOnly) {
+        unsigned T;
+        if (!addTransfer(TransferKind::LaneInsert, {Me}, T, laneCount(G),
+                         /*Chain=*/true, I.getType()))
+          return false;
+        OutNode[V] = T;
+      }
+      return true;
+    }
+    // Live-out of a Singleton Vectorized group: back to a GPR unless every
+    // user outside the group is a store, which can store from the vector.
+    if (P && is_contained(R.Groups[GIdx].LiveOuts, &I)) {
+      if (liveOutNeedsGpr(R.Groups[GIdx], I)) {
+        unsigned T;
+        if (!addTransfer(TransferKind::VecToGpr, {Me}, T))
+          return false;
+        OutNode[V] = T;
+      }
+    }
+    return true;
+  }
+
+  /// A `udiv`/`urem <N x i32>`: one node per lane group, joined by a node of
+  /// no cost that stands for the instruction. A group that stays is its share
+  /// of the backend's scalar split (key "<op> v<N>i32", the resource use and
+  /// micro-ops divided by the number of groups, the same latency); the first
+  /// m groups together are the fpdiv<m*G> sequence ("fpdiv<m*G>.<op> v<N>i32",
+  /// G lanes per group), at its measured whole-sequence cost, plus a
+  /// concurrency table if the entry has one. Without the split's cost the
+  /// instruction costs what the fallback says, and cannot be moved. The
+  /// operands are vectors already: there is no transfer.
+  bool buildVectorDivide(unsigned J, unsigned NI, ArrayRef<unsigned> Groups,
+                         CostNode &Nd, ArrayRef<CarriedEdge> OwnEdges) {
+    const Instruction &I = *RG.Insts[NI];
+    unsigned V = J * N + NI;
+    unsigned NumGroups = Groups.size();
+    unsigned Size = R.Groups[Groups[0]].GroupLanes;
+    SmallVector<bool, 4> Pr;
+    unsigned Moved = 0; // The groups moved are the first Moved ones.
+    bool Prefix = true;
+    for (unsigned Idx : Groups) {
+      bool P = Promoted[virtualGroup(Idx, J)];
+      Pr.push_back(P);
+      if (P && Moved != Pr.size() - 1)
+        Prefix = false;
+      Moved += P;
+    }
+    std::string Ty = typeKey(I.getType());
+    std::string Op = (Twine(I.getOpcodeName()) + " " + Ty).str();
+    std::optional<OpCost> Base = PD.irOpCost(Op);
+    if (!Base) {
+      if (Moved)
+        return false;
+      Nd.Cost = Fallback(I);
+      Nd.Wide512 = is512BitOp(I);
+      NodeOf[V] = Nodes.size();
+      unsigned Me = Nodes.size();
+      Nodes.push_back(std::move(Nd));
+      for (const CarriedEdge &E : OwnEdges)
+        Pending.push_back({Me, E.Latch, E.Joined, E.Dist});
+      return true;
+    }
+    // A later group alone, or after a gap, would need operand and result
+    // shuffles that no sequence prices: not an assignment the model can cost,
+    // so never chosen. Nor is a lane count that has no intrinsic.
+    unsigned MovedLanes = Moved * Size;
+    if (!Prefix || (Moved && (MovedLanes < 2 || !isPowerOf2_32(MovedLanes))))
+      return false;
+    std::optional<OpCost> Seq;
+    const ConcurrencyTable *SeqConc = nullptr;
+    if (Moved) {
+      std::string Key =
+          fpDivideKey(I.getOpcodeName(), I.getType(), MovedLanes, Size);
+      Seq = PD.irOpCost(Key);
+      if (!Seq)
+        return false;
+      SeqConc = PD.concurrency(Key);
+    }
+    SmallVector<unsigned, 4> GroupNodes;
+    for (unsigned P = 0; P != NumGroups; ++P) {
+      CostNode PN;
+      PN.Preds = Nd.Preds;
+      if (Pr[P]) {
+        // The moved groups are one sequence, carried by the node of group 0;
+        // the nodes of the other moved groups cost nothing.
+        if (P == 0) {
+          PN.Cost = *Seq;
+          PN.Conc = SeqConc;
+          // A zmm divide is emitted only where the backend uses zmm: the
+          // function holds a 512-bit vector, or the lane group is 512 bits
+          // (G = 8). Two ymm divides (G = 4 on a v8i32) are not 512-bit.
+          PN.Wide512 =
+              MovedLanes * 64 >= 512 &&
+              (Size * 64 == 512 ||
+               I.getType()->getPrimitiveSizeInBits().getFixedValue() >= 512);
+        } else {
+          PN.Cost = OpCost{{}, 0, 0};
+        }
+      } else {
+        // A group that stays: its share of the split's resource use and
+        // micro-ops (the odd micro-ops go to the first groups). The latency
+        // stays that of the whole split, which is pessimistic for a part.
+        PN.Cost = *Base;
+        for (ResourceUse &U : PN.Cost.Uses)
+          U.Cycles /= NumGroups;
+        PN.Cost.Uops = (PN.Cost.Uops + NumGroups - 1 - P) / NumGroups;
+      }
+      GroupNodes.push_back(Nodes.size());
+      Nodes.push_back(std::move(PN));
+      for (const CarriedEdge &E : OwnEdges)
+        Pending.push_back({GroupNodes.back(), E.Latch, E.Joined, E.Dist});
+    }
+    CostNode Join;
+    Join.Cost = OpCost{{}, 0, 0};
+    Join.Wide512 = is512BitOp(I);
+    Join.Preds.assign(GroupNodes.begin(), GroupNodes.end());
+    NodeOf[V] = Nodes.size();
+    Nodes.push_back(std::move(Join));
+    return true;
+  }
+
+  /// The node producing the scalar value of virtual instruction \p V: its
+  /// VecToGpr node if it is a Singleton Vectorized live-out, else its own.
+  unsigned scalarNode(unsigned V) const {
+    return OutNode[V] != None ? OutNode[V] : NodeOf[V];
+  }
+};
+
+} // namespace
+
+namespace llvm {
+namespace savio {
+
+/// Estimate an assignment on the region unrolled \p Copies times, per
+/// original iteration; nullopt if it needs a missing cost.
+std::optional<RegionEstimate>
+estimateAssignment(const Region &R, const RegionGraph &RG,
+                   const PortDescription &PD, FallbackCostFn Fallback,
+                   ArrayRef<bool> Promoted, unsigned Copies) {
+  NodeBuilder B(R, RG, PD, Fallback, Promoted, Copies);
+  if (!B.build())
+    return std::nullopt;
+  SmallVector<CostNode, 32> Nodes(B.nodes().begin(), B.nodes().end());
+  applyConcurrency(Nodes, PD, R.L != nullptr);
+  RegionEstimate E = estimateRegion(Nodes, PD, R.L != nullptr);
+  E.TRes /= Copies;
+  E.TRec /= Copies;
+  E.TDisp /= Copies;
+  E.TMem = R.MemFloor;
+  LLVM_DEBUG({
+    dbgs() << "savio: estimate (copies " << Copies << ", promoted";
+    for (unsigned I = 0; I != Promoted.size(); ++I)
+      if (Promoted[I])
+        dbgs() << ' ' << I;
+    dbgs() << "): TRes " << E.TRes << " (" << PD.className(E.BusiestClass)
+           << ") TRec " << E.TRec << " TDisp " << E.TDisp << " TMem "
+           << E.TMem;
+    if (PD.hasPortSets())
+      dbgs() << " with512=" << E.With512;
+    dbgs() << "\n";
+  });
+  return E;
+}
+
+} // namespace savio
+} // namespace llvm
