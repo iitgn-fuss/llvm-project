@@ -107,7 +107,8 @@ public:
       for (unsigned K = 0; K != N; ++K) {
         Value *A = lane(I->getOperand(0), K, I);
         Value *Bv = lane(I->getOperand(1), K, I);
-        auto *S = BinaryOperator::Create(BO->getOpcode(), A, Bv, "", I);
+        auto *S = BinaryOperator::Create(BO->getOpcode(), A, Bv, "",
+                                         I->getIterator());
         S->copyIRFlags(I);
         S->setDebugLoc(I->getDebugLoc());
         V.push_back(S);

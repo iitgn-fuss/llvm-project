@@ -163,7 +163,11 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
 
   std::unique_ptr<PortDescription> PD(new PortDescription());
 
-  // resources.json
+  //===========================================================================
+  // Phase 1: Parse resources.json
+  // Micro-architecture configuration: execution classes, port masks,
+  // front-end dispatch width, vector width, and cache penalties.
+  //===========================================================================
   {
     Expected<json::Object> R = readObject(Dir, "resources.json");
     if (!R)
@@ -321,7 +325,10 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
     return It - PD->ClassNames.begin();
   };
 
-  // ops.json
+  //===========================================================================
+  // Phase 2: Parse ops.json (individual opcodes)
+  // Maps machine opcodes to latency, uops, and resource class cycle occupancy.
+  //===========================================================================
   StringMap<OpCost> Ops;
   {
     Expected<json::Object> O = readObject(Dir, "ops.json");
@@ -368,9 +375,10 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
     }
   }
 
-  // ops.json "sequences" (optional): whole-sequence measurements that
-  // override the per-opcode sum for a probe key. Keys are validated against
-  // probes.json below.
+  //===========================================================================
+  // Phase 3: Parse ops.json "sequences" and "throughput_by_concurrency"
+  // Whole-sequence overrides and saturation interpolation curves.
+  //===========================================================================
   StringMap<OpCost> Sequences;
   StringMap<ConcurrencyTable> Tables;
   {
@@ -449,7 +457,10 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
     }
   }
 
-  // transfers.json
+  //===========================================================================
+  // Phase 4: Parse transfers.json
+  // Quantifies cross-domain register transfers (GPR <-> Vector, etc.).
+  //===========================================================================
   {
     Expected<json::Object> T = readObject(Dir, "transfers.json");
     if (!T)
@@ -474,7 +485,10 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
     }
   }
 
-  // lane_transfers.json (optional): per-width lane transfers.
+  //===========================================================================
+  // Phase 5: Parse lane_transfers.json (optional)
+  // Per-vector-width lane extraction and insertion sequences.
+  //===========================================================================
   {
     SmallString<128> LP(Dir);
     sys::path::append(LP, "lane_transfers.json");
@@ -507,7 +521,10 @@ PortDescription::load(StringRef Root, StringRef Arch, StringRef CPU) {
     }
   }
 
-  // probes.json
+  //===========================================================================
+  // Phase 6: Parse probes.json and apply sequence overrides
+  // Maps high-level IR signatures to machine opcode costs.
+  //===========================================================================
   {
     Expected<json::Object> P = readObject(Dir, "probes.json");
     if (!P)

@@ -6,9 +6,39 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Loads the per-CPU port-info files (resources.json, ops.json, transfers.json,
-// probes.json) that describe execution-resource classes and the resource use
-// and latency of machine opcodes, and maps IR-level operation forms onto them.
+// Defines the micro-architectural port description loader and query interface
+// for the SAVIO cost model.
+//
+// Port information is stored per CPU target under `<Root>/<Arch>/<CPU>/` in
+// five structured JSON files:
+//
+// 1. `resources.json`:
+//    - Execution resource classes and units (`classes`: name -> {units, ports}).
+//    - Optional 512-bit port degradation (`ports_with_512`).
+//    - Machine front-end dispatch width (`dispatch_width`).
+//    - Vector register width (`vector_width_bits`, default 128).
+//    - Out-of-order execution window size (`window_uops`).
+//    - Cache penalty for data-dependent accesses (`indirect_access`).
+//    - Analysis flags (`charge_out_of_group`, `critical_path_outside_loops`).
+//
+// 2. `ops.json`:
+//    - Benchmarked machine opcode characteristics (`latency`, `uops`, `uses`).
+//    - Whole-sequence overrides and non-linear concurrency scaling curves
+//      (`throughput_by_concurrency`).
+//
+// 3. `transfers.json`:
+//    - Domain-crossing data motion costs across scalar (GPR) and vector (SIMD)
+//      registers (`gpr_to_vec`, `vec_to_gpr`, `load_to_vec`, `store_from_vec`,
+//      `lane_to_lane0`, and optional `lane_extract`, `lane_insert`).
+//
+// 4. `lane_transfers.json` (optional):
+//    - Per-vector-width lane extraction and insertion instruction chains
+//      (`lane_extract v8i32`, `lane_insert v4i64`), specifying full opcode sets
+//      and critical chain latencies.
+//
+// 5. `probes.json`:
+//    - Maps high-level LLVM IR operation signatures (e.g. `add i32`, `mul i64`,
+//      `sv.fdiv v4f32`) onto machine opcode lists in `ops.json`.
 //
 //===----------------------------------------------------------------------===//
 

@@ -60,18 +60,23 @@ cl::opt<int> llvm::SAVIOForceCount(
 /// whose poison/undef semantics are stronger than an ordinary scalar
 /// operation, rather than silently dropping nuw/nsw/exact.
 
+/// Returns true if user \p U is a simple (non-atomic, non-volatile) store
+/// storing value \p V to some memory address (and not storing into V itself).
 static bool isSimpleStoreOf(const User *U, const Value *V) {
   auto *S = dyn_cast<StoreInst>(U);
   return S && S->isSimple() && S->getValueOperand() == V &&
          S->getPointerOperand() != V;
 }
 
-/// True if the value of \p I reaches an address (a GEP operand or an inttoptr)
-/// through casts, phis and other in-scope operations: addresses must stay in
-/// GPRs, so such an operation is not a candidate. The walk stops at a bit count
-/// (a call: whether it is in scope depends on the port information, which this
-/// walk does not see; stopping keeps the behaviour of the code before bit counts
-/// were candidates, on every target).
+/// Returns true if the value computed by instruction \p I flows into an address
+/// calculation (e.g. as an index/offset to a GetElementPtrInst or an IntToPtrInst)
+/// through casts, PHIs, or other in-scope arithmetic.
+///
+/// WHY: Address calculations must reside in General Purpose Registers (GPRs).
+/// Vectorizing an operation that produces or feeds an address would force an
+/// expensive vector-to-GPR transfer instruction before every memory access,
+/// eliminating any performance advantage. The walk stops at bit-counting calls
+/// (ctpop/ctlz).
 static bool reachesAddress(const Instruction &I) {
   SmallVector<const Instruction *, 8> Work{&I};
   SmallPtrSet<const Instruction *, 8> Seen{&I};
@@ -95,7 +100,7 @@ static bool reachesAddress(const Instruction &I) {
 
 namespace {
 
-/// Union-find over indices.
+/// Disjoint-set data structure (Union-Find with path compression) over integer indices.
 struct DisjointSets {
   SmallVector<unsigned, 16> Parent;
   unsigned add() {
@@ -115,71 +120,97 @@ struct DisjointSets {
   }
 };
 
+/// DFS frame for iterative Tarjan's SCC search.
+struct TarjanFrame {
+  unsigned Node;
+  unsigned NextSucc;
+};
+
 } // namespace
 
-/// Strongly connected components of the region graph (same-iteration and
-/// carried edges), by iterative Tarjan. Returns the component id of each node;
-/// ids are dense. \p HasCycle[c] is true for components that are cycles (more
-/// than one node, or a node with a carried edge to itself).
+/// Computes the strongly connected components (SCCs) of the region graph
+/// considering both same-iteration def-use edges and loop-carried dependencies,
+/// using an iterative implementation of Tarjan's algorithm.
+///
+/// Returns a vector mapping each node index to its dense SCC component ID.
+/// \p HasCycle is populated with a boolean per component indicating whether the
+/// component forms a recurrence cycle (contains >1 node, or a self-loop).
 static SmallVector<unsigned, 32> computeSCCs(const RegionGraph &RG,
                                              SmallVectorImpl<bool> &HasCycle) {
-  unsigned N = RG.Insts.size();
-  SmallVector<SmallVector<unsigned, 2>, 32> Succs(N);
-  for (unsigned U = 0; U != N; ++U) {
-    for (unsigned P : RG.Preds[U])
-      Succs[P].push_back(U);
-    for (auto &E : RG.Carried[U])
-      Succs[E.first].push_back(U);
+  const unsigned NumNodes = RG.Insts.size();
+  SmallVector<SmallVector<unsigned, 2>, 32> Successors(NumNodes);
+  for (unsigned NodeIdx = 0; NodeIdx != NumNodes; ++NodeIdx) {
+    for (unsigned PredIdx : RG.Preds[NodeIdx])
+      Successors[PredIdx].push_back(NodeIdx);
+    for (const auto &CarriedEdge : RG.Carried[NodeIdx])
+      Successors[CarriedEdge.first].push_back(NodeIdx);
   }
-  const unsigned None = ~0u;
-  SmallVector<unsigned, 32> Index(N, None), Low(N, 0), Comp(N, None);
-  SmallVector<bool, 32> OnStack(N, false);
-  SmallVector<unsigned, 32> Stack;
-  SmallVector<std::pair<unsigned, unsigned>, 32> Work; // (node, next succ)
-  unsigned Counter = 0, NumComps = 0;
-  for (unsigned Root = 0; Root != N; ++Root) {
-    if (Index[Root] != None)
+
+  const unsigned Unvisited = ~0u;
+  SmallVector<unsigned, 32> DfsIndex(NumNodes, Unvisited);
+  SmallVector<unsigned, 32> LowLink(NumNodes, 0);
+  SmallVector<unsigned, 32> NodeComponent(NumNodes, Unvisited);
+  SmallVector<bool, 32> OnStack(NumNodes, false);
+  SmallVector<unsigned, 32> SccStack;
+  SmallVector<TarjanFrame, 32> DfsWorkStack;
+
+  unsigned NextIndex = 0;
+  unsigned NumComponents = 0;
+
+  for (unsigned Root = 0; Root != NumNodes; ++Root) {
+    if (DfsIndex[Root] != Unvisited)
       continue;
-    Work.push_back({Root, 0});
-    Index[Root] = Low[Root] = Counter++;
-    Stack.push_back(Root);
+
+    DfsWorkStack.push_back({Root, 0});
+    DfsIndex[Root] = LowLink[Root] = NextIndex++;
+    SccStack.push_back(Root);
     OnStack[Root] = true;
-    while (!Work.empty()) {
-      auto &[V, Next] = Work.back();
-      if (Next < Succs[V].size()) {
-        unsigned W = Succs[V][Next++];
-        if (Index[W] == None) {
-          Index[W] = Low[W] = Counter++;
-          Stack.push_back(W);
-          OnStack[W] = true;
-          Work.push_back({W, 0});
-        } else if (OnStack[W]) {
-          Low[V] = std::min(Low[V], Index[W]);
+
+    while (!DfsWorkStack.empty()) {
+      auto &[CurrNode, NextSuccIdx] = DfsWorkStack.back();
+      if (NextSuccIdx < Successors[CurrNode].size()) {
+        unsigned SuccNode = Successors[CurrNode][NextSuccIdx++];
+        if (DfsIndex[SuccNode] == Unvisited) {
+          DfsIndex[SuccNode] = LowLink[SuccNode] = NextIndex++;
+          SccStack.push_back(SuccNode);
+          OnStack[SuccNode] = true;
+          DfsWorkStack.push_back({SuccNode, 0});
+        } else if (OnStack[SuccNode]) {
+          LowLink[CurrNode] = std::min(LowLink[CurrNode], DfsIndex[SuccNode]);
         }
         continue;
       }
-      unsigned Vn = V;
-      Work.pop_back();
-      if (!Work.empty())
-        Low[Work.back().first] = std::min(Low[Work.back().first], Low[Vn]);
-      if (Low[Vn] == Index[Vn]) {
-        unsigned Size = 0, X;
+
+      unsigned FinishedNode = CurrNode;
+      DfsWorkStack.pop_back();
+      if (!DfsWorkStack.empty()) {
+        unsigned ParentNode = DfsWorkStack.back().Node;
+        LowLink[ParentNode] = std::min(LowLink[ParentNode], LowLink[FinishedNode]);
+      }
+
+      // Root of an SCC found.
+      if (LowLink[FinishedNode] == DfsIndex[FinishedNode]) {
+        unsigned SccSize = 0;
+        unsigned MemberNode = 0;
         do {
-          X = Stack.pop_back_val();
-          OnStack[X] = false;
-          Comp[X] = NumComps;
-          ++Size;
-        } while (X != Vn);
-        bool Cycle = Size > 1;
-        if (!Cycle)
-          for (auto &E : RG.Carried[Vn])
-            Cycle |= E.first == Vn;
-        HasCycle.push_back(Cycle);
-        ++NumComps;
+          MemberNode = SccStack.pop_back_val();
+          OnStack[MemberNode] = false;
+          NodeComponent[MemberNode] = NumComponents;
+          ++SccSize;
+        } while (MemberNode != FinishedNode);
+
+        bool IsCycle = SccSize > 1;
+        if (!IsCycle) {
+          // Check for self-loop via carried dependencies.
+          for (const auto &CarriedEdge : RG.Carried[FinishedNode])
+            IsCycle |= (CarriedEdge.first == FinishedNode);
+        }
+        HasCycle.push_back(IsCycle);
+        ++NumComponents;
       }
     }
   }
-  return Comp;
+  return NodeComponent;
 }
 
 /// ToScalar groups: the loads and stores the slice owns. A vector load owned by
@@ -288,134 +319,179 @@ static std::string sliceKey(const Group &G, const Loop *L, unsigned RegionNo) {
   return Key;
 }
 
-/// The groups of one region: every whole all-in-scope recurrence (with its
-/// phis, kept in vector form), and the use-def connected slices of the
-/// candidates outside recurrences. Operations of a recurrence that has a member
-/// out of scope are not candidates, so no transfer lands on a cycle.
-/// \p Classes numbers the slice classes of the function; \p RegionNo keeps the
-/// classes of different regions apart.
+/// Identifies and constructs candidate transformation groups for basic block \p BB:
+/// 1. Discovers self-contained loop-carried recurrences (keeping loop PHIs in vector form).
+/// 2. Clusters acyclic candidate instructions into use-def connected slices.
+/// 3. Identifies vector divides eligible for FP-divider lane group splitting.
+///
+/// \p Classes maps canonical slice keys to unique integer class identifiers.
+/// \p RegionNo ensures distinct regions do not share slice class identifiers.
 static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
                                         StringMap<unsigned> &Classes,
                                         unsigned RegionNo, unsigned LaneGroup,
                                         const PortDescription *PD) {
   RegionGraph RG = buildRegionGraph(BB, L);
-  unsigned N = RG.Insts.size();
-  // Scalar candidates move to the vector unit, vector candidates to the scalar
-  // ports; a slice is one or the other. A vector operation is never part of a
-  // recurrence group: recurrences are pinned in the form LLVM chose.
-  SmallVector<bool, 32> InScope(N, false), IsVec(N, false);
-  for (unsigned I = 0; I != N; ++I) {
-    const Instruction &In = *RG.Insts[I];
-    IsVec[I] = isVectorCandidate(In);
-    InScope[I] = isCandidate(In) && !reachesAddress(In) &&
-                 isAvailable(PD,
-                             IsVec[I] ? Transform::Scalarize
-                                      : Transform::SingletonVectorize,
-                             In);
+  const unsigned NumInsts = RG.Insts.size();
+
+  //===--------------------------------------------------------------------===//
+  // Phase 1: Filter In-Scope Candidate Instructions
+  //===--------------------------------------------------------------------===//
+  // Scalar candidates move to vector lane 0 (ToVector); vector candidates move
+  // to scalar ports (ToScalar). A candidate is in scope only if it does not feed
+  // a memory address calculation and the target CPU port-info provides all
+  // required execution and transfer costs.
+  SmallVector<bool, 32> InScope(NumInsts, false);
+  SmallVector<bool, 32> IsVectorOp(NumInsts, false);
+  for (unsigned NodeIdx = 0; NodeIdx != NumInsts; ++NodeIdx) {
+    const Instruction &Inst = *RG.Insts[NodeIdx];
+    IsVectorOp[NodeIdx] = isVectorCandidate(Inst);
+    InScope[NodeIdx] =
+        isCandidate(Inst) && !reachesAddress(Inst) &&
+        isAvailable(PD,
+                    IsVectorOp[NodeIdx] ? Transform::Scalarize
+                                        : Transform::SingletonVectorize,
+                    Inst);
   }
 
-  SmallVector<bool, 8> CompCycle;
-  SmallVector<unsigned, 32> Comp = computeSCCs(RG, CompCycle);
-  SmallVector<SmallVector<unsigned, 4>, 8> CompNodes(CompCycle.size());
-  for (unsigned I = 0; I != N; ++I)
-    CompNodes[Comp[I]].push_back(I);
-  // A bit count on a loop-carried chain stays scalar (v1: such chains are
-  // pinned unless every member is a plain arithmetic operation); the rest of
-  // that chain is then pinned with it. Bit counts off every chain move.
-  for (unsigned I = 0; I != N; ++I)
-    if (CompCycle[Comp[I]] && !bitCountName(*RG.Insts[I]).empty())
-      InScope[I] = false;
+  //===--------------------------------------------------------------------===//
+  // Phase 2: Compute SCCs for Recurrence Detection
+  //===--------------------------------------------------------------------===//
+  // Find strongly connected components in the dependence graph to detect cycles.
+  // A cycle represents a loop-carried recurrence.
+  SmallVector<bool, 8> CompHasCycle;
+  SmallVector<unsigned, 32> NodeToComp = computeSCCs(RG, CompHasCycle);
+  SmallVector<SmallVector<unsigned, 4>, 8> CompMembers(CompHasCycle.size());
+  for (unsigned NodeIdx = 0; NodeIdx != NumInsts; ++NodeIdx)
+    CompMembers[NodeToComp[NodeIdx]].push_back(NodeIdx);
+  // Conservatively pin bit-count operations on loop-carried chains to scalar
+  // execution (chains with bit counts stay scalar; independent bit counts move).
+  for (unsigned NodeIdx = 0; NodeIdx != NumInsts; ++NodeIdx)
+    if (CompHasCycle[NodeToComp[NodeIdx]] &&
+        !bitCountName(*RG.Insts[NodeIdx]).empty())
+      InScope[NodeIdx] = false;
 
-  // Group number of each node, or none: a recurrence is one group, the other
-  // candidates group by use-def.
-  const unsigned None = ~0u;
-  SmallVector<unsigned, 32> GroupOfNode(N, None);
-  SmallVector<bool, 32> IsRec(N, false);
-  unsigned NumRec = 0;
-  SmallVector<unsigned, 8> RecOfComp(CompCycle.size(), None);
-  for (unsigned C = 0; C != CompCycle.size(); ++C) {
-    if (!CompCycle[C])
+  // Identify whole all-in-scope recurrence groups.
+  const unsigned NoGroup = ~0u;
+  SmallVector<unsigned, 32> RecurrenceGroupId(NumInsts, NoGroup);
+  SmallVector<bool, 32> IsRecurrenceNode(NumInsts, false);
+  unsigned NumRecurrences = 0;
+  SmallVector<unsigned, 8> RecOfComp(CompHasCycle.size(), NoGroup);
+
+  for (unsigned CompIdx = 0; CompIdx != CompHasCycle.size(); ++CompIdx) {
+    if (!CompHasCycle[CompIdx])
       continue;
-    // Whether the whole recurrence is in scope.
-    bool AllInScope = all_of(
-        CompNodes[C], [&](unsigned I) { return InScope[I] && !IsVec[I]; });
-    for (unsigned I : CompNodes[C]) {
-      IsRec[I] = true;
-      if (AllInScope)
-        GroupOfNode[I] = RecOfComp[C] != None ? RecOfComp[C]
-                                              : (RecOfComp[C] = NumRec++);
+
+    // A recurrence cycle can be promoted as a group only if every instruction
+    // in the cycle is an eligible in-scope scalar candidate.
+    bool AllInScope = all_of(CompMembers[CompIdx], [&](unsigned NodeIdx) {
+      return InScope[NodeIdx] && !IsVectorOp[NodeIdx];
+    });
+
+    for (unsigned NodeIdx : CompMembers[CompIdx]) {
+      IsRecurrenceNode[NodeIdx] = true;
+      if (AllInScope) {
+        if (RecOfComp[CompIdx] == NoGroup)
+          RecOfComp[CompIdx] = NumRecurrences++;
+        RecurrenceGroupId[NodeIdx] = RecOfComp[CompIdx];
+      }
     }
   }
 
-  // The acyclic candidates, connected by def-use.
-  DisjointSets DS;
-  SmallVector<unsigned, 32> DSIndex(N, None);
-  for (unsigned I = 0; I != N; ++I)
-    if (InScope[I] && !IsRec[I])
-      DSIndex[I] = DS.add();
-  for (unsigned I = 0; I != N; ++I)
-    if (DSIndex[I] != None)
-      for (unsigned P : RG.Preds[I])
-        if (DSIndex[P] != None && IsVec[P] == IsVec[I])
-          DS.unite(DSIndex[I], DSIndex[P]);
+  //===--------------------------------------------------------------------===//
+  // Phase 3: Cluster Acyclic Candidates via DisjointSets (Union-Find)
+  //===--------------------------------------------------------------------===//
+  // Acyclic candidate instructions are clustered into connected slices along
+  // def-use edges where both producer and consumer share the same direction.
+  DisjointSets AcyclicDS;
+  SmallVector<unsigned, 32> NodeToDSIndex(NumInsts, NoGroup);
+  for (unsigned NodeIdx = 0; NodeIdx != NumInsts; ++NodeIdx)
+    if (InScope[NodeIdx] && !IsRecurrenceNode[NodeIdx])
+      NodeToDSIndex[NodeIdx] = AcyclicDS.add();
 
-  // One group per recurrence or set, in order of first appearance.
+  for (unsigned NodeIdx = 0; NodeIdx != NumInsts; ++NodeIdx) {
+    if (NodeToDSIndex[NodeIdx] != NoGroup) {
+      for (unsigned PredIdx : RG.Preds[NodeIdx]) {
+        if (NodeToDSIndex[PredIdx] != NoGroup &&
+            IsVectorOp[PredIdx] == IsVectorOp[NodeIdx])
+          AcyclicDS.unite(NodeToDSIndex[NodeIdx], NodeToDSIndex[PredIdx]);
+      }
+    }
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Phase 4: Construct Group Objects
+  //===--------------------------------------------------------------------===//
   SmallVector<Group, 4> Groups;
-  DenseMap<unsigned, unsigned> GroupOfKey; // 2*rec or 2*root+1
-  DenseMap<const Instruction *, unsigned> GroupOf;
-  for (unsigned I = 0; I != N; ++I) {
-    unsigned Key;
-    if (IsRec[I] && GroupOfNode[I] != None)
-      Key = 2 * GroupOfNode[I];
-    else if (DSIndex[I] != None)
-      Key = 2 * DS.find(DSIndex[I]) + 1;
+  DenseMap<unsigned, unsigned> GroupIndexByKey; // Even key: recurrence; Odd key: acyclic
+  DenseMap<const Instruction *, unsigned> InstToGroupIndex;
+
+  for (unsigned NodeIdx = 0; NodeIdx != NumInsts; ++NodeIdx) {
+    unsigned Key = 0;
+    if (IsRecurrenceNode[NodeIdx] && RecurrenceGroupId[NodeIdx] != NoGroup)
+      Key = 2 * RecurrenceGroupId[NodeIdx];
+    else if (NodeToDSIndex[NodeIdx] != NoGroup)
+      Key = 2 * AcyclicDS.find(NodeToDSIndex[NodeIdx]) + 1;
     else
       continue;
-    auto [It, New] = GroupOfKey.try_emplace(Key, Groups.size());
-    if (New) {
+
+    auto [It, Inserted] = GroupIndexByKey.try_emplace(Key, Groups.size());
+    if (Inserted) {
       Groups.emplace_back();
-      Groups.back().Recurrence = (Key & 1) == 0;
-      Groups.back().Dir = IsVec[I] ? Direction::ToScalar : Direction::ToVector;
+      Groups.back().Recurrence = ((Key & 1) == 0);
+      Groups.back().Dir =
+          IsVectorOp[NodeIdx] ? Direction::ToScalar : Direction::ToVector;
     }
-    Groups[It->second].Ops.push_back(const_cast<Instruction *>(RG.Insts[I]));
-    GroupOf[RG.Insts[I]] = It->second;
+    unsigned GrpIdx = It->second;
+    Groups[GrpIdx].Ops.push_back(const_cast<Instruction *>(RG.Insts[NodeIdx]));
+    InstToGroupIndex[RG.Insts[NodeIdx]] = GrpIdx;
   }
 
-  // The phis of a recurrence stay in vector form: every phi that closes the
-  // cycle joins its group. If such a phi is also read outside the group the
-  // recurrence is not a group at all: a conservative v1 choice (a lane-0 read
-  // of the vector phi would be off the cycle, but it is not implemented).
-  SmallVector<bool, 4> Drop(Groups.size(), false);
-  if (L)
+  //===--------------------------------------------------------------------===//
+  // Phase 5: Associate Carried PHI Nodes
+  //===--------------------------------------------------------------------===//
+  // In a recurrence group, loop PHIs closing the loop-carried cycle are kept in
+  // vector form. If a carried PHI has users outside the group, we conservatively
+  // discard the recurrence group to avoid complex off-cycle scalar reads.
+  SmallVector<bool, 4> DiscardGroup(Groups.size(), false);
+  if (L) {
     for (PHINode &Phi : BB.phis()) {
       auto LatchIt = RG.PhiLatch.find(&Phi);
       if (!Phi.getType()->isIntegerTy(32) || Phi.use_empty() ||
           LatchIt == RG.PhiLatch.end())
         continue;
-      auto GIt = GroupOf.find(RG.Insts[LatchIt->second.first]);
-      if (GIt == GroupOf.end() || !Groups[GIt->second].Recurrence)
+
+      auto GroupIt = InstToGroupIndex.find(RG.Insts[LatchIt->second.first]);
+      if (GroupIt == InstToGroupIndex.end() ||
+          !Groups[GroupIt->second].Recurrence)
         continue;
-      unsigned G = GIt->second;
-      auto InG = [&](User *U) {
-        auto It = GroupOf.find(dyn_cast<Instruction>(U));
-        return It != GroupOf.end() && It->second == G;
+
+      unsigned GrpIdx = GroupIt->second;
+      auto IsUserInThisGroup = [&](User *U) {
+        auto It = InstToGroupIndex.find(dyn_cast<Instruction>(U));
+        return It != InstToGroupIndex.end() && It->second == GrpIdx;
       };
-      if (all_of(Phi.users(), InG)) {
-        // A phi whose latch is a phi (distance above 1) is not joined.
+
+      if (all_of(Phi.users(), IsUserInThisGroup)) {
+        // PHI-of-PHI chains (iteration distance > 1) are not joined into vector form.
         if (isa<PHINode>(Phi.getIncomingValueForBlock(&BB)))
-          Drop[G] = true;
+          DiscardGroup[GrpIdx] = true;
         else
-          Groups[G].CarriedPhis.push_back(&Phi);
-      } else if (any_of(Phi.users(), InG)) {
-        Drop[G] = true;
+          Groups[GrpIdx].CarriedPhis.push_back(&Phi);
+      } else if (any_of(Phi.users(), IsUserInThisGroup)) {
+        DiscardGroup[GrpIdx] = true;
       }
     }
-  SmallVector<Group, 4> Kept;
-  for (unsigned G = 0; G != Groups.size(); ++G)
-    if (!Drop[G])
-      Kept.push_back(std::move(Groups[G]));
-  Groups = std::move(Kept);
+  }
 
+  SmallVector<Group, 4> ValidGroups;
+  for (unsigned GrpIdx = 0; GrpIdx != Groups.size(); ++GrpIdx)
+    if (!DiscardGroup[GrpIdx])
+      ValidGroups.push_back(std::move(Groups[GrpIdx]));
+  Groups = std::move(ValidGroups);
+
+  //===--------------------------------------------------------------------===//
+  // Phase 6: Analyze Group Inputs, Live-Outs, Ownership, and Slice Classes
+  //===--------------------------------------------------------------------===//
   for (Group &Grp : Groups) {
     if (Grp.VectorDivide)
       continue;
@@ -470,6 +546,9 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
     });
   }
 
+  //===--------------------------------------------------------------------===//
+  // Phase 7: Form Vector Divide Lane Groups (FP Divider Lane Slicing)
+  //===--------------------------------------------------------------------===//
   // The lane groups of each unsigned divide or remainder of <N x i32> by a
   // non-constant divisor (a constant divisor becomes a multiply: the integer
   // divider is not used and the fdiv form would lose), for vectors that fit
@@ -646,56 +725,64 @@ bool savio::liveOutNeedsGpr(const Group &G, const Instruction &I) {
 }
 
 RegionGraph savio::buildRegionGraph(BasicBlock &BB, Loop *L) {
-  RegionGraph G;
+  RegionGraph RG;
+
+  // Non-PHI instructions form graph nodes in program order, which guarantees a
+  // topological ordering for intra-iteration dataflow edges. Outside loops, the
+  // terminator is omitted; in loops, the loop-control branch is included.
   for (Instruction &I : BB)
-    // Outside a loop the terminator is not a node; in a loop region the
-    // terminator is the loop-control branch.
     if (!isa<PHINode>(I) && (L || !I.isTerminator())) {
-      G.Index[&I] = G.Insts.size();
-      G.Insts.push_back(&I);
+      RG.Index[&I] = RG.Insts.size();
+      RG.Insts.push_back(&I);
     }
-  G.Preds.resize(G.Insts.size());
-  G.Carried.resize(G.Insts.size());
+  RG.Preds.resize(RG.Insts.size());
+  RG.Carried.resize(RG.Insts.size());
+
+  // In loop regions, trace header PHIs back to their latch definition in this
+  // block, following PHI-of-PHI chains (e.g. multiple iteration delays) to
+  // compute the producer node and carried iteration distance.
   if (L) {
-    // The node and distance a header phi takes its value from, following a
-    // phi whose latch value is another header phi.
     for (PHINode &Phi : BB.phis()) {
-      const PHINode *Cur = &Phi;
-      unsigned Dist = 0;
+      const PHINode *CurrPhi = &Phi;
+      unsigned IterationDistance = 0;
       for (unsigned Step = 0; Step <= BB.size(); ++Step) {
-        int Idx = Cur->getBasicBlockIndex(&BB);
-        if (Idx < 0)
+        int IncomingIdx = CurrPhi->getBasicBlockIndex(&BB);
+        if (IncomingIdx < 0)
           break;
-        ++Dist;
-        const Value *V = Cur->getIncomingValue(Idx);
-        if (auto *P = dyn_cast<PHINode>(V)) {
-          if (P->getParent() != &BB)
+        ++IterationDistance;
+        const Value *IncomingVal = CurrPhi->getIncomingValue(IncomingIdx);
+        if (auto *NextPhi = dyn_cast<PHINode>(IncomingVal)) {
+          if (NextPhi->getParent() != &BB)
             break;
-          Cur = P;
+          CurrPhi = NextPhi;
           continue;
         }
-        auto It = isa<Instruction>(V) ? G.Index.find(cast<Instruction>(V))
-                                      : G.Index.end();
-        if (It != G.Index.end())
-          G.PhiLatch[&Phi] = {It->second, Dist};
+        auto IndexIt = isa<Instruction>(IncomingVal)
+                           ? RG.Index.find(cast<Instruction>(IncomingVal))
+                           : RG.Index.end();
+        if (IndexIt != RG.Index.end())
+          RG.PhiLatch[&Phi] = {IndexIt->second, IterationDistance};
         break;
       }
     }
   }
-  for (unsigned N = 0; N != G.Insts.size(); ++N)
-    for (const Use &U : G.Insts[N]->operands()) {
-      auto *OpI = dyn_cast<Instruction>(U.get());
-      if (!OpI)
+
+  // Populate intra-iteration predecessors and loop-carried dependencies.
+  for (unsigned ConsumerIdx = 0; ConsumerIdx != RG.Insts.size(); ++ConsumerIdx) {
+    for (const Use &OpUse : RG.Insts[ConsumerIdx]->operands()) {
+      auto *ProducerInst = dyn_cast<Instruction>(OpUse.get());
+      if (!ProducerInst)
         continue;
-      if (auto *Phi = dyn_cast<PHINode>(OpI)) {
-        auto It = G.PhiLatch.find(Phi);
-        if (It != G.PhiLatch.end())
-          G.Carried[N].push_back(It->second);
+      if (auto *Phi = dyn_cast<PHINode>(ProducerInst)) {
+        auto LatchIt = RG.PhiLatch.find(Phi);
+        if (LatchIt != RG.PhiLatch.end())
+          RG.Carried[ConsumerIdx].push_back(LatchIt->second);
         continue;
       }
-      auto It = G.Index.find(OpI);
-      if (It != G.Index.end())
-        G.Preds[N].push_back(It->second);
+      auto IndexIt = RG.Index.find(ProducerInst);
+      if (IndexIt != RG.Index.end())
+        RG.Preds[ConsumerIdx].push_back(IndexIt->second);
     }
-  return G;
+  }
+  return RG;
 }

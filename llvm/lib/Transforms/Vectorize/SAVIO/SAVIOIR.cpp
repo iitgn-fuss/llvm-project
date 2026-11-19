@@ -382,8 +382,13 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
       });
     }
     // The remarks above name operations the rewrite erases. The lane groups of
-    // one vector divide are rewritten together.
-    SmallVector<std::tuple<Instruction *, unsigned, unsigned>, 2> Divides;
+    // one vector divide are rewritten together in a single batch.
+    struct VectorDivideBatch {
+      Instruction *DivInst = nullptr;
+      unsigned LaneGroupMask = 0;
+      unsigned GroupLanes = 0;
+    };
+    SmallVector<VectorDivideBatch, 2> Divides;
     for (unsigned G : D.Promoted) {
       const Group &Grp = Reg.Groups[G];
       if (Grp.Dir == Direction::ToScalar) {
@@ -394,14 +399,16 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
         rewriteSingletonVectorize(Grp, Reg.L);
         continue;
       }
-      auto *It =
-          find_if(Divides, [&](auto &P) { return std::get<0>(P) == Grp.Ops[0]; });
+      auto *It = find_if(Divides, [&](const VectorDivideBatch &B) {
+        return B.DivInst == Grp.Ops[0];
+      });
       if (It == Divides.end())
-        It = Divides.insert(Divides.end(), {Grp.Ops[0], 0u, Grp.GroupLanes});
-      std::get<1>(*It) |= 1u << Grp.LaneGroup;
+        It = Divides.insert(Divides.end(),
+                            {Grp.Ops[0], 0u, Grp.GroupLanes});
+      It->LaneGroupMask |= (1u << Grp.LaneGroup);
     }
-    for (auto &[I, Mask, Lanes] : Divides)
-      rewriteVectorDivide(I, Mask, Lanes);
+    for (const auto &Batch : Divides)
+      rewriteVectorDivide(Batch.DivInst, Batch.LaneGroupMask, Batch.GroupLanes);
     Changed = true;
   };
 

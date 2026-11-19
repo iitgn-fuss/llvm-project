@@ -25,6 +25,15 @@ using namespace llvm::savio;
 
 namespace llvm {
 namespace savio {
+
+/// Returns true if instruction \p I carries undefined/poison-generating flags
+/// such as `nuw` (no unsigned wrap), `nsw` (no signed wrap), or `exact`.
+///
+/// WHY: SAVIO's singleton vector intrinsics (e.g. `llvm.savio.sv.add`) do not
+/// provide poison-flag attributes or operands. Silently dropping `nsw`, `nuw`,
+/// or `exact` during vectorization would convert poisoned inputs into valid
+/// wrapped results, violating refinement semantics. We conservatively disqualify
+/// any instruction with poison flags.
 static bool hasPoisonFlag(const Instruction &I) {
   if (isa<OverflowingBinaryOperator>(&I))
     if (I.hasNoUnsignedWrap() || I.hasNoSignedWrap())
@@ -39,15 +48,22 @@ static bool hasPoisonFlag(const Instruction &I) {
     return false;
   }
 }
-/// Singleton Vectorize candidates: i32 add sub mul and or xor shl lshr ashr
-/// udiv urem, and calls to llvm.ctpop.i32 / llvm.ctlz.i32 (the latter's
-/// lane-0 form defines the zero case as 32, which is exact for both values of
-/// is_zero_poison; the flag is an immediate, so it is always a constant).
+
+/// Identifies scalar operations eligible for Singleton Vectorization:
+/// 32-bit integer arithmetic (add, sub, mul), bitwise logic (and, or, xor),
+/// bit shifts (shl, lshr, ashr), integer divide/remainder (udiv, urem), and
+/// bit-counting calls (llvm.ctpop.i32, llvm.ctlz.i32).
+///
+/// Disqualifies instructions that carry poison flags or non-constant ctlz
+/// zero-poison flags.
 bool isScalarCandidate(const Instruction &I) {
   if (!I.getType()->isIntegerTy(32))
     return false;
   if (hasPoisonFlag(I))
     return false;
+  // Calls: llvm.ctpop.i32 has 1 operand; llvm.ctlz.i32 has (val, is_zero_poison).
+  // The lane-0 vector ctlz intrinsic always produces 32 for zero input, which
+  // is exact regardless of the is_zero_poison flag value.
   if (StringRef BC = bitCountName(I); !BC.empty())
     return BC == "ctpop" || isa<ConstantInt>(I.getOperand(1));
   switch (I.getOpcode()) {
@@ -68,10 +84,11 @@ bool isScalarCandidate(const Instruction &I) {
   }
 }
 
-/// Scalarize candidates: add sub mul and or xor shl lshr ashr on fixed vectors
-/// of i32 or i64 that are 128, 256 or 512 bits wide (whether the port-info has
-/// the keys is decided at candidacy, by isAvailable). Vector udiv/urem stay
-/// with the lane-group path.
+/// Identifies vector operations eligible for Scalarization:
+/// Fixed-width integer vectors (128, 256, or 512 bits) of i32 or i64 elements
+/// performing arithmetic, logical, or shift operations. Vector divide/remainder
+/// instructions are excluded here because they are handled by the FP-divider
+/// lane-group path instead.
 bool isVectorCandidate(const Instruction &I) {
   auto *VT = dyn_cast<FixedVectorType>(I.getType());
   if (!VT || !(VT->getElementType()->isIntegerTy(32) ||

@@ -34,133 +34,192 @@ Bound RegionEstimate::limiting() const {
 
 namespace {
 
-/// An edge of the dependence graph of a loop: the value of node From, Dist
-/// iterations earlier, is an operand of node To. Its weight is the latency of
-/// From, so a cycle's weight is the sum of the latencies of its nodes.
+/// A directed edge in the loop dependence graph.
+///
+/// An edge from \c From to \c To with carried distance \c Dist indicates that
+/// the value produced by \c From on iteration $i$ is consumed by \c To on
+/// iteration $i + \text{Dist}$.
+/// - For intra-iteration dependencies (within the same loop iteration), \c Dist == 0.
+/// - For loop-carried dependencies (e.g. cross-iteration PHIs), \c Dist >= 1.
 struct Edge {
-  unsigned From, To, Dist;
+  unsigned From;
+  unsigned To;
+  unsigned Dist;
 };
 
-/// Looks for a cycle whose total latency exceeds Lambda times its total
-/// distance, by Bellman-Ford longest-path relaxation on the weights
-/// lat(From) - Lambda * Dist. Returns the cycle's ratio (latency over
-/// distance), which is greater than Lambda, or 0 if there is no such cycle.
-/// Edges are sorted by destination, and same-iteration edges go from lower to
-/// higher node indices, so one sweep settles all same-iteration paths.
+/// Looks for a dependence cycle whose latency-to-distance ratio strictly
+/// exceeds \p Lambda, using Bellman-Ford longest-path relaxation.
+///
+/// In loop pipelining, the recurrence bound is defined by the maximum cycle ratio:
+///   T_rec = max_C [ sum_{v in C} Latency(v) / sum_{e in C} Distance(e) ]
+///
+/// For a trial throughput candidate Lambda, a cycle C violates the bound if:
+///   sum_{v in C} Latency(v) / sum_{e in C} Distance(e) > Lambda
+///   <=> sum_{e in C} [ Latency(From(e)) - Lambda * Distance(e) ] > 0
+///
+/// By assigning each edge e = (From, To) the weight:
+///   weight(e) = Latency(From) - Lambda * Dist(e)
+/// the problem reduces to detecting a strictly positive-weight cycle in the
+/// dependence graph.
+///
+/// If Bellman-Ford can still relax an edge after \c NumNodes rounds, a positive
+/// cycle is guaranteed to exist. Walking backward \c NumNodes steps along the
+/// relaxation parent pointers lands inside the cycle, which is then traversed
+/// to compute its exact cycle ratio Latency / Distance (> Lambda).
+/// Returns the new cycle ratio, or 0.0 if no cycle exceeds Lambda.
 double betterCycleRatio(ArrayRef<CostNode> Nodes, ArrayRef<Edge> Edges,
                         double Lambda) {
   constexpr double Eps = 1e-9;
-  unsigned N = Nodes.size();
-  SmallVector<double, 32> Dist(N, 0.0);
-  SmallVector<int, 32> Via(N, -1); // Index in Edges of the edge that set Dist.
-  int Last = -1;
-  for (unsigned Round = 0; Round != N + 1; ++Round) {
-    Last = -1;
-    for (unsigned E = 0; E != Edges.size(); ++E) {
-      const Edge &Ed = Edges[E];
-      double W = Nodes[Ed.From].Cost.Latency - Lambda * Ed.Dist;
-      if (Dist[Ed.From] + W > Dist[Ed.To] + Eps) {
-        Dist[Ed.To] = Dist[Ed.From] + W;
-        Via[Ed.To] = E;
-        Last = Ed.To;
+  unsigned NumNodes = Nodes.size();
+  SmallVector<double, 32> LongestDist(NumNodes, 0.0);
+  SmallVector<int, 32> ParentEdge(NumNodes, -1); // Index in Edges that set LongestDist.
+  int LastRelaxedNode = -1;
+
+  for (unsigned Round = 0; Round != NumNodes + 1; ++Round) {
+    LastRelaxedNode = -1;
+    for (unsigned EdgeIdx = 0; EdgeIdx != Edges.size(); ++EdgeIdx) {
+      const Edge &E = Edges[EdgeIdx];
+      double Weight = Nodes[E.From].Cost.Latency - Lambda * E.Dist;
+      if (LongestDist[E.From] + Weight > LongestDist[E.To] + Eps) {
+        LongestDist[E.To] = LongestDist[E.From] + Weight;
+        ParentEdge[E.To] = EdgeIdx;
+        LastRelaxedNode = E.To;
       }
     }
-    if (Last < 0)
-      return 0;
+    // If no edge was relaxed in this round, all paths have settled and no
+    // positive-weight cycle exists.
+    if (LastRelaxedNode < 0)
+      return 0.0;
   }
-  // Still relaxing after N rounds: a positive cycle exists. Walk back N steps
-  // to land inside it, then trace it.
-  unsigned X = Last;
-  for (unsigned I = 0; I != N; ++I) {
-    assert(Via[X] >= 0 && "a node on a positive cycle was relaxed");
-    X = Edges[Via[X]].From;
+
+  // Still relaxing after NumNodes rounds: a positive cycle exists.
+  // Walk backward NumNodes steps along parent pointers to ensure landing inside the cycle.
+  unsigned CycleEntryNode = LastRelaxedNode;
+  for (unsigned I = 0; I != NumNodes; ++I) {
+    assert(ParentEdge[CycleEntryNode] >= 0 &&
+           "a node on a positive cycle must have a parent edge");
+    CycleEntryNode = Edges[ParentEdge[CycleEntryNode]].From;
   }
-  double Lat = 0;
-  unsigned D = 0;
-  unsigned Cur = X;
+
+  // Trace the cycle from CycleEntryNode back to itself and sum its latencies and distances.
+  double CycleLatency = 0.0;
+  unsigned CycleDistance = 0;
+  unsigned CurrNode = CycleEntryNode;
   do {
-    const Edge &Ed = Edges[Via[Cur]];
-    Lat += Nodes[Ed.From].Cost.Latency;
-    D += Ed.Dist;
-    Cur = Ed.From;
-  } while (Cur != X);
-  return D ? Lat / D : 0;
+    const Edge &E = Edges[ParentEdge[CurrNode]];
+    CycleLatency += Nodes[E.From].Cost.Latency;
+    CycleDistance += E.Dist;
+    CurrNode = E.From;
+  } while (CurrNode != CycleEntryNode);
+
+  return CycleDistance ? CycleLatency / CycleDistance : 0.0;
 }
 
-/// The maximum over all cycles of the loop dependence graph of (sum of node
-/// latencies) / (sum of carried distances). Starting from lambda 0, each step
-/// finds a cycle that beats lambda and raises lambda to its ratio, so the
-/// result is exact and the loop ends after finitely many cycles.
+/// Computes the exact recurrence bound T_rec: the maximum cycle ratio over
+/// all cycles in the loop dependence graph:
+///   T_rec = max_C [ sum_{v in C} Latency(v) / sum_{e in C} Distance(e) ]
+///
+/// Implements Howard's / Lawler's cycle ratio iteration algorithm:
+/// Starting from Lambda = 0, each invocation of \c betterCycleRatio either
+/// finds a cycle that beats Lambda and raises Lambda to that cycle's exact ratio,
+/// or determines that no better cycle exists. Because the graph has finitely
+/// many simple cycles, the iteration terminates quickly with the exact maximum.
 double maxCycleRatio(ArrayRef<CostNode> Nodes) {
   SmallVector<Edge, 64> Edges;
-  for (unsigned V = 0; V != Nodes.size(); ++V) {
-    for (unsigned P : Nodes[V].Preds)
-      Edges.push_back({P, V, 0});
-    for (auto [U, D] : Nodes[V].Carried)
-      Edges.push_back({U, V, D});
+  for (unsigned ConsumerIdx = 0; ConsumerIdx != Nodes.size(); ++ConsumerIdx) {
+    for (unsigned PredIdx : Nodes[ConsumerIdx].Preds)
+      Edges.push_back({PredIdx, ConsumerIdx, 0});
+    for (auto [ProducerIdx, Dist] : Nodes[ConsumerIdx].Carried)
+      Edges.push_back({ProducerIdx, ConsumerIdx, Dist});
   }
-  double Lambda = 0;
-  while (double R = betterCycleRatio(Nodes, Edges, Lambda)) {
-    if (R <= Lambda)
+
+  double Lambda = 0.0;
+  while (double BetterRatio = betterCycleRatio(Nodes, Edges, Lambda)) {
+    if (BetterRatio <= Lambda)
       break;
-    Lambda = R;
+    Lambda = BetterRatio;
   }
   return Lambda;
 }
 
-/// TRes of a description with port sets: the maximum over the non-empty unions
-/// U of the loaded classes' port sets of (the load of the classes whose set
-/// lies inside U) / |U|; a class without ports is its own pool, load / units.
-/// BusiestClass is the class with the largest load inside the maximizing U.
+/// Computes TRes for targets with execution port sets.
+///
+/// When execution units are partitioned into discrete execution ports, an
+/// instruction of class C can typically issue to any port in its allowable
+/// port set S_C.
+/// By generalized max-flow min-cut (Hall's condition), the bottleneck for any
+/// subset of execution ports U is given by the aggregate load of all classes
+/// whose allowable ports form a subset of U, divided by the number of ports in U:
+///   T(U) = sum_{C : S_C <= U} Load[C] / |U|
+///
+/// The true resource bound TRes is the maximum over all non-empty port unions U:
+///   TRes = max_{U} T(U)
+///
+/// Classes with no assigned port set operate as independent resource pools
+/// (Load[C] / Units[C]).
+///
+/// The loader limits the number of distinct port sets to at most 16, so the
+/// number of evaluated subsets is at most 2^16 = 65536.
 void resourceBoundOverPorts(const PortDescription &PD, ArrayRef<double> Load,
                             RegionEstimate &E) {
-  SmallVector<std::pair<uint64_t, unsigned>, 16> Sets; // (port mask, class)
-  for (unsigned C = 0; C != PD.numClasses(); ++C) {
-    if (Load[C] <= 0)
+  SmallVector<std::pair<uint64_t, unsigned>, 16> ClassPortSets; // (port mask, class)
+  for (unsigned ClassIdx = 0; ClassIdx != PD.numClasses(); ++ClassIdx) {
+    if (Load[ClassIdx] <= 0)
       continue;
-    ArrayRef<unsigned> Ports = PD.ports(C, E.With512);
+    ArrayRef<unsigned> Ports = PD.ports(ClassIdx, E.With512);
     if (Ports.empty()) {
-      double T = Load[C] / PD.units(C);
-      if (T > E.TRes) {
-        E.TRes = T;
-        E.BusiestClass = C;
+      // Independent resource pool without port assignments.
+      double ClassTime = Load[ClassIdx] / PD.units(ClassIdx);
+      if (ClassTime > E.TRes) {
+        E.TRes = ClassTime;
+        E.BusiestClass = ClassIdx;
       }
       continue;
     }
-    uint64_t Mask = 0;
-    for (unsigned P : Ports)
-      Mask |= uint64_t(1) << P;
-    Sets.push_back({Mask, C});
+    uint64_t PortMask = 0;
+    for (unsigned Port : Ports)
+      PortMask |= uint64_t(1) << Port;
+    ClassPortSets.push_back({PortMask, ClassIdx});
   }
-  // The distinct sets; every union is a union of a subset of them. The loader
-  // allows at most 16 distinct port sets over 'ports' and 'ports_with_512'
-  // (PortDescription::load), so Distinct has at most 16 entries and there are
-  // at most 2^16 subsets.
-  SmallVector<uint64_t, 16> Distinct;
-  for (auto &[Mask, C] : Sets)
-    if (!is_contained(Distinct, Mask))
-      Distinct.push_back(Mask);
-  for (uint32_t Subset = 1; Subset < (uint32_t(1) << Distinct.size());
-       ++Subset) {
-    uint64_t U = 0;
-    for (unsigned I = 0; I != Distinct.size(); ++I)
-      if (Subset >> I & 1)
-        U |= Distinct[I];
-    double Sum = 0, Max = 0;
-    unsigned Busiest = 0;
-    for (auto &[Mask, C] : Sets) {
-      if (Mask & ~U)
+
+  // Identify distinct port sets. Every possible port union is a union of a
+  // subset of these distinct masks.
+  SmallVector<uint64_t, 16> DistinctPortMasks;
+  for (auto &[PortMask, ClassIdx] : ClassPortSets) {
+    if (!is_contained(DistinctPortMasks, PortMask))
+      DistinctPortMasks.push_back(PortMask);
+  }
+
+  // Enumerate all 2^k - 1 non-empty subsets of distinct port sets.
+  for (uint32_t SubsetIdx = 1;
+       SubsetIdx < (uint32_t(1) << DistinctPortMasks.size());
+       ++SubsetIdx) {
+    uint64_t PortUnionMask = 0;
+    for (unsigned I = 0; I != DistinctPortMasks.size(); ++I) {
+      if ((SubsetIdx >> I) & 1)
+        PortUnionMask |= DistinctPortMasks[I];
+    }
+
+    double UnionClassLoad = 0.0;
+    double MaxClassLoadInUnion = 0.0;
+    unsigned BusiestClassInUnion = 0;
+
+    for (auto &[PortMask, ClassIdx] : ClassPortSets) {
+      // Check if ClassIdx's port mask is entirely contained within PortUnionMask.
+      if (PortMask & ~PortUnionMask)
         continue;
-      Sum += Load[C];
-      if (Load[C] > Max) {
-        Max = Load[C];
-        Busiest = C;
+      UnionClassLoad += Load[ClassIdx];
+      if (Load[ClassIdx] > MaxClassLoadInUnion) {
+        MaxClassLoadInUnion = Load[ClassIdx];
+        BusiestClassInUnion = ClassIdx;
       }
     }
-    double T = Sum / llvm::popcount(U);
-    if (T > E.TRes) {
-      E.TRes = T;
-      E.BusiestClass = Busiest;
+
+    double SubsetThroughputTime =
+        UnionClassLoad / llvm::popcount(PortUnionMask);
+    if (SubsetThroughputTime > E.TRes) {
+      E.TRes = SubsetThroughputTime;
+      E.BusiestClass = BusiestClassInUnion;
     }
   }
 }
@@ -196,64 +255,72 @@ void savio::applyConcurrency(SmallVectorImpl<CostNode> &Nodes,
 
 RegionEstimate savio::estimateRegion(ArrayRef<CostNode> Nodes,
                                      const PortDescription &PD, bool IsLoop) {
-  RegionEstimate E;
+  RegionEstimate Est;
 
 #ifndef NDEBUG
-  // Input contract, for loop and non-loop regions alike.
+  // Verify topological order and edge validity contract.
   for (unsigned I = 0; I != Nodes.size(); ++I) {
     for (unsigned P : Nodes[I].Preds)
       assert(P < I && "nodes must be in topological order");
-    for (auto [U, Dist] : Nodes[I].Carried)
-      assert(U < Nodes.size() && Dist >= 1 && "bad carried edge");
+    for (auto [Producer, Dist] : Nodes[I].Carried)
+      assert(Producer < Nodes.size() && Dist >= 1 && "bad carried edge");
   }
 #endif
 
-  // Resource bound: the most loaded class, per unit.
-  SmallVector<double, 8> Load(PD.numClasses(), 0.0);
-  double Uops = 0;
-  for (const CostNode &N : Nodes) {
-    for (const ResourceUse &U : N.Cost.Uses)
-      Load[U.Class] += U.Cycles;
-    Uops += N.Cost.Uops;
+  // Phase 1: Aggregate resource class occupancy loads and total micro-ops.
+  SmallVector<double, 8> ClassLoads(PD.numClasses(), 0.0);
+  double TotalUops = 0.0;
+  for (const CostNode &Node : Nodes) {
+    for (const ResourceUse &Usage : Node.Cost.Uses)
+      ClassLoads[Usage.Class] += Usage.Cycles;
+    TotalUops += Node.Cost.Uops;
   }
+
   LLVM_DEBUG({
     dbgs() << "savio: class loads (cycles, whole region):";
     for (unsigned C = 0; C != PD.numClasses(); ++C)
-      if (Load[C] > 0)
-        dbgs() << ' ' << PD.className(C) << '=' << Load[C];
-    dbgs() << " uops=" << Uops << '\n';
+      if (ClassLoads[C] > 0)
+        dbgs() << ' ' << PD.className(C) << '=' << ClassLoads[C];
+    dbgs() << " uops=" << TotalUops << '\n';
   });
+
+  // Phase 2: Compute Resource Bound (TRes).
   if (!PD.hasPortSets()) {
+    // Independent resource units per class.
     for (unsigned C = 0; C != PD.numClasses(); ++C) {
-      double T = Load[C] / PD.units(C);
-      if (T > E.TRes) {
-        E.TRes = T;
-        E.BusiestClass = C;
+      double ClassTime = ClassLoads[C] / PD.units(C);
+      if (ClassTime > Est.TRes) {
+        Est.TRes = ClassTime;
+        Est.BusiestClass = C;
       }
     }
   } else {
-    E.With512 = any_of(Nodes, [](const CostNode &N) { return N.Wide512; });
-    resourceBoundOverPorts(PD, Load, E);
+    // Shared execution port sets.
+    Est.With512 = any_of(Nodes, [](const CostNode &N) { return N.Wide512; });
+    resourceBoundOverPorts(PD, ClassLoads, Est);
   }
 
-  // Dispatch bound.
-  E.TDisp = Uops / PD.dispatchWidth();
+  // Phase 3: Compute Front-End Dispatch Bound (TDisp).
+  Est.TDisp = TotalUops / PD.dispatchWidth();
 
-  // Recurrence bound. In a loop it is the maximum cycle ratio over every
-  // cycle of the dependence graph, however many carried edges it crosses.
+  // Phase 4: Compute Recurrence / Critical Path Bound (TRec).
+  // In a loop, TRec is the maximum cycle ratio over every cycle of the
+  // dependence graph, regardless of how many carried edges it crosses.
   if (IsLoop) {
-    E.TRec = maxCycleRatio(Nodes);
+    Est.TRec = maxCycleRatio(Nodes);
   } else if (PD.criticalPathOutsideLoops()) {
-    // Longest latency path in the region. (A description may drop it for
-    // regions outside loops: critical_path_outside_loops.)
-    SmallVector<double, 16> Dist(Nodes.size(), 0.0);
+    // Outside loops, calculate the longest latency path in the DAG.
+    // (A target description can disable this via 'critical_path_outside_loops'
+    // when neighboring code overlaps arithmetic latency).
+    SmallVector<double, 16> CriticalDist(Nodes.size(), 0.0);
     for (unsigned I = 0; I != Nodes.size(); ++I) {
-      double Best = 0;
-      for (unsigned P : Nodes[I].Preds)
-        Best = std::max(Best, Dist[P]);
-      Dist[I] = Best + Nodes[I].Cost.Latency;
-      E.TRec = std::max(E.TRec, Dist[I]);
+      double MaxPredLatency = 0.0;
+      for (unsigned Pred : Nodes[I].Preds)
+        MaxPredLatency = std::max(MaxPredLatency, CriticalDist[Pred]);
+      CriticalDist[I] = MaxPredLatency + Nodes[I].Cost.Latency;
+      Est.TRec = std::max(Est.TRec, CriticalDist[I]);
     }
   }
-  return E;
+
+  return Est;
 }

@@ -117,11 +117,11 @@ class NodeBuilder {
   FallbackCostFn Fallback;
   ArrayRef<bool> Promoted; // Indexed by virtual group.
   unsigned Copies;
-  unsigned N;  // Nodes of the region graph.
-  unsigned NG; // Groups of the region.
+  unsigned NumInsts;        // Number of non-PHI instruction nodes in the region graph.
+  unsigned NumRegionGroups; // Number of transformation groups in the region.
 
   SmallVector<CostNode, 32> Nodes;
-  /// Node of each virtual instruction (copy * N + graph node), or None.
+  /// Node of each virtual instruction (CopyIdx * NumInsts + GraphNodeIdx), or None.
   SmallVector<unsigned, 32> NodeOf, OutNode;
   /// Group of each graph node, or None.
   SmallVector<unsigned, 32> GroupOfNode;
@@ -130,8 +130,12 @@ class NodeBuilder {
   SmallVector<bool, 32> ControlOnly;
   /// The ToScalar group owning each load/store node, if any.
   DenseMap<unsigned, unsigned> MemOwner;
+
+  /// Cache of boundary transfer nodes keyed by:
+  /// (VirtualGroupIdx, OperandValue, SourceCopyIdx) -> TransferCostNodeIdx.
   DenseMap<std::tuple<unsigned, const Value *, unsigned>, unsigned> InNode;
   static constexpr unsigned None = ~0u;
+
   /// A loop-carried edge to add once all nodes exist: the value of virtual
   /// instruction Latch, Dist unrolled iterations earlier, reaches node Dest.
   /// Through a phi kept in vector form (Joined) it stays in the vector domain;
@@ -201,16 +205,16 @@ public:
               FallbackCostFn Fallback, ArrayRef<bool> Promoted,
               unsigned Copies = 1)
       : R(R), RG(RG), PD(PD), Fallback(Fallback), Promoted(Promoted),
-        Copies(Copies), N(RG.Insts.size()), NG(R.Groups.size()),
-        NodeOf(size_t(Copies) * N, None), OutNode(size_t(Copies) * N, None),
-        GroupOfNode(N, None), ControlOnly(N, false) {
-    for (unsigned G = 0; G != NG; ++G) {
+        Copies(Copies), NumInsts(RG.Insts.size()), NumRegionGroups(R.Groups.size()),
+        NodeOf(size_t(Copies) * NumInsts, None), OutNode(size_t(Copies) * NumInsts, None),
+        GroupOfNode(NumInsts, None), ControlOnly(NumInsts, false) {
+    for (unsigned G = 0; G != NumRegionGroups; ++G) {
       for (LoadInst *LD : R.Groups[G].OwnedLoads)
         MemOwner[RG.Index.lookup(LD)] = G;
       for (StoreInst *S : R.Groups[G].OwnedStores)
         MemOwner[RG.Index.lookup(S)] = G;
     }
-    for (unsigned G = 0; G != NG; ++G)
+    for (unsigned G = 0; G != NumRegionGroups; ++G)
       for (Instruction *I : R.Groups[G].Ops) {
         unsigned NI = RG.Index.lookup(I);
         if (!R.Groups[G].VectorDivide) {
@@ -223,7 +227,7 @@ public:
       }
     // In a loop, the terminator and what only feeds it (the exit test).
     if (R.L)
-      for (unsigned I = 0; I != N; ++I) {
+      for (unsigned I = 0; I != NumInsts; ++I) {
         const Instruction *In = RG.Insts[I];
         ControlOnly[I] = In->isTerminator() ||
                          (!In->use_empty() &&
@@ -233,17 +237,17 @@ public:
       }
   }
 
-  /// The virtual group of group \p G in copy \p J.
-  unsigned virtualGroup(unsigned G, unsigned J) const {
-    return R.Groups[G].Recurrence ? G : J * NG + G;
+  /// The virtual group of group \p G in copy \p CopyIdx.
+  unsigned virtualGroup(unsigned G, unsigned CopyIdx) const {
+    return R.Groups[G].Recurrence ? G : CopyIdx * NumRegionGroups + G;
   }
 
   /// Fills the nodes; false if the assignment needs a cost the port
   /// description lacks.
   bool build() {
-    for (unsigned J = 0; J != Copies; ++J)
-      for (unsigned NI = 0; NI != N; ++NI)
-        if ((J + 1 == Copies || !ControlOnly[NI]) && !buildNode(J, NI))
+    for (unsigned CopyIdx = 0; CopyIdx != Copies; ++CopyIdx)
+      for (unsigned NodeIdx = 0; NodeIdx != NumInsts; ++NodeIdx)
+        if ((CopyIdx + 1 == Copies || !ControlOnly[NodeIdx]) && !buildNode(CopyIdx, NodeIdx))
           return false;
 
     for (const CarriedEdge &E : Pending) {
@@ -256,16 +260,20 @@ public:
   ArrayRef<CostNode> nodes() const { return Nodes; }
 
 private:
-  bool buildNode(unsigned J, unsigned NI) {
-    const Instruction &I = *RG.Insts[NI];
-    unsigned V = J * N + NI;
+  bool buildNode(unsigned CopyIdx, unsigned NodeIdx) {
+    const Instruction &I = *RG.Insts[NodeIdx];
+    unsigned VirtualInstIdx = CopyIdx * NumInsts + NodeIdx;
+
+    //===------------------------------------------------------------------===//
+    // 1. Resolve Operands and Predecessors
+    //===------------------------------------------------------------------===//
     // The region graph holds one edge per operand defined in the block, in
-    // operand order: same-iteration in Preds, through a header phi in
-    // Carried.
+    // operand order: intra-iteration edges in Preds, loop-carried through a
+    // header PHI in Carried.
     unsigned PredCur = 0, CarriedCur = 0;
-    bool InGroup = GroupOfNode[NI] != None;
-    unsigned GIdx = InGroup ? GroupOfNode[NI] : 0;
-    unsigned VG = virtualGroup(GIdx, J);
+    bool InGroup = GroupOfNode[NodeIdx] != None;
+    unsigned GIdx = InGroup ? GroupOfNode[NodeIdx] : 0;
+    unsigned VG = virtualGroup(GIdx, CopyIdx);
     bool P = InGroup && Promoted[VG];
 
     CostNode Nd;
@@ -281,28 +289,28 @@ private:
         // A loop phi closes a recurrence through this operand when its latch
         // value is an instruction of the block: a carried edge.
         if (RG.PhiLatch.count(Phi)) {
-          assert(CarriedCur < RG.Carried[NI].size() && "missing carried edge");
-          auto [LatchNode, D] = RG.Carried[NI][CarriedCur++];
-          if (J >= D) {
+          assert(CarriedCur < RG.Carried[NodeIdx].size() && "missing carried edge");
+          auto [LatchNode, D] = RG.Carried[NodeIdx][CarriedCur++];
+          if (CopyIdx >= D) {
             // The value of an earlier copy of this unrolled iteration.
-            SrcCopy = J - D;
-            DefV = SrcCopy * N + LatchNode;
+            SrcCopy = CopyIdx - D;
+            DefV = SrcCopy * NumInsts + LatchNode;
             Op = RG.Insts[LatchNode];
           } else {
-            SrcCopy = ((int(J) - int(D)) % int(Copies) + int(Copies)) %
+            SrcCopy = ((int(CopyIdx) - int(D)) % int(Copies) + int(Copies)) %
                       int(Copies);
-            LatchV = SrcCopy * N + LatchNode;
-            Dist = (D - J + Copies - 1) / Copies;
+            LatchV = SrcCopy * NumInsts + LatchNode;
+            Dist = (D - CopyIdx + Copies - 1) / Copies;
             Joined = InGroup && is_contained(R.Groups[GIdx].CarriedPhis, Phi);
           }
         }
       } else if (auto *OpI = dyn_cast<Instruction>(Op)) {
         if (RG.Index.count(OpI)) {
-          assert(PredCur < RG.Preds[NI].size() && "missing pred edge");
-          unsigned DefNode = RG.Preds[NI][PredCur++];
+          assert(PredCur < RG.Preds[NodeIdx].size() && "missing pred edge");
+          unsigned DefNode = RG.Preds[NodeIdx][PredCur++];
           assert(RG.Insts[DefNode] == OpI && "region graph edge order differs");
-          SrcCopy = J;
-          DefV = J * N + DefNode;
+          SrcCopy = CopyIdx;
+          DefV = CopyIdx * NumInsts + DefNode;
         }
       }
 
@@ -315,9 +323,9 @@ private:
       // scalar value, i.e. through the VecToGpr node of a live-out.
       bool SameGroup = false;
       if (DefV != None && InGroup) {
-        unsigned DG = GroupOfNode[DefV % N];
+        unsigned DG = GroupOfNode[DefV % NumInsts];
         SameGroup = DG != None && DG == GIdx &&
-                    virtualGroup(DG, DefV / N) == VG;
+                    virtualGroup(DG, DefV / NumInsts) == VG;
       }
       // A ToScalar group's non-free input is a lane extract of the vector.
       bool Vec = InGroup && R.Groups[GIdx].Dir == Direction::ToScalar;
@@ -361,13 +369,17 @@ private:
         OwnEdges.push_back({0, LatchV, false, Dist});
     }
 
-    assert(PredCur == RG.Preds[NI].size() &&
-           CarriedCur == RG.Carried[NI].size() && "unconsumed graph edges");
-    if (auto LG = LaneGroups.find(NI); LaneGroups.end() != LG)
-      return buildVectorDivide(J, NI, LG->second, Nd, OwnEdges);
+    assert(PredCur == RG.Preds[NodeIdx].size() &&
+           CarriedCur == RG.Carried[NodeIdx].size() && "unconsumed graph edges");
+    if (auto LG = LaneGroups.find(NodeIdx); LaneGroups.end() != LG)
+      return buildVectorDivide(CopyIdx, NodeIdx, LG->second, Nd, OwnEdges);
+
+    //===------------------------------------------------------------------===//
+    // 2. Compute Operation Cost
+    //===------------------------------------------------------------------===//
     std::optional<OpCost> C;
     const ConcurrencyTable *Conc = nullptr;
-    auto OwnerIt = MemOwner.find(NI);
+    auto OwnerIt = MemOwner.find(NodeIdx);
     if (InGroup && R.Groups[GIdx].Dir == Direction::ToScalar) {
       // Scalarize candidate: its vector form as LLVM left it, or one scalar
       // operation per lane. An unpromoted one without a key costs what the
@@ -385,7 +397,7 @@ private:
       // over-charges a split copy by about 15% against measured pairs: a known
       // limitation of the key-per-op model.)
       const Group &G = R.Groups[OwnerIt->second];
-      bool MP = Promoted[virtualGroup(OwnerIt->second, J)];
+      bool MP = Promoted[virtualGroup(OwnerIt->second, CopyIdx)];
       C = PD.irOpCost((Twine(isa<LoadInst>(I) ? "load " : "store ") +
                        laneTypeName(G, !MP))
                           .str());
@@ -415,16 +427,19 @@ private:
     bool Scalarized =
         (InGroup && R.Groups[GIdx].Dir == Direction::ToScalar && P) ||
         (OwnerIt != MemOwner.end() &&
-         Promoted[virtualGroup(OwnerIt->second, J)]);
+         Promoted[virtualGroup(OwnerIt->second, CopyIdx)]);
     Nd.Wide512 = !Scalarized && is512BitOp(I);
     unsigned Me = Nodes.size();
     Nodes.push_back(std::move(Nd));
-    NodeOf[V] = Me;
+    NodeOf[VirtualInstIdx] = Me;
     for (CarriedEdge &E : OwnEdges) {
       E.Dest = Me;
       Pending.push_back(E);
     }
 
+    //===------------------------------------------------------------------===//
+    // 3. Handle Live-Out Boundary Transfers
+    //===------------------------------------------------------------------===//
     // Live-out of a Scalarized group: its lanes back into a vector, unless
     // every user outside the group is a store the group owns.
     if (P && R.Groups[GIdx].Dir == Direction::ToScalar) {
@@ -451,7 +466,7 @@ private:
         if (!addTransfer(TransferKind::LaneInsert, {Me}, T, laneCount(G),
                          /*Chain=*/true, I.getType()))
           return false;
-        OutNode[V] = T;
+        OutNode[VirtualInstIdx] = T;
       }
       return true;
     }
@@ -462,7 +477,7 @@ private:
         unsigned T;
         if (!addTransfer(TransferKind::VecToGpr, {Me}, T))
           return false;
-        OutNode[V] = T;
+        OutNode[VirtualInstIdx] = T;
       }
     }
     return true;
@@ -477,17 +492,17 @@ private:
   /// concurrency table if the entry has one. Without the split's cost the
   /// instruction costs what the fallback says, and cannot be moved. The
   /// operands are vectors already: there is no transfer.
-  bool buildVectorDivide(unsigned J, unsigned NI, ArrayRef<unsigned> Groups,
+  bool buildVectorDivide(unsigned CopyIdx, unsigned NodeIdx, ArrayRef<unsigned> Groups,
                          CostNode &Nd, ArrayRef<CarriedEdge> OwnEdges) {
-    const Instruction &I = *RG.Insts[NI];
-    unsigned V = J * N + NI;
-    unsigned NumGroups = Groups.size();
+    const Instruction &I = *RG.Insts[NodeIdx];
+    unsigned VirtualInstIdx = CopyIdx * NumInsts + NodeIdx;
+    unsigned NumDivideGroups = Groups.size();
     unsigned Size = R.Groups[Groups[0]].GroupLanes;
     SmallVector<bool, 4> Pr;
     unsigned Moved = 0; // The groups moved are the first Moved ones.
     bool Prefix = true;
     for (unsigned Idx : Groups) {
-      bool P = Promoted[virtualGroup(Idx, J)];
+      bool P = Promoted[virtualGroup(Idx, CopyIdx)];
       Pr.push_back(P);
       if (P && Moved != Pr.size() - 1)
         Prefix = false;
@@ -501,7 +516,7 @@ private:
         return false;
       Nd.Cost = Fallback(I);
       Nd.Wide512 = is512BitOp(I);
-      NodeOf[V] = Nodes.size();
+      NodeOf[VirtualInstIdx] = Nodes.size();
       unsigned Me = Nodes.size();
       Nodes.push_back(std::move(Nd));
       for (const CarriedEdge &E : OwnEdges)
@@ -525,7 +540,7 @@ private:
       SeqConc = PD.concurrency(Key);
     }
     SmallVector<unsigned, 4> GroupNodes;
-    for (unsigned P = 0; P != NumGroups; ++P) {
+    for (unsigned P = 0; P != NumDivideGroups; ++P) {
       CostNode PN;
       PN.Preds = Nd.Preds;
       if (Pr[P]) {
@@ -550,8 +565,8 @@ private:
         // stays that of the whole split, which is pessimistic for a part.
         PN.Cost = *Base;
         for (ResourceUse &U : PN.Cost.Uses)
-          U.Cycles /= NumGroups;
-        PN.Cost.Uops = (PN.Cost.Uops + NumGroups - 1 - P) / NumGroups;
+          U.Cycles /= NumDivideGroups;
+        PN.Cost.Uops = (PN.Cost.Uops + NumDivideGroups - 1 - P) / NumDivideGroups;
       }
       GroupNodes.push_back(Nodes.size());
       Nodes.push_back(std::move(PN));
@@ -562,15 +577,16 @@ private:
     Join.Cost = OpCost{{}, 0, 0};
     Join.Wide512 = is512BitOp(I);
     Join.Preds.assign(GroupNodes.begin(), GroupNodes.end());
-    NodeOf[V] = Nodes.size();
+    NodeOf[VirtualInstIdx] = Nodes.size();
     Nodes.push_back(std::move(Join));
     return true;
   }
 
-  /// The node producing the scalar value of virtual instruction \p V: its
-  /// VecToGpr node if it is a Singleton Vectorized live-out, else its own.
-  unsigned scalarNode(unsigned V) const {
-    return OutNode[V] != None ? OutNode[V] : NodeOf[V];
+  /// The node producing the scalar value of virtual instruction \p VirtualInstIdx:
+  /// its VecToGpr node if it is a Singleton Vectorized live-out, else its own.
+  unsigned scalarNode(unsigned VirtualInstIdx) const {
+    return OutNode[VirtualInstIdx] != None ? OutNode[VirtualInstIdx]
+                                          : NodeOf[VirtualInstIdx];
   }
 };
 
