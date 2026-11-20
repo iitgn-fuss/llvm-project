@@ -56,6 +56,10 @@ cl::opt<int> llvm::SAVIOForceCount(
              "that class moves (Singleton Vectorize or Scalarize), and "
              "nothing else (-1 = off; for calibration sweeps)"));
 
+static cl::opt<bool> EnableMultiBlockLoops(
+    "savio-multi-block-loops", cl::init(true),
+    cl::desc("Allow forming acyclic regions for basic blocks within multi-block loops"));
+
 /// Singleton Vectorize gives no intrinsic flag operands.  Refuse operations
 /// whose poison/undef semantics are stronger than an ordinary scalar
 /// operation, rather than silently dropping nuw/nsw/exact.
@@ -480,7 +484,7 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
   // vector form. If a carried PHI has users outside the group, we conservatively
   // discard the recurrence group to avoid complex off-cycle scalar reads.
   SmallVector<bool, 4> DiscardGroup(Groups.size(), false);
-  if (L) {
+  if (L && L->isInnermost() && L->getNumBlocks() == 1) {
     for (PHINode &Phi : BB.phis()) {
       auto LatchIt = RG.PhiLatch.find(&Phi);
       if ((!Phi.getType()->isIntegerTy(32) &&
@@ -714,8 +718,8 @@ SmallVector<Region, 4> savio::formRegions(Function &F, LoopInfo &LI,
   unsigned RegionNo = 0;
   for (BasicBlock &BB : F) {
     Loop *L = LI.getLoopFor(&BB);
-    // v1: innermost single-block loops, and blocks outside any loop.
-    if (L && !(L->isInnermost() && L->getNumBlocks() == 1))
+    // When multi-block loops are disabled, restrict to innermost single-block loops.
+    if (L && !EnableMultiBlockLoops && !(L->isInnermost() && L->getNumBlocks() == 1))
       continue;
     SmallVector<Group, 4> Groups = formGroups(BB, L, Classes, RegionNo++, LaneGroup, PD);
     if (!Groups.empty())
@@ -766,22 +770,24 @@ bool savio::liveOutNeedsGpr(const Group &G, const Instruction &I) {
 
 RegionGraph savio::buildRegionGraph(BasicBlock &BB, Loop *L) {
   RegionGraph RG;
+  bool IsSingleBlockLoop = L && L->isInnermost() && L->getNumBlocks() == 1;
 
   // Non-PHI instructions form graph nodes in program order, which guarantees a
-  // topological ordering for intra-iteration dataflow edges. Outside loops, the
-  // terminator is omitted; in loops, the loop-control branch is included.
+  // topological ordering for intra-iteration dataflow edges. Outside loops or in
+  // multi-block loop blocks, the terminator is omitted; in single-block loops,
+  // the loop-control branch is included.
   for (Instruction &I : BB)
-    if (!isa<PHINode>(I) && (L || !I.isTerminator())) {
+    if (!isa<PHINode>(I) && (IsSingleBlockLoop || !I.isTerminator())) {
       RG.Index[&I] = RG.Insts.size();
       RG.Insts.push_back(&I);
     }
   RG.Preds.resize(RG.Insts.size());
   RG.Carried.resize(RG.Insts.size());
 
-  // In loop regions, trace header PHIs back to their latch definition in this
+  // In single-block loop regions, trace header PHIs back to their latch definition in this
   // block, following PHI-of-PHI chains (e.g. multiple iteration delays) to
   // compute the producer node and carried iteration distance.
-  if (L) {
+  if (IsSingleBlockLoop) {
     for (PHINode &Phi : BB.phis()) {
       const PHINode *CurrPhi = &Phi;
       unsigned IterationDistance = 0;

@@ -236,9 +236,10 @@ private:
     // the value in that block, outside the loop.
     auto IsExitPhi = [&](Use *U) {
       auto *P = dyn_cast<PHINode>(U->getUser());
-      return P && P->getParent() != BB && P->getNumIncomingValues() == 1;
+      return P && !L->contains(P->getParent()) && P->getNumIncomingValues() == 1;
     };
-    if (L && all_of(Outside, IsExitPhi)) {
+    if (L && L->isInnermost() && L->getNumBlocks() == 1 &&
+        all_of(Outside, IsExitPhi)) {
       DenseMap<BasicBlock *, Value *> PerBlock;
       for (Use *U : Outside) {
         auto *P = cast<PHINode>(U->getUser());

@@ -25,7 +25,7 @@ using namespace llvm::savio;
 #define DEBUG_TYPE "savio"
 
 static cl::opt<bool> RelaxPoisonFlags(
-    "savio-relax-poison-flags", cl::init(false),
+    "savio-relax-poison-flags", cl::init(true),
     cl::desc("Allow singleton vectorization of instructions with poison-generating flags (nsw/nuw/exact)"));
 
 namespace llvm {
