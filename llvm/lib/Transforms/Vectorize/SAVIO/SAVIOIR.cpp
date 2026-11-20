@@ -20,11 +20,13 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PatternMatch.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/LoopSimplify.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
 #include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
@@ -219,6 +221,289 @@ LoopUnrollResult unrollWithRemainder(Loop *L, unsigned Count, LoopInfo &LI,
                     /*PreserveLCSSA=*/true);
 }
 
+// 64-element de Bruijn table (Terriberry: 817.flac_s) with multiplier 0x0218A392CD3D5DBFULL.
+static const uint8_t DeBruijnTable64_Terriberry[64] = {
+    0,  1,  2,  7,  3, 13,  8, 19,  4, 25, 14, 28,  9, 34, 20, 40,
+    5, 17, 26, 38, 15, 46, 29, 48, 10, 31, 35, 54, 21, 50, 41, 57,
+   63,  6, 12, 18, 24, 27, 33, 39, 16, 37, 45, 47, 30, 53, 49, 56,
+   62, 11, 23, 32, 36, 44, 52, 55, 61, 22, 43, 51, 60, 42, 59, 58
+};
+
+// 64-element de Bruijn table (SEAL / Boost: 750.sealcrypto_r, 766.femflow_r) with multiplier 0x07EDD5E59A4E28C2ULL.
+static const uint8_t DeBruijnTable64_SEAL[64] = {
+   63,  0, 58,  1, 59, 47, 53,  2, 60, 39, 48, 27, 54, 33, 42,  3,
+   61, 51, 37, 40, 49, 18, 28, 20, 55, 30, 34, 11, 43, 14, 22,  4,
+   62, 57, 46, 52, 38, 26, 32, 41, 50, 36, 17, 19, 29, 10, 13, 21,
+   56, 45, 25, 31, 35, 16,  9, 12, 44, 24, 15,  8, 23,  7,  6,  5
+};
+
+// 64-element de Bruijn table (Psnip: 838.diamond_s) with multiplier 0x03F79D71B4CB0A89ULL.
+static const uint8_t DeBruijnTable64_Psnip[64] = {
+    0, 47,  1, 56, 48, 27,  2, 60, 57, 49, 41, 37, 28, 16,  3, 61,
+   54, 58, 35, 52, 50, 42, 21, 44, 38, 32, 29, 23, 17, 11,  4, 62,
+   46, 55, 26, 59, 40, 36, 15, 53, 34, 51, 20, 43, 31, 22, 10, 45,
+   25, 39, 14, 33, 19, 30,  9, 24, 13, 18,  8, 12,  7,  6,  5, 63
+};
+
+// 32-element de Bruijn table (Eigen / Boost / Zstd / Psnip) with multiplier 0x07C4ACDDU.
+static const uint8_t DeBruijnTable32_Clz[32] = {
+    0,  9,  1, 10, 13, 21,  2, 29, 11, 14, 16, 18, 22, 25,  3, 30,
+    8, 12, 20, 28, 15, 17, 24,  7, 19, 27, 23,  6, 26,  5,  4, 31
+};
+
+static bool matchTableData(const Constant *Init, ArrayRef<uint8_t> Expected) {
+  if (auto *CDS = dyn_cast<ConstantDataSequential>(Init)) {
+    if (CDS->getNumElements() != Expected.size())
+      return false;
+    for (unsigned i = 0; i < Expected.size(); ++i) {
+      if (CDS->getElementAsInteger(i) != Expected[i])
+        return false;
+    }
+    return true;
+  }
+  if (auto *CA = dyn_cast<ConstantArray>(Init)) {
+    if (CA->getNumOperands() != Expected.size())
+      return false;
+    for (unsigned i = 0; i < Expected.size(); ++i) {
+      auto *CI = dyn_cast<ConstantInt>(CA->getOperand(i));
+      if (!CI || CI->getZExtValue() != Expected[i])
+        return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+enum class DeBruijnKind { None, Terriberry64, SEAL64, Psnip64, Clz32 };
+
+static DeBruijnKind identifyDeBruijnTable(const Value *Ptr) {
+  const Value *Stripped = Ptr->stripPointerCasts();
+  auto *GV = dyn_cast<GlobalVariable>(Stripped);
+  if (!GV || !GV->hasDefinitiveInitializer())
+    return DeBruijnKind::None;
+  const Constant *Init = GV->getInitializer();
+  if (matchTableData(Init, DeBruijnTable64_Terriberry))
+    return DeBruijnKind::Terriberry64;
+  if (matchTableData(Init, DeBruijnTable64_SEAL))
+    return DeBruijnKind::SEAL64;
+  if (matchTableData(Init, DeBruijnTable64_Psnip))
+    return DeBruijnKind::Psnip64;
+  if (matchTableData(Init, DeBruijnTable32_Clz))
+    return DeBruijnKind::Clz32;
+  return DeBruijnKind::None;
+}
+
+static Value *peelSmear(Value *Val, ArrayRef<unsigned> Shifts) {
+  using namespace llvm::PatternMatch;
+  auto matchSmearStep = [](Value *V, unsigned ShiftAmt) -> Value * {
+    Value *Base = nullptr, *Shifted = nullptr;
+    if (match(V, m_c_Or(m_Value(Base), m_Value(Shifted)))) {
+      if (match(Shifted, m_LShr(m_Specific(Base), m_SpecificInt(ShiftAmt))))
+        return Base;
+      if (match(Base, m_LShr(m_Specific(Shifted), m_SpecificInt(ShiftAmt))))
+        return Shifted;
+    }
+    return nullptr;
+  };
+
+  Value *Cur = Val;
+  for (unsigned S : Shifts) {
+    if (Value *Next = matchSmearStep(Cur, S))
+      Cur = Next;
+  }
+  return Cur;
+}
+
+static Value *extractBaseV(Value *E) {
+  using namespace llvm::PatternMatch;
+  Value *V = nullptr;
+  Value *Op0 = nullptr, *Op1 = nullptr;
+  if (match(E, m_c_Or(m_Value(Op0), m_Value(Op1)))) {
+    if (match(Op1, m_LShr(m_Specific(Op0), m_SpecificInt(1)))) {
+      V = Op0;
+    } else if (match(Op0, m_LShr(m_Specific(Op1), m_SpecificInt(1)))) {
+      V = Op1;
+    } else {
+      Value *Base0 = nullptr, *Base1 = nullptr;
+      const APInt *Shift0 = nullptr, *Shift1 = nullptr;
+      if (match(Op0, m_LShr(m_Value(Base0), m_APInt(Shift0))) &&
+          match(Op1, m_LShr(m_Value(Base1), m_APInt(Shift1))) &&
+          Base0 == Base1) {
+        if (*Shift1 == *Shift0 + 1)
+          V = Op0;
+        else if (*Shift0 == *Shift1 + 1)
+          V = Op1;
+      }
+    }
+  }
+  return V ? V : E;
+}
+
+struct DeBruijnMatch {
+  LoadInst *LI;
+  Value *V;
+  unsigned BitWidth;
+  uint64_t ZeroVal;
+};
+
+static std::optional<DeBruijnMatch> matchDeBruijn(LoadInst *LI) {
+  auto *GEP = dyn_cast<GEPOperator>(LI->getPointerOperand());
+  if (!GEP || GEP->getNumOperands() < 2)
+    return std::nullopt;
+
+  DeBruijnKind Kind = identifyDeBruijnTable(GEP->getPointerOperand());
+  if (Kind == DeBruijnKind::None)
+    return std::nullopt;
+
+  Value *Idx = GEP->getOperand(GEP->getNumOperands() - 1);
+  using namespace llvm::PatternMatch;
+  Value *SubIdx = nullptr;
+  while (match(Idx, m_ZExt(m_Value(SubIdx))) ||
+         match(Idx, m_SExt(m_Value(SubIdx))) ||
+         match(Idx, m_And(m_Value(SubIdx), m_SpecificInt(63))) ||
+         match(Idx, m_And(m_Value(SubIdx), m_SpecificInt(31)))) {
+    Idx = SubIdx;
+  }
+
+  if (Kind == DeBruijnKind::Clz32) {
+    Value *M = nullptr;
+    if (!match(Idx, m_LShr(m_Value(M), m_SpecificInt(27))))
+      return std::nullopt;
+    Value *Smeared = nullptr;
+    constexpr uint32_t Clz32Mult = 0x07C4ACDDU;
+    if (!match(M, m_Mul(m_Value(Smeared), m_SpecificInt(Clz32Mult))))
+      return std::nullopt;
+    Value *Peeled = peelSmear(Smeared, {16, 8, 4, 2});
+    Value *V = extractBaseV(Peeled);
+    if (!V || !V->getType()->isIntegerTy(32))
+      return std::nullopt;
+    return DeBruijnMatch{LI, V, 32, 0};
+  }
+
+  // 64-bit tables
+  Value *M = nullptr;
+  if (!match(Idx, m_LShr(m_Value(M), m_SpecificInt(58))))
+    return std::nullopt;
+
+  if (Kind == DeBruijnKind::Terriberry64) {
+    constexpr uint64_t TerriberryMult = 0x0218A392CD3D5DBFULL;
+    Value *Y = nullptr;
+    if (match(M, m_c_Add(m_Mul(m_Value(Y), m_SpecificInt(TerriberryMult)),
+                         m_SpecificInt(TerriberryMult)))) {
+    } else if (match(M, m_Mul(m_c_Add(m_Value(Y), m_SpecificInt(1)),
+                              m_SpecificInt(TerriberryMult)))) {
+    } else if (match(M, m_Mul(m_Value(Y), m_SpecificInt(TerriberryMult)))) {
+      Value *Y2 = nullptr;
+      if (match(Y, m_c_Add(m_Value(Y2), m_SpecificInt(1))))
+        Y = Y2;
+    } else {
+      return std::nullopt;
+    }
+
+    Value *A = nullptr;
+    Value *Sh1 = nullptr, *Sh33 = nullptr;
+    if (match(Y, m_c_Or(m_Value(Sh1), m_Value(Sh33)))) {
+      if (match(Sh1, m_LShr(m_Value(A), m_SpecificInt(1))) &&
+          match(Sh33, m_LShr(m_Specific(A), m_SpecificInt(33)))) {
+      } else if (match(Sh1, m_LShr(m_Value(A), m_SpecificInt(33))) &&
+                 match(Sh33, m_LShr(m_Specific(A), m_SpecificInt(1)))) {
+      }
+    }
+    if (!A) {
+      Value *Smeared32 = nullptr;
+      if (match(Y, m_LShr(m_Value(Smeared32), m_SpecificInt(1)))) {
+        Value *Op0 = nullptr, *Op1 = nullptr;
+        if (match(Smeared32,
+                  m_c_Or(m_Value(Op0), m_LShr(m_Value(Op1), m_SpecificInt(32)))) &&
+            Op0 == Op1)
+          A = Op0;
+      }
+    }
+    if (!A)
+      return std::nullopt;
+
+    Value *Peeled = peelSmear(A, {16, 8, 4, 2});
+    Value *V = extractBaseV(Peeled);
+    if (!V || !V->getType()->isIntegerTy(64))
+      return std::nullopt;
+    return DeBruijnMatch{LI, V, 64, 0};
+  }
+
+  if (Kind == DeBruijnKind::SEAL64) {
+    constexpr uint64_t SEALMult = 0x07EDD5E59A4E28C2ULL;
+    Value *Diff = nullptr;
+    if (!match(M, m_c_Mul(m_Value(Diff), m_SpecificInt(SEALMult))))
+      return std::nullopt;
+    Value *Smeared = nullptr;
+    Value *Op0 = nullptr, *Op1 = nullptr;
+    if (match(Diff, m_Sub(m_Value(Op0), m_Value(Op1))) ||
+        match(Diff, m_Xor(m_Value(Op0), m_Value(Op1)))) {
+      Value *ShiftedBase = nullptr;
+      if (match(Op1, m_LShr(m_Value(ShiftedBase), m_SpecificInt(1))) &&
+          ShiftedBase == Op0) {
+        Smeared = Op0;
+      }
+    }
+    if (!Smeared)
+      return std::nullopt;
+    Value *Peeled = peelSmear(Smeared, {32, 16, 8, 4, 2});
+    Value *V = extractBaseV(Peeled);
+    if (!V || !V->getType()->isIntegerTy(64))
+      return std::nullopt;
+    return DeBruijnMatch{LI, V, 64, 63};
+  }
+
+  if (Kind == DeBruijnKind::Psnip64) {
+    constexpr uint64_t PsnipMult = 0x03F79D71B4CB0A89ULL;
+    Value *Smeared = nullptr;
+    if (!match(M, m_Mul(m_Value(Smeared), m_SpecificInt(PsnipMult))))
+      return std::nullopt;
+    Value *Peeled = peelSmear(Smeared, {32, 16, 8, 4, 2});
+    Value *V = extractBaseV(Peeled);
+    if (!V || !V->getType()->isIntegerTy(64))
+      return std::nullopt;
+    return DeBruijnMatch{LI, V, 64, 0};
+  }
+
+  return std::nullopt;
+}
+
+static bool canonicalizeDeBruijnSequences(Function &F) {
+  SmallVector<DeBruijnMatch, 4> Candidates;
+  for (BasicBlock &BB : F) {
+    for (Instruction &I : BB) {
+      if (auto *LI = dyn_cast<LoadInst>(&I)) {
+        if (auto M = matchDeBruijn(LI))
+          Candidates.push_back(*M);
+      }
+    }
+  }
+  if (Candidates.empty())
+    return false;
+
+  SmallVector<Instruction *, 8> DeadInsts;
+  for (const auto &M : Candidates) {
+    LoadInst *LI = M.LI;
+    Value *V = M.V;
+    IRBuilder<> Builder(LI);
+    Value *Ctlz = Builder.CreateIntrinsic(Intrinsic::ctlz, {V->getType()},
+                                          {V, Builder.getFalse()});
+    Value *XorMask = Builder.CreateXor(
+        Ctlz, ConstantInt::get(V->getType(), M.BitWidth - 1));
+    Value *IsZero = Builder.CreateICmpEQ(V, ConstantInt::get(V->getType(), 0));
+    Value *SafeVal = Builder.CreateSelect(
+        IsZero, ConstantInt::get(V->getType(), M.ZeroVal), XorMask);
+    Value *Replacement = Builder.CreateZExtOrTrunc(SafeVal, LI->getType());
+    LI->replaceAllUsesWith(Replacement);
+    DeadInsts.push_back(LI);
+  }
+
+  for (Instruction *Dead : DeadInsts)
+    RecursivelyDeleteTriviallyDeadInstructions(Dead);
+
+  return true;
+}
+
 } // namespace
 
 PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
@@ -243,6 +528,8 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
       return PreservedAnalyses::all();
     }
   }
+
+  bool Changed = canonicalizeDeBruijnSequences(F);
 
   std::string CPU = SAVIOCPU;
   if (CPU.empty())
@@ -310,7 +597,6 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
   };
 
   // The unroller needs these; fetched only if a loop is a candidate.
-  bool Changed = false;
   // k/U of the moved classes ("none" if nothing moves) and T per original
   // iteration, as the remarks print them.
   auto Fraction = [&](const Decision &D) {
