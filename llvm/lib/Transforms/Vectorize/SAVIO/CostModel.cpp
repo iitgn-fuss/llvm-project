@@ -101,6 +101,15 @@ static std::optional<OpCost> outOfGroupOpCost(const PortDescription &PD,
     C = PD.irOpCost((Twine(I.getOpcodeName()) + (Imm ? ".imm " : " ") +
                      TyKey)
                         .str());
+  } else if (isa<SelectInst>(&I) && !I.getType()->isFPOrFPVectorTy()) {
+    std::string TyKey = typeKey(I.getType());
+    if (TyKey.empty()) {
+      if (I.getType()->isPointerTy())
+        TyKey = "i64";
+      else if (I.getType()->isIntegerTy())
+        TyKey = "i32";
+    }
+    C = PD.irOpCost("select " + TyKey);
   } else {
     return std::nullopt;
   }
@@ -149,6 +158,8 @@ class NodeBuilder {
   SmallVector<bool, 32> ControlOnly;
   /// The ToScalar group owning each load/store node, if any.
   DenseMap<unsigned, unsigned> MemOwner;
+  /// Single-use bitwise operations fused into their consumer on AVX-512 (vpternlog).
+  DenseSet<const Instruction *> AbsorbedBitwise;
 
   /// Cache of boundary transfer nodes keyed by:
   /// (VirtualGroupIdx, OperandValue, SourceCopyIdx) -> TransferCostNodeIdx.
@@ -254,6 +265,29 @@ public:
                             return cast<Instruction>(U)->isTerminator();
                           }));
       }
+
+    // Under AVX-512, DAGCombiner fuses single-use bitwise operations into their
+    // bitwise consumer as a single vpternlogd/vpternlogq instruction.
+    if (PD.vectorWidthBits() == 512) {
+      for (unsigned G = 0; G != NumRegionGroups; ++G) {
+        const Group &Grp = R.Groups[G];
+        DenseSet<const Instruction *> Absorbing;
+        for (const Instruction *I : Grp.Ops) {
+          if (!I->isBitwiseLogicOp() || !I->hasOneUse())
+            continue;
+          const User *U = *I->user_begin();
+          auto *UI = dyn_cast<Instruction>(U);
+          if (!UI || !UI->isBitwiseLogicOp())
+            continue;
+          if (!isInGroup(Grp, UI))
+            continue;
+          if (Absorbing.count(UI) || AbsorbedBitwise.count(I))
+            continue;
+          AbsorbedBitwise.insert(I);
+          Absorbing.insert(UI);
+        }
+      }
+    }
   }
 
   /// The virtual group of group \p G in copy \p CopyIdx.
@@ -425,22 +459,29 @@ private:
       if (C && MP)
         C = lanes(*C, laneCount(G));
     } else if (InGroup) {
-      std::string Key;
-      bool Imm = isShift(I.getOpcode()) && isa<ConstantInt>(I.getOperand(1));
-      if (P) {
-        if (I.getType()->isIntegerTy(64))
-          Key = opName(I) + (Imm ? ".imm " : " ") + "v2i64";
-        else
-          Key = "sv." + opName(I) + (Imm ? ".imm " : " ") + "v4i32";
+      if (P && AbsorbedBitwise.count(&I)) {
+        // Under AVX-512, DAGCombiner fuses this single-use bitwise producer into
+        // its bitwise consumer as a single vpternlogd/vpternlogq uop.
+        // The producer node incurs zero latency and zero micro-ops.
+        C = OpCost{{}, 0, 0};
       } else {
-        std::string ElemTyStr = typeKey(I.getType());
-        Key = opName(I) + (Imm ? ".imm " : " ") + ElemTyStr;
+        std::string Key;
+        bool Imm = isShift(I.getOpcode()) && isa<ConstantInt>(I.getOperand(1));
+        if (P) {
+          if (I.getType()->isIntegerTy(64))
+            Key = opName(I) + (Imm ? ".imm " : " ") + "v2i64";
+          else
+            Key = "sv." + opName(I) + (Imm ? ".imm " : " ") + "v4i32";
+        } else {
+          std::string EltTyStr = typeKey(I.getType());
+          Key = opName(I) + (Imm ? ".imm " : " ") + EltTyStr;
+        }
+        C = PD.irOpCost(Key);
+        if (!C && P)
+          return false;
+        if (C && P)
+          Conc = PD.concurrency(Key);
       }
-      C = PD.irOpCost(Key);
-      if (!C && P)
-        return false;
-      if (C && P)
-        Conc = PD.concurrency(Key);
     }
     if (!C && !InGroup && PD.chargeOutOfGroup())
       C = outOfGroupOpCost(PD, I);

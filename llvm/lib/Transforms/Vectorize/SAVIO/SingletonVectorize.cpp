@@ -165,6 +165,30 @@ public:
     }
 
     for (Instruction *Op : G.Ops) {
+      if (auto *SI = dyn_cast<SelectInst>(Op)) {
+        Value *Cond = SI->getCondition();
+        B.SetInsertPoint(Op);
+        B.SetCurrentDebugLocation(Op->getDebugLoc());
+        Value *CondVec;
+        if (auto *C = dyn_cast<Constant>(Cond)) {
+          CondVec = ConstantVector::getSplat(VecTy->getElementCount(), C);
+        } else {
+          CondVec = B.CreateVectorSplat(VecTy->getElementCount(), Cond, "cond.sv");
+        }
+        auto GetVecOperand = [&](Value *V) -> Value * {
+          auto *VI = dyn_cast<Instruction>(V);
+          if (auto It = VecOf.find(V); It != VecOf.end() && VI && isInGroup(G, VI))
+            return It->second;
+          return enter(Op, V);
+        };
+        Value *TrueVec = GetVecOperand(SI->getTrueValue());
+        Value *FalseVec = GetVecOperand(SI->getFalseValue());
+        B.SetInsertPoint(Op);
+        B.SetCurrentDebugLocation(Op->getDebugLoc());
+        VecOf[Op] = B.CreateSelect(CondVec, TrueVec, FalseVec, Op->getName() + ".sv");
+        continue;
+      }
+
       Value *Args[3];
       // llvm.ctpop / llvm.ctlz have one data operand (the flag of llvm.ctlz
       // is an immediate that the one-operand llvm.savio.sv.ctlz does not

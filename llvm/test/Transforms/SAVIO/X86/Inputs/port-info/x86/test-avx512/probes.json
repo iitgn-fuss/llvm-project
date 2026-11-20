@@ -636,6 +636,18 @@
     ],
     "fshr v2i64": [
       "T_VADD"
+    ],
+    "select i32": [
+      "T_SUB"
+    ],
+    "select i64": [
+      "T_SUB"
+    ],
+    "sv.select v4i32": [
+      "T_VADD"
+    ],
+    "select v2i64": [
+      "T_VADD"
     ]
   }
 }

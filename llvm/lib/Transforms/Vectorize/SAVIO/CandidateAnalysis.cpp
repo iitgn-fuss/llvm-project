@@ -97,6 +97,7 @@ bool isScalarCandidate(const Instruction &I) {
   case Instruction::Shl:
   case Instruction::LShr:
   case Instruction::AShr:
+  case Instruction::Select:
     return true;
   case Instruction::UDiv:
   case Instruction::URem:
@@ -136,6 +137,7 @@ bool isVectorCandidate(const Instruction &I) {
   case Instruction::Shl:
   case Instruction::LShr:
   case Instruction::AShr:
+  case Instruction::Select:
     return true;
   default:
     return false;
