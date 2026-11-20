@@ -117,7 +117,9 @@ LoadResult loadPortInfo(StringRef Root, StringRef Arch, StringRef CPU) {
 }
 
 /// Most instructions in a loop body SAVIO will unroll.
-constexpr unsigned MaxUnrollBodySize = 64;
+static cl::opt<unsigned> SAVIOMaxUnrollBodySize(
+    "savio-max-unroll-body-size", cl::init(128), cl::Hidden,
+    cl::desc("Maximum instruction count in a loop body SAVIO will unroll"));
 
 /// True if the loop header already contains a fixed-width integer vector
 /// operation that Scalarize can split.  Loop metadata alone is not enough:
@@ -157,7 +159,7 @@ static bool hasVectorCandidateBody(const BasicBlock &BB) {
 /// alone: unrolling it would be full unrolling).
 bool mayUnroll(const Loop &L, ScalarEvolution &SE) {
   if (!L.isInnermost() || L.getNumBlocks() != 1 ||
-      L.getHeader()->size() > MaxUnrollBodySize)
+      L.getHeader()->size() > SAVIOMaxUnrollBodySize)
     return false;
   for (StringRef Name :
        {"llvm.loop.unroll.disable", "llvm.loop.unroll.runtime.disable",

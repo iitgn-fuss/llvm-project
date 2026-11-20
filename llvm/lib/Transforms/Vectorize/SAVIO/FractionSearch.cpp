@@ -20,6 +20,10 @@ using namespace llvm::savio;
 
 #define DEBUG_TYPE "savio"
 
+static cl::opt<unsigned> SAVIOMaxVirtualUnrollInstances(
+    "savio-max-virtual-unroll-instances", cl::init(16), cl::Hidden,
+    cl::desc("Maximum virtual unroll instances explored in fraction search"));
+
 /// Populates \p D.MovedPerClass with the summary of how many instances of each
 /// slice class were promoted from the scalar unit to the vector unit.
 static void recordMoved(const Region &R, Decision &D) {
@@ -301,7 +305,8 @@ Decision savio::decide(const Region &R, const PortDescription &PD,
     }
 
     for (unsigned UnrollMult = 2;
-         MaxInstancesPerClass && UnrollMult * MaxInstancesPerClass <= 8;
+         MaxInstancesPerClass &&
+         UnrollMult * MaxInstancesPerClass <= SAVIOMaxVirtualUnrollInstances;
          ++UnrollMult) {
       SearchResult Candidate =
           searchFraction(R, RG, PD, Fallback, Margin, UnrollMult);

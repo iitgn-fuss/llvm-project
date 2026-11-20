@@ -103,6 +103,16 @@ class Rewriter {
     if (It != VecOf.end())
       return It->second;
 
+    // Reuse vector register directly if V is already an extract from Lane 0 of matching vector.
+    if (auto *EE = dyn_cast<ExtractElementInst>(V)) {
+      if (auto *Idx = dyn_cast<ConstantInt>(EE->getIndexOperand())) {
+        if (Idx->isZero() && EE->getVectorOperand()->getType() == VecTy) {
+          VecOf[V] = EE->getVectorOperand();
+          return EE->getVectorOperand();
+        }
+      }
+    }
+
     InputKind K = classifyInput(L, G, V);
     BasicBlock *Preheader = L ? L->getLoopPreheader() : nullptr;
     Value *Vec;

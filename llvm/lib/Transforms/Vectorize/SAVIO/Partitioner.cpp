@@ -756,8 +756,12 @@ InputKind savio::classifyInput(const Loop *L, const Group &G,
   if (auto *EE = dyn_cast<ExtractElementInst>(V))
     if (auto *VT = dyn_cast<FixedVectorType>(EE->getVectorOperand()->getType()))
       if (auto *Idx = dyn_cast<ConstantInt>(EE->getIndexOperand()))
-        if (Idx->getValue().ult(VT->getNumElements()))
+        if (Idx->getValue().ult(VT->getNumElements())) {
+          if (Idx->isZero() &&
+              VT->getNumElements() == (EE->getType()->isIntegerTy(64) ? 2 : 4))
+            return InputKind::Free;
           return InputKind::LaneToLane0;
+        }
   return InputKind::GprToVec;
 }
 

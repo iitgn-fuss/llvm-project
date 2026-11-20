@@ -92,6 +92,7 @@ static const char *LoopIR = R"(
     %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
     %ld = load i32, ptr %p
     %ld2 = load i32, ptr %q
+    %e0 = extractelement <4 x i32> %vec, i32 0
     %e2 = extractelement <4 x i32> %vec, i32 2
     %evar = extractelement <4 x i32> %vec, i32 %idx
     %eoob = extractelement <4 x i32> %vec, i32 7

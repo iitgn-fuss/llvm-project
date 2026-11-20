@@ -359,9 +359,21 @@ private:
       bool Vec = InGroup && R.Groups[GIdx].Dir == Direction::ToScalar;
       InputKind K = InputKind::Free;
       if (P && !SameGroup) {
-        if (!Vec)
-          K = classifyInput(R.L, R.Groups[GIdx], Op);
-        else if (!scalarizeInputIsFree(R.L, R.Groups[GIdx], Op))
+        if (!Vec) {
+          bool ProducerInVector = false;
+          if (DefV != None) {
+            unsigned DG = GroupOfNode[DefV % NumInsts];
+            if (DG != None && R.Groups[DG].Dir == Direction::ToVector) {
+              unsigned DVG = virtualGroup(DG, DefV / NumInsts);
+              if (Promoted[DVG])
+                ProducerInVector = true;
+            }
+          }
+          if (ProducerInVector)
+            K = InputKind::Free;
+          else
+            K = classifyInput(R.L, R.Groups[GIdx], Op);
+        } else if (!scalarizeInputIsFree(R.L, R.Groups[GIdx], Op))
           K = InputKind::GprToVec; // Stands for "needs a transfer".
       }
       if (P && !SameGroup && K != InputKind::Free) {

@@ -98,6 +98,7 @@ TEST_F(SAVIOGroupingTest, ExtractElement) {
   Group G = groupOf({find(*F, "g3"), find(*F, "g4")});
   // %vec is an argument, so in the loop these extracts are invariant; classify
   // outside a loop to test the lane rule itself.
+  EXPECT_EQ(classifyInput(nullptr, G, find(*F, "e0")), InputKind::Free);
   EXPECT_EQ(classifyInput(nullptr, G, find(*F, "e2")), InputKind::LaneToLane0);
   EXPECT_EQ(classifyInput(nullptr, G, find(*F, "evar")), InputKind::GprToVec);
   EXPECT_EQ(classifyInput(nullptr, G, find(*F, "eoob")), InputKind::GprToVec);
