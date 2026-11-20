@@ -181,9 +181,9 @@ TEST_F(SAVIOGroupingTest, RegionGraphNoTerminatorOutsideLoop) {
 
 TEST_F(SAVIOGroupingTest, SliceClassEqualForCopies) {
   // Four copies of the bucket feeder (mul, and, add, urem) off the pinned
-  // fshl/xor accumulator chain: four groups, one class.
+  // bswap/xor accumulator chain: four groups, one class.
   Function *F = parse(R"(
-    declare i32 @llvm.fshl.i32(i32, i32, i32)
+    declare i32 @llvm.bswap.i32(i32)
     define i32 @f(ptr %b, ptr %c, i64 %n) {
     entry:
       br label %loop
@@ -222,13 +222,13 @@ TEST_F(SAVIOGroupingTest, SliceClassEqualForCopies) {
       %k3 = and i32 %c3, 1023
       %d3 = add i32 %k3, 1
       %r3 = urem i32 %m3, %d3
-      %rot0 = call i32 @llvm.fshl.i32(i32 %acc, i32 %acc, i32 5)
+      %rot0 = call i32 @llvm.bswap.i32(i32 %acc)
       %a0 = xor i32 %rot0, %r0
-      %rot1 = call i32 @llvm.fshl.i32(i32 %a0, i32 %a0, i32 5)
+      %rot1 = call i32 @llvm.bswap.i32(i32 %a0)
       %a1 = xor i32 %rot1, %r1
-      %rot2 = call i32 @llvm.fshl.i32(i32 %a1, i32 %a1, i32 5)
+      %rot2 = call i32 @llvm.bswap.i32(i32 %a1)
       %a2 = xor i32 %rot2, %r2
-      %rot3 = call i32 @llvm.fshl.i32(i32 %a2, i32 %a2, i32 5)
+      %rot3 = call i32 @llvm.bswap.i32(i32 %a2)
       %a3 = xor i32 %rot3, %r3
       %i.next = add nuw i64 %i, 1
       %cmp = icmp ult i64 %i.next, %n
@@ -253,7 +253,7 @@ TEST_F(SAVIOGroupingTest, SliceClassEqualForCopies) {
 TEST_F(SAVIOGroupingTest, SliceClassDiffersByOpcodeOrConstant) {
   // The third copy masks with 511 instead of 1023.
   Function *F = parse(R"(
-    declare i32 @llvm.fshl.i32(i32, i32, i32)
+    declare i32 @llvm.bswap.i32(i32)
     define i32 @f(ptr %b, ptr %c, i64 %n) {
     entry:
       br label %loop
@@ -292,13 +292,13 @@ TEST_F(SAVIOGroupingTest, SliceClassDiffersByOpcodeOrConstant) {
       %k3 = and i32 %c3, 1023
       %d3 = add i32 %k3, 1
       %r3 = urem i32 %m3, %d3
-      %rot0 = call i32 @llvm.fshl.i32(i32 %acc, i32 %acc, i32 5)
+      %rot0 = call i32 @llvm.bswap.i32(i32 %acc)
       %a0 = xor i32 %rot0, %r0
-      %rot1 = call i32 @llvm.fshl.i32(i32 %a0, i32 %a0, i32 5)
+      %rot1 = call i32 @llvm.bswap.i32(i32 %a0)
       %a1 = xor i32 %rot1, %r1
-      %rot2 = call i32 @llvm.fshl.i32(i32 %a1, i32 %a1, i32 5)
+      %rot2 = call i32 @llvm.bswap.i32(i32 %a1)
       %a2 = xor i32 %rot2, %r2
-      %rot3 = call i32 @llvm.fshl.i32(i32 %a2, i32 %a2, i32 5)
+      %rot3 = call i32 @llvm.bswap.i32(i32 %a2)
       %a3 = xor i32 %rot3, %r3
       %i.next = add nuw i64 %i, 1
       %cmp = icmp ult i64 %i.next, %n
@@ -493,11 +493,11 @@ TEST_F(SAVIOGroupingTest, RecurrenceWithOutsideReaderOfPhiDropped) {
 }
 
 TEST_F(SAVIOGroupingTest, RecurrenceWithOutOfScopeMemberNextToSlice) {
-  // acc = fshl(acc ^ (v * 7), 13) * 5: the recurrence has an out-of-scope
-  // member (fshl), so none of its operations is a candidate; the feeder v * 7
+  // acc = bswap(acc ^ (v * 7)) * 5: the recurrence has an out-of-scope
+  // member (bswap), so none of its operations is a candidate; the feeder v * 7
   // is a slice off the cycle and survives.
   Function *F = parse(R"(
-    declare i32 @llvm.fshl.i32(i32, i32, i32)
+    declare i32 @llvm.bswap.i32(i32)
     define i32 @f(ptr %b, ptr %p, i64 %n) {
     entry:
       br label %loop
@@ -508,7 +508,7 @@ TEST_F(SAVIOGroupingTest, RecurrenceWithOutOfScopeMemberNextToSlice) {
       %v = load i32, ptr %pb
       %m = mul i32 %v, 7
       %s = xor i32 %acc, %m
-      %r = call i32 @llvm.fshl.i32(i32 %s, i32 %s, i32 13)
+      %r = call i32 @llvm.bswap.i32(i32 %s)
       %an = mul i32 %r, 5
       %i.next = add nuw i64 %i, 1
       %cmp = icmp ult i64 %i.next, %n

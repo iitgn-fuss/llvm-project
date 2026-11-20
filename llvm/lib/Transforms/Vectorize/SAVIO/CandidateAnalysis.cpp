@@ -78,10 +78,13 @@ bool isScalarCandidate(const Instruction &I) {
   // The lane-0 vector ctlz intrinsic always produces bitwidth for zero input,
   // which is exact regardless of the is_zero_poison flag value.
   // llvm.smin / llvm.smax / llvm.umin / llvm.umax have 2 data operands and no poison flags.
+  // llvm.fshl / llvm.fshr have 3 operands: op0, op1, and constant shift amount.
   if (StringRef IN = supportedIntrinsicName(I); !IN.empty()) {
     if (IN == "ctpop" || IN == "smin" || IN == "smax" || IN == "umin" ||
         IN == "umax")
       return true;
+    if (IN == "fshl" || IN == "fshr")
+      return isa<ConstantInt>(I.getOperand(2));
     return isa<ConstantInt>(I.getOperand(1));
   }
   switch (I.getOpcode()) {

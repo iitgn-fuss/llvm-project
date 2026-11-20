@@ -68,19 +68,38 @@ static std::optional<OpCost> outOfGroupOpCost(const PortDescription &PD,
                               ? TransferKind::GprToVec
                               : TransferKind::LaneInsert);
   } else if (auto *LD = dyn_cast<LoadInst>(&I)) {
-    C = PD.irOpCost("load " + typeKey(LD->getType()));
+    std::string TyKey = typeKey(LD->getType());
+    if (TyKey.empty()) {
+      if (LD->getType()->isPointerTy())
+        TyKey = "i64";
+      else if (LD->getType()->isIntegerTy())
+        TyKey = "i32";
+    }
+    C = PD.irOpCost("load " + TyKey);
   } else if (auto *ST = dyn_cast<StoreInst>(&I)) {
-    C = PD.irOpCost(
-        "store " + typeKey(ST->getValueOperand()->getType()));
+    std::string TyKey = typeKey(ST->getValueOperand()->getType());
+    if (TyKey.empty()) {
+      if (ST->getValueOperand()->getType()->isPointerTy())
+        TyKey = "i64";
+      else if (ST->getValueOperand()->getType()->isIntegerTy())
+        TyKey = "i32";
+    }
+    C = PD.irOpCost("store " + TyKey);
   } else if (!supportedIntrinsicName(I).empty()) {
-    C = PD.irOpCost(opName(I) + " " + typeKey(I.getType()));
+    std::string TyKey = typeKey(I.getType());
+    if (TyKey.empty() && I.getType()->isIntegerTy())
+      TyKey = "i32";
+    C = PD.irOpCost(opName(I) + " " + TyKey);
   } else if (I.isBinaryOp() && !I.getType()->isFPOrFPVectorTy()) {
     bool Imm = isa<ConstantInt>(I.getOperand(1)) &&
                (I.getOpcode() == Instruction::Shl ||
                 I.getOpcode() == Instruction::LShr ||
                 I.getOpcode() == Instruction::AShr);
+    std::string TyKey = typeKey(I.getType());
+    if (TyKey.empty() && I.getType()->isIntegerTy())
+      TyKey = "i32";
     C = PD.irOpCost((Twine(I.getOpcodeName()) + (Imm ? ".imm " : " ") +
-                     typeKey(I.getType()))
+                     TyKey)
                         .str());
   } else {
     return std::nullopt;

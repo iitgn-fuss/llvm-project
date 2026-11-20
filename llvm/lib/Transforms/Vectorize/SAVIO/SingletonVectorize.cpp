@@ -39,6 +39,10 @@ static Intrinsic::ID svIntrinsicFor(const Instruction &I) {
       return Intrinsic::umin;
     case Intrinsic::umax:
       return Intrinsic::umax;
+    case Intrinsic::fshl:
+      return Intrinsic::fshl;
+    case Intrinsic::fshr:
+      return Intrinsic::fshr;
     default:
       llvm_unreachable("call is not in scope of Singleton Vectorize");
     }
@@ -161,11 +165,14 @@ public:
     }
 
     for (Instruction *Op : G.Ops) {
-      Value *Args[2];
+      Value *Args[3];
       // llvm.ctpop / llvm.ctlz have one data operand (the flag of llvm.ctlz
       // is an immediate that the one-operand llvm.savio.sv.ctlz does not
-      // take); every other operation (including smin/smax/umin/umax) is binary.
-      unsigned NumArgs = !bitCountName(*Op).empty() ? 1 : 2;
+      // take); llvm.fshl / llvm.fshr have 3 operands;
+      // every other operation (including smin/smax/umin/umax) is binary.
+      unsigned NumArgs = !bitCountName(*Op).empty()
+                             ? 1
+                             : (isFunnelShift(*Op) ? 3 : 2);
       for (unsigned I = 0; I != NumArgs; ++I) {
         Value *V = Op->getOperand(I);
         // Arguments and constants are never in the group; they may be cached
@@ -174,7 +181,8 @@ public:
         if (auto It = VecOf.find(V);
             It != VecOf.end() && VI && isInGroup(G, VI)) {
           Args[I] = It->second;
-        } else if (I == 1 && Op->isShift() && isa<ConstantInt>(V)) {
+        } else if ((I == 1 && Op->isShift() && isa<ConstantInt>(V)) ||
+                   (I == 2 && isFunnelShift(*Op) && isa<ConstantInt>(V))) {
           // Constant shift count: a splat the backend matches to an immediate.
           Args[I] = ConstantVector::getSplat(VecTy->getElementCount(),
                                              cast<ConstantInt>(V));

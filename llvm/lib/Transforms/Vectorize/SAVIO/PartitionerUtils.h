@@ -53,6 +53,10 @@ inline StringRef supportedIntrinsicName(const Instruction &I) {
     return "umin";
   case Intrinsic::umax:
     return "umax";
+  case Intrinsic::fshl:
+    return "fshl";
+  case Intrinsic::fshr:
+    return "fshr";
   default:
     return "";
   }
@@ -73,6 +77,12 @@ inline bool isMinMax(const Instruction &I) {
   return Name == "smin" || Name == "smax" || Name == "umin" || Name == "umax";
 }
 
+/// Returns true if intrinsic call \p I computes funnel shift / rotate.
+inline bool isFunnelShift(const Instruction &I) {
+  StringRef Name = supportedIntrinsicName(I);
+  return Name == "fshl" || Name == "fshr";
+}
+
 /// Returns the operation name for port-info matching: the intrinsic key name
 /// ("ctpop", "ctlz", "smin", etc.) for intrinsics, or the IR opcode name for standard instructions.
 inline std::string opName(const Instruction &I) {
@@ -83,10 +93,10 @@ inline std::string opName(const Instruction &I) {
 /// Returns an iterator range over the meaningful data operands of instruction \p I.
 /// For unary bit counts (ctpop/ctlz), only the primary data operand (operand 0) is returned,
 /// ignoring any trailing flag operand.
-/// For binary min/max calls, operand 0 and operand 1 are both data operands.
+/// For binary min/max calls and funnel shifts, operand 0 and operand 1 are both data operands.
 inline iterator_range<User::const_op_iterator>
 dataOperands(const Instruction &I) {
-  if (isMinMax(I))
+  if (isMinMax(I) || isFunnelShift(I))
     return make_range(I.op_begin(), I.op_begin() + 2);
   if (!bitCountName(I).empty())
     return make_range(I.op_begin(), I.op_begin() + 1);
