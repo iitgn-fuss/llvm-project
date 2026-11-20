@@ -28,6 +28,10 @@ static cl::opt<bool> RelaxPoisonFlags(
     "savio-relax-poison-flags", cl::init(true),
     cl::desc("Allow singleton vectorization of instructions with poison-generating flags (nsw/nuw/exact)"));
 
+static cl::opt<bool> AllowConstantDivisors(
+    "savio-allow-constant-divisors", cl::init(false),
+    cl::desc("Allow singleton vectorization of divisions with constant divisors (which are otherwise lowered to reciprocal multiply)"));
+
 namespace llvm {
 namespace savio {
 
@@ -88,9 +92,13 @@ bool isScalarCandidate(const Instruction &I) {
     return true;
   case Instruction::UDiv:
   case Instruction::URem:
-    // UDiv and URem are strictly restricted to i32: 32-bit integer division
-    // through double-precision float divide is exact, but 64-bit integer
-    // division exceeds float64's 53-bit mantissa and would lose precision.
+    // Reject constant divisors unless explicitly allowed: scalar division or
+    // remainder by a compile-time constant is lowered to reciprocal multiplication
+    // (imul/mulx, 1-cycle throughput on Port 1) without using the hardware divider.
+    // Vectorizing to floating-point division (vdivsd) would replace a 3-cycle
+    // integer multiply with a 20+ cycle floating-point division and vector transfers.
+    if (!AllowConstantDivisors && isa<Constant>(I.getOperand(1)))
+      return false;
     return IsI32;
   default:
     return false;
