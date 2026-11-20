@@ -258,6 +258,18 @@
     ],
     "add.lshr.imm v4i32": [
       "T_VUSRA"
+    ],
+    "select i32": [
+      "T_ADD"
+    ],
+    "select v4i32": [
+      "T_VADD"
+    ],
+    "smin i32": [
+      "T_ADD"
+    ],
+    "smin v4i32": [
+      "T_VADD"
     ]
   }
 }

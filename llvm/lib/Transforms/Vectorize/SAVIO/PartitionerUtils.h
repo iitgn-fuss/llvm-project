@@ -36,7 +36,8 @@ inline bool isShift(unsigned Opcode) {
 /// `umin`, `umax`), returning their canonical key name.
 /// Returns empty StringRef for any other instruction.
 inline StringRef supportedIntrinsicName(const Instruction &I) {
-  if (!I.getType()->isIntegerTy(32) && !I.getType()->isIntegerTy(64))
+  Type *ScalarTy = I.getType()->getScalarType();
+  if (!ScalarTy->isIntegerTy(32) && !ScalarTy->isIntegerTy(64))
     return "";
   switch (I.getOpcode() == Instruction::Call
               ? cast<CallInst>(I).getIntrinsicID()

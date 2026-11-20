@@ -12,6 +12,8 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/Support/Alignment.h"
 
@@ -102,16 +104,52 @@ public:
     // The operations, in program order, one per lane at the vector one's
     // place.
     for (Instruction *I : G.Ops) {
-      auto *BO = cast<BinaryOperator>(I);
       auto &V = Lanes[I];
-      for (unsigned K = 0; K != N; ++K) {
-        Value *A = lane(I->getOperand(0), K, I);
-        Value *Bv = lane(I->getOperand(1), K, I);
-        auto *S = BinaryOperator::Create(BO->getOpcode(), A, Bv, "",
-                                         I->getIterator());
-        S->copyIRFlags(I);
-        S->setDebugLoc(I->getDebugLoc());
-        V.push_back(S);
+      if (auto *SI = dyn_cast<SelectInst>(I)) {
+        for (unsigned K = 0; K != N; ++K) {
+          Value *Cond = lane(SI->getCondition(), K, I);
+          Value *TrueVal = lane(SI->getTrueValue(), K, I);
+          Value *FalseVal = lane(SI->getFalseValue(), K, I);
+          auto *S = SelectInst::Create(Cond, TrueVal, FalseVal, "",
+                                       I->getIterator());
+          S->copyIRFlags(I);
+          S->setDebugLoc(I->getDebugLoc());
+          V.push_back(S);
+        }
+      } else if (auto *II = dyn_cast<IntrinsicInst>(I)) {
+        Intrinsic::ID IID = II->getIntrinsicID();
+        Function *Decl =
+            Intrinsic::getOrInsertDeclaration(BB->getModule(), IID, {EltTy});
+        for (unsigned K = 0; K != N; ++K) {
+          SmallVector<Value *, 3> Args;
+          for (unsigned ArgIdx = 0; ArgIdx != II->arg_size(); ++ArgIdx) {
+            Value *Arg = II->getArgOperand(ArgIdx);
+            if (isa<ConstantInt>(Arg) && Arg->getType()->isIntegerTy(1) &&
+                IID == Intrinsic::ctlz) {
+              Args.push_back(Arg);
+            } else if (isa<ConstantInt>(Arg) && !Arg->getType()->isVectorTy()) {
+              Args.push_back(Arg);
+            } else {
+              Args.push_back(lane(Arg, K, I));
+            }
+          }
+          auto *S = CallInst::Create(Decl, Args, "", I->getIterator());
+          S->copyIRFlags(I);
+          S->setDebugLoc(I->getDebugLoc());
+          V.push_back(S);
+        }
+      } else if (auto *BO = dyn_cast<BinaryOperator>(I)) {
+        for (unsigned K = 0; K != N; ++K) {
+          Value *A = lane(I->getOperand(0), K, I);
+          Value *Bv = lane(I->getOperand(1), K, I);
+          auto *S = BinaryOperator::Create(BO->getOpcode(), A, Bv, "",
+                                           I->getIterator());
+          S->copyIRFlags(I);
+          S->setDebugLoc(I->getDebugLoc());
+          V.push_back(S);
+        }
+      } else {
+        llvm_unreachable("unexpected instruction in scalarize group");
       }
     }
 

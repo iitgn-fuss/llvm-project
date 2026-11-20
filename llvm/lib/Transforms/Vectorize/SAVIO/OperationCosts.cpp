@@ -97,8 +97,7 @@ std::optional<OpCost> scalarizeOpCost(const PortDescription &PD,
                                               const Group &G, bool Vector) {
   std::string Ty = laneTypeName(G, Vector);
   auto Fused = [&](const Instruction &U, const Instruction &S) {
-    return (Twine(U.getOpcodeName()) + "." + S.getOpcodeName() + ".imm " + Ty)
-        .str();
+    return (Twine(opName(U)) + "." + opName(S) + ".imm " + Ty).str();
   };
   // A shift folded into its (only) user.
   if (isShift(I.getOpcode()) && I.hasOneUse())
@@ -111,7 +110,7 @@ std::optional<OpCost> scalarizeOpCost(const PortDescription &PD,
       return C;
   bool Imm = isShift(I.getOpcode()) && isImmAmount(I.getOperand(1));
   return PD.irOpCost(
-      (Twine(I.getOpcodeName()) + (Imm ? ".imm " : " ") + Ty).str());
+      (Twine(opName(I)) + (Imm ? ".imm " : " ") + Ty).str());
 }
 
 /// Cost of \p Lanes copies of \p C issued side by side: resource use and

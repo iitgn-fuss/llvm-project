@@ -127,6 +127,15 @@ bool isVectorCandidate(const Instruction &I) {
   uint64_t Bits = VT->getPrimitiveSizeInBits().getFixedValue();
   if (Bits != 128 && Bits != 256 && Bits != 512)
     return false;
+  if (StringRef IN = supportedIntrinsicName(I); !IN.empty()) {
+    if (IN == "ctpop" || IN == "smin" || IN == "smax" || IN == "umin" ||
+        IN == "umax")
+      return true;
+    if (IN == "fshl" || IN == "fshr")
+      return isa<ConstantInt>(I.getOperand(2)) ||
+             isImmAmount(I.getOperand(2));
+    return isa<ConstantInt>(I.getOperand(1));
+  }
   switch (I.getOpcode()) {
   case Instruction::Add:
   case Instruction::Sub:
