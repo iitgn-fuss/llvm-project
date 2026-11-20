@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Vectorize/SAVIO/SingletonVectorize.h"
+#include "PartitionerUtils.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Analysis/LoopInfo.h"
@@ -30,6 +31,14 @@ static Intrinsic::ID svIntrinsicFor(const Instruction &I) {
       return Intrinsic::savio_sv_ctpop;
     case Intrinsic::ctlz:
       return Intrinsic::savio_sv_ctlz;
+    case Intrinsic::smin:
+      return Intrinsic::smin;
+    case Intrinsic::smax:
+      return Intrinsic::smax;
+    case Intrinsic::umin:
+      return Intrinsic::umin;
+    case Intrinsic::umax:
+      return Intrinsic::umax;
     default:
       llvm_unreachable("call is not in scope of Singleton Vectorize");
     }
@@ -155,8 +164,8 @@ public:
       Value *Args[2];
       // llvm.ctpop / llvm.ctlz have one data operand (the flag of llvm.ctlz
       // is an immediate that the one-operand llvm.savio.sv.ctlz does not
-      // take); every other operation is binary.
-      unsigned NumArgs = isa<CallInst>(Op) ? 1 : 2;
+      // take); every other operation (including smin/smax/umin/umax) is binary.
+      unsigned NumArgs = !bitCountName(*Op).empty() ? 1 : 2;
       for (unsigned I = 0; I != NumArgs; ++I) {
         Value *V = Op->getOperand(I);
         // Arguments and constants are never in the group; they may be cached

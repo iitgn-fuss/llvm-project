@@ -72,8 +72,8 @@ static std::optional<OpCost> outOfGroupOpCost(const PortDescription &PD,
   } else if (auto *ST = dyn_cast<StoreInst>(&I)) {
     C = PD.irOpCost(
         "store " + typeKey(ST->getValueOperand()->getType()));
-  } else if (!bitCountName(I).empty()) {
-    C = PD.irOpCost(opName(I) + " i32");
+  } else if (!supportedIntrinsicName(I).empty()) {
+    C = PD.irOpCost(opName(I) + " " + typeKey(I.getType()));
   } else if (I.isBinaryOp() && !I.getType()->isFPOrFPVectorTy()) {
     bool Imm = isa<ConstantInt>(I.getOperand(1)) &&
                (I.getOpcode() == Instruction::Shl ||

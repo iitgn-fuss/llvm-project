@@ -74,26 +74,33 @@ static bool isSimpleStoreOf(const User *U, const Value *V) {
 
 /// Returns true if the value computed by instruction \p I flows into an address
 /// calculation (e.g. as an index/offset to a GetElementPtrInst or an IntToPtrInst)
-/// through casts, PHIs, or other in-scope arithmetic.
+/// through casts, PHIs, or other in-scope arithmetic within the same loop or block.
 ///
 /// WHY: Address calculations must reside in General Purpose Registers (GPRs).
-/// Vectorizing an operation that produces or feeds an address would force an
-/// expensive vector-to-GPR transfer instruction before every memory access,
-/// eliminating any performance advantage. The walk stops at bit-counting calls
-/// (ctpop/ctlz).
-static bool reachesAddress(const Instruction &I) {
+/// Vectorizing an operation that produces or feeds an in-region address would force
+/// an expensive vector-to-GPR transfer instruction before every memory access,
+/// eliminating any performance advantage. Out-of-region uses (such as after loop
+/// exit) receive live-outs in GPRs at region exits and incur zero in-region overhead.
+static bool reachesAddress(const Instruction &I, const Loop *L,
+                           const BasicBlock *BB) {
   SmallVector<const Instruction *, 8> Work{&I};
   SmallPtrSet<const Instruction *, 8> Seen{&I};
   while (!Work.empty()) {
     const Instruction *Cur = Work.pop_back_val();
     for (const User *U : Cur->users()) {
-      if (isa<GetElementPtrInst>(U) || isa<IntToPtrInst>(U))
+      auto *UI = dyn_cast<Instruction>(U);
+      if (!UI)
+        continue;
+      // Only penalize address calculations within the same region (in-loop or
+      // in-block). Uses outside the region receive live-out values in GPRs at
+      // region exit and do not incur in-loop vector-to-GPR transfers.
+      if (L ? !L->contains(UI) : UI->getParent() != BB)
+        continue;
+      if (isa<GetElementPtrInst>(UI) || isa<IntToPtrInst>(UI))
         return true;
-      if (isa<SExtInst>(U) || isa<ZExtInst>(U) || isa<TruncInst>(U) ||
-          isa<PHINode>(U) ||
-          (isCandidate(*cast<Instruction>(U)) &&
-           bitCountName(*cast<Instruction>(U)).empty())) {
-        auto *UI = cast<Instruction>(U);
+      if (isa<SExtInst>(UI) || isa<ZExtInst>(UI) || isa<TruncInst>(UI) ||
+          isa<PHINode>(UI) ||
+          (isCandidate(*UI) && bitCountName(*UI).empty())) {
         if (Seen.insert(UI).second)
           Work.push_back(UI);
       }
@@ -377,7 +384,7 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
     const Instruction &Inst = *RG.Insts[NodeIdx];
     IsVectorOp[NodeIdx] = isVectorCandidate(Inst);
     InScope[NodeIdx] =
-        isCandidate(Inst) && !reachesAddress(Inst) &&
+        isCandidate(Inst) && !reachesAddress(Inst, L, &BB) &&
         isAvailable(PD,
                     IsVectorOp[NodeIdx] ? Transform::Scalarize
                                         : Transform::SingletonVectorize,

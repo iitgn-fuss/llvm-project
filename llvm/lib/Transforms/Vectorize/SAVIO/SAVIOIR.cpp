@@ -418,7 +418,7 @@ PreservedAnalyses SAVIOIRPass::run(Function &F, FunctionAnalysisManager &FAM) {
     double RegionFrequency =
         double(BFI.getBlockFreq(Reg.BB).getFrequency()) / EntryFreq;
     if (RegionFrequency < SAVIOColdFraction ||
-        (!Forced && RegionFrequency < SAVIORemainderFraction))
+        (!Forced && !Reg.L && RegionFrequency < SAVIORemainderFraction))
       continue;
     // Unrolling is only for the cost-driven search; the force flags act on
     // the region as it is.

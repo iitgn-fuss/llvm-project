@@ -32,11 +32,10 @@ inline bool isShift(unsigned Opcode) {
          Opcode == Instruction::AShr;
 }
 
-/// Identifies supported bit-counting intrinsics (`llvm.ctpop.i32`,
-/// `llvm.ctpop.i64`, `llvm.ctlz.i32`, or `llvm.ctlz.i64`), returning their
-/// canonical key name ("ctpop" / "ctlz").
+/// Identifies supported intrinsic operations (`ctpop`, `ctlz`, `smin`, `smax`,
+/// `umin`, `umax`), returning their canonical key name.
 /// Returns empty StringRef for any other instruction.
-inline StringRef bitCountName(const Instruction &I) {
+inline StringRef supportedIntrinsicName(const Instruction &I) {
   if (!I.getType()->isIntegerTy(32) && !I.getType()->isIntegerTy(64))
     return "";
   switch (I.getOpcode() == Instruction::Call
@@ -46,23 +45,49 @@ inline StringRef bitCountName(const Instruction &I) {
     return "ctpop";
   case Intrinsic::ctlz:
     return "ctlz";
+  case Intrinsic::smin:
+    return "smin";
+  case Intrinsic::smax:
+    return "smax";
+  case Intrinsic::umin:
+    return "umin";
+  case Intrinsic::umax:
+    return "umax";
   default:
     return "";
   }
 }
 
+/// Identifies supported bit-counting intrinsics (`llvm.ctpop.i32`,
+/// `llvm.ctpop.i64`, `llvm.ctlz.i32`, or `llvm.ctlz.i64`), returning their
+/// canonical key name ("ctpop" / "ctlz").
+/// Returns empty StringRef for any other instruction.
+inline StringRef bitCountName(const Instruction &I) {
+  StringRef Name = supportedIntrinsicName(I);
+  return (Name == "ctpop" || Name == "ctlz") ? Name : "";
+}
+
+/// Returns true if intrinsic call \p I computes integer min/max.
+inline bool isMinMax(const Instruction &I) {
+  StringRef Name = supportedIntrinsicName(I);
+  return Name == "smin" || Name == "smax" || Name == "umin" || Name == "umax";
+}
+
 /// Returns the operation name for port-info matching: the intrinsic key name
-/// ("ctpop", "ctlz") for bit counts, or the IR opcode name for standard instructions.
+/// ("ctpop", "ctlz", "smin", etc.) for intrinsics, or the IR opcode name for standard instructions.
 inline std::string opName(const Instruction &I) {
-  StringRef BitCount = bitCountName(I);
-  return BitCount.empty() ? std::string(I.getOpcodeName()) : BitCount.str();
+  StringRef Intrin = supportedIntrinsicName(I);
+  return Intrin.empty() ? std::string(I.getOpcodeName()) : Intrin.str();
 }
 
 /// Returns an iterator range over the meaningful data operands of instruction \p I.
-/// For bit counts (calls), only the primary data operand (operand 0) is returned,
-/// ignoring the is_zero_poison flag operand.
+/// For unary bit counts (ctpop/ctlz), only the primary data operand (operand 0) is returned,
+/// ignoring any trailing flag operand.
+/// For binary min/max calls, operand 0 and operand 1 are both data operands.
 inline iterator_range<User::const_op_iterator>
 dataOperands(const Instruction &I) {
+  if (isMinMax(I))
+    return make_range(I.op_begin(), I.op_begin() + 2);
   if (!bitCountName(I).empty())
     return make_range(I.op_begin(), I.op_begin() + 1);
   return I.operands();

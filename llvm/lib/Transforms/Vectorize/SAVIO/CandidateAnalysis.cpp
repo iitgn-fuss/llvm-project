@@ -77,8 +77,13 @@ bool isScalarCandidate(const Instruction &I) {
   // Calls: llvm.ctpop has 1 operand; llvm.ctlz has (val, is_zero_poison).
   // The lane-0 vector ctlz intrinsic always produces bitwidth for zero input,
   // which is exact regardless of the is_zero_poison flag value.
-  if (StringRef BC = bitCountName(I); !BC.empty())
-    return BC == "ctpop" || isa<ConstantInt>(I.getOperand(1));
+  // llvm.smin / llvm.smax / llvm.umin / llvm.umax have 2 data operands and no poison flags.
+  if (StringRef IN = supportedIntrinsicName(I); !IN.empty()) {
+    if (IN == "ctpop" || IN == "smin" || IN == "smax" || IN == "umin" ||
+        IN == "umax")
+      return true;
+    return isa<ConstantInt>(I.getOperand(1));
+  }
   switch (I.getOpcode()) {
   case Instruction::Add:
   case Instruction::Sub:

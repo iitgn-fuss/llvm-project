@@ -111,6 +111,18 @@
       "T_VUDIV_FP",
       "T_VUDIV_FP",
       "T_VUDIV_FIX"
+    ],
+    "smin i32": [
+      "T_SUB"
+    ],
+    "sv.smin v4i32": [
+      "T_VSUB"
+    ],
+    "smax i32": [
+      "T_SUB"
+    ],
+    "sv.smax v4i32": [
+      "T_VSUB"
     ]
   }
 }
