@@ -85,6 +85,8 @@ bool isScalarCandidate(const Instruction &I) {
       return true;
     if (IN == "fshl" || IN == "fshr")
       return isa<ConstantInt>(I.getOperand(2));
+    if (IN == "cttz" || IN == "abs")
+      return false; // cttz/abs recognized for accurate out-of-group port costing and scalarization
     return isa<ConstantInt>(I.getOperand(1));
   }
   switch (I.getOpcode()) {

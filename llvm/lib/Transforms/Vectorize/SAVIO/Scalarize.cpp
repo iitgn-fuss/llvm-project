@@ -125,7 +125,8 @@ public:
           for (unsigned ArgIdx = 0; ArgIdx != II->arg_size(); ++ArgIdx) {
             Value *Arg = II->getArgOperand(ArgIdx);
             if (isa<ConstantInt>(Arg) && Arg->getType()->isIntegerTy(1) &&
-                IID == Intrinsic::ctlz) {
+                (IID == Intrinsic::ctlz || IID == Intrinsic::cttz ||
+                 IID == Intrinsic::abs)) {
               Args.push_back(Arg);
             } else if (isa<ConstantInt>(Arg) && !Arg->getType()->isVectorTy()) {
               Args.push_back(Arg);

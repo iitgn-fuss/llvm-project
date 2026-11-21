@@ -270,6 +270,18 @@
     ],
     "smin v4i32": [
       "T_VADD"
+    ],
+    "cttz i32": [
+      "T_ADD"
+    ],
+    "cttz v4i32": [
+      "T_VADD"
+    ],
+    "abs i32": [
+      "T_ADD"
+    ],
+    "abs v4i32": [
+      "T_VADD"
     ]
   }
 }

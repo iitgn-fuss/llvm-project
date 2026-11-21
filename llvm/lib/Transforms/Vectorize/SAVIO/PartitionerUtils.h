@@ -46,6 +46,10 @@ inline StringRef supportedIntrinsicName(const Instruction &I) {
     return "ctpop";
   case Intrinsic::ctlz:
     return "ctlz";
+  case Intrinsic::cttz:
+    return "cttz";
+  case Intrinsic::abs:
+    return "abs";
   case Intrinsic::smin:
     return "smin";
   case Intrinsic::smax:
@@ -64,12 +68,17 @@ inline StringRef supportedIntrinsicName(const Instruction &I) {
 }
 
 /// Identifies supported bit-counting intrinsics (`llvm.ctpop.i32`,
-/// `llvm.ctpop.i64`, `llvm.ctlz.i32`, or `llvm.ctlz.i64`), returning their
-/// canonical key name ("ctpop" / "ctlz").
+/// `llvm.ctpop.i64`, `llvm.ctlz.i32`, `llvm.ctlz.i64`, `llvm.cttz.i32`,
+/// or `llvm.cttz.i64`), returning their canonical key name ("ctpop" / "ctlz" / "cttz").
 /// Returns empty StringRef for any other instruction.
 inline StringRef bitCountName(const Instruction &I) {
   StringRef Name = supportedIntrinsicName(I);
-  return (Name == "ctpop" || Name == "ctlz") ? Name : "";
+  return (Name == "ctpop" || Name == "ctlz" || Name == "cttz") ? Name : "";
+}
+
+/// Returns true if intrinsic call \p I computes integer absolute value.
+inline bool isAbs(const Instruction &I) {
+  return supportedIntrinsicName(I) == "abs";
 }
 
 /// Returns true if intrinsic call \p I computes integer min/max.
@@ -92,14 +101,14 @@ inline std::string opName(const Instruction &I) {
 }
 
 /// Returns an iterator range over the meaningful data operands of instruction \p I.
-/// For unary bit counts (ctpop/ctlz), only the primary data operand (operand 0) is returned,
+/// For unary bit counts (ctpop/ctlz/cttz) and abs, only the primary data operand (operand 0) is returned,
 /// ignoring any trailing flag operand.
 /// For binary min/max calls and funnel shifts, operand 0 and operand 1 are both data operands.
 inline iterator_range<User::const_op_iterator>
 dataOperands(const Instruction &I) {
   if (isMinMax(I) || isFunnelShift(I))
     return make_range(I.op_begin(), I.op_begin() + 2);
-  if (!bitCountName(I).empty())
+  if (!bitCountName(I).empty() || isAbs(I))
     return make_range(I.op_begin(), I.op_begin() + 1);
   return I.operands();
 }

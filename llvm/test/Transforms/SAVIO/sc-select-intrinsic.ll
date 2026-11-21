@@ -51,3 +51,49 @@ vector.body:
 exit:
   ret void
 }
+
+; CHECK-LABEL: @test_cttz(
+; CHECK: load i32, ptr %pk
+; CHECK: call i32 @llvm.cttz.i32(i32 {{.*}}, i1 true)
+; CHECK: store i32 {{.*}}, ptr %po
+define void @test_cttz(ptr noalias %k, ptr noalias %o, i64 %n.vec) {
+entry:
+  br label %vector.body
+
+vector.body:
+  %index = phi i64 [ 0, %entry ], [ %index.next, %vector.body ]
+  %pk = getelementptr inbounds nuw i32, ptr %k, i64 %index
+  %w = load <4 x i32>, ptr %pk, align 16
+  %tz = call <4 x i32> @llvm.cttz.v4i32(<4 x i32> %w, i1 true)
+  %po = getelementptr inbounds nuw i32, ptr %o, i64 %index
+  store <4 x i32> %tz, ptr %po, align 16
+  %index.next = add nuw i64 %index, 4
+  %done = icmp eq i64 %index.next, %n.vec
+  br i1 %done, label %exit, label %vector.body
+
+exit:
+  ret void
+}
+
+; CHECK-LABEL: @test_abs(
+; CHECK: load i32, ptr %pk
+; CHECK: call i32 @llvm.abs.i32(i32 {{.*}}, i1 true)
+; CHECK: store i32 {{.*}}, ptr %po
+define void @test_abs(ptr noalias %k, ptr noalias %o, i64 %n.vec) {
+entry:
+  br label %vector.body
+
+vector.body:
+  %index = phi i64 [ 0, %entry ], [ %index.next, %vector.body ]
+  %pk = getelementptr inbounds nuw i32, ptr %k, i64 %index
+  %w = load <4 x i32>, ptr %pk, align 16
+  %a = call <4 x i32> @llvm.abs.v4i32(<4 x i32> %w, i1 true)
+  %po = getelementptr inbounds nuw i32, ptr %o, i64 %index
+  store <4 x i32> %a, ptr %po, align 16
+  %index.next = add nuw i64 %index, 4
+  %done = icmp eq i64 %index.next, %n.vec
+  br i1 %done, label %exit, label %vector.body
+
+exit:
+  ret void
+}
