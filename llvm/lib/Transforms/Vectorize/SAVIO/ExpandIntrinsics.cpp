@@ -54,9 +54,10 @@ using namespace llvm;
 
 namespace {
 
-/// True for the one-operand sv forms (sv.ctpop, sv.ctlz).
+/// True for the one-operand sv forms (sv.ctpop, sv.ctlz, sv.cttz).
 bool isUnaryCount(Intrinsic::ID ID) {
-  return ID == Intrinsic::savio_sv_ctpop || ID == Intrinsic::savio_sv_ctlz;
+  return ID == Intrinsic::savio_sv_ctpop || ID == Intrinsic::savio_sv_ctlz ||
+         ID == Intrinsic::savio_sv_cttz;
 }
 
 /// Binary opcode of an sv.<op> / fpdiv.<op> intrinsic; false if \p ID is not
@@ -117,7 +118,11 @@ Value *expandOne(IntrinsicInst *II, Instruction::BinaryOps Opc, unsigned Lanes,
     Value *A = II->getArgOperand(0);
     if (II->getIntrinsicID() == Intrinsic::savio_sv_ctpop)
       return B.CreateUnaryIntrinsic(Intrinsic::ctpop, A);
-    return B.CreateIntrinsic(Intrinsic::ctlz, {A->getType()},
+    if (II->getIntrinsicID() == Intrinsic::savio_sv_ctlz)
+      return B.CreateIntrinsic(Intrinsic::ctlz, {A->getType()},
+                               {A, B.getFalse()});
+    // sv.cttz: cttz(x, false) — is_zero_poison=false, matches ctlz behavior.
+    return B.CreateIntrinsic(Intrinsic::cttz, {A->getType()},
                              {A, B.getFalse()});
   }
   Value *A = II->getArgOperand(0), *D = II->getArgOperand(1);

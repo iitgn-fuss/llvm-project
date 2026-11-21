@@ -282,6 +282,13 @@
     ],
     "abs v4i32": [
       "T_VADD"
+    ],
+    "sv.cttz v4i32": [
+      "T_VADD"
+    ],
+    "cttz v2i64": [
+      "T_ADD",
+      "T_ADD"
     ]
   }
 }

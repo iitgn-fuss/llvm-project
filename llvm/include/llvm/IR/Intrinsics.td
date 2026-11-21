@@ -3222,7 +3222,7 @@ foreach Op = ["add", "sub", "mul", "and", "or", "xor", "shl", "lshr", "ashr",
 // operand (ctlz of 0 is the element width: is_zero_poison is false); the other
 // lanes are poison. Same type rules and attributes as the two-operand forms
 // above; the mangled name of the <4 x i32> form is llvm.savio.sv.<op>.v4i32.
-foreach Op = ["ctpop", "ctlz"] in
+foreach Op = ["ctpop", "ctlz", "cttz"] in
   def int_savio_sv_#Op
       : DefaultAttrsIntrinsic<[llvm_anyvector_ty],
                               [LLVMMatchType<0>],

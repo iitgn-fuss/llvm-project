@@ -85,8 +85,11 @@ bool isScalarCandidate(const Instruction &I) {
       return true;
     if (IN == "fshl" || IN == "fshr")
       return isa<ConstantInt>(I.getOperand(2));
+    // cttz: now enabled for singleton vectorization via llvm.savio.sv.cttz.
+    // The is_zero_poison flag (operand 1) must be a compile-time constant so it
+    // is preserved as an immediate across the scalar -> vector rewrite.
     if (IN == "cttz")
-      return false; // cttz recognized for accurate out-of-group port costing and scalarization
+      return isa<ConstantInt>(I.getOperand(1));
     return isa<ConstantInt>(I.getOperand(1));
   }
   switch (I.getOpcode()) {

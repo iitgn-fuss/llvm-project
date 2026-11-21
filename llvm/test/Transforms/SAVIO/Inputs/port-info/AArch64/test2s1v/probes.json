@@ -129,6 +129,12 @@
     ],
     "sv.abs v4i32": [
       "T_VSUB"
+    ],
+    "cttz i32": [
+      "T_ADD"
+    ],
+    "sv.cttz v4i32": [
+      "T_VADD"
     ]
   }
 }

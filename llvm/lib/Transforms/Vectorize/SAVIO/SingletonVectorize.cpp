@@ -31,6 +31,8 @@ static Intrinsic::ID svIntrinsicFor(const Instruction &I) {
       return Intrinsic::savio_sv_ctpop;
     case Intrinsic::ctlz:
       return Intrinsic::savio_sv_ctlz;
+    case Intrinsic::cttz:
+      return Intrinsic::savio_sv_cttz;
     case Intrinsic::abs:
       return Intrinsic::abs;
     case Intrinsic::smin:
@@ -215,9 +217,9 @@ public:
         Args[1] = Op->getOperand(1);
         NumArgs = 2;
       } else {
-        // llvm.ctpop / llvm.ctlz have one data operand (the flag of llvm.ctlz
-        // is an immediate that the one-operand llvm.savio.sv.ctlz does not
-        // take); llvm.fshl / llvm.fshr have 3 operands;
+        // llvm.ctpop / llvm.ctlz / llvm.cttz have one data operand (the flag of
+        // ctlz/cttz is an immediate that sv.ctpop/sv.ctlz/sv.cttz do not take);
+        // llvm.fshl / llvm.fshr have 3 operands;
         // every other operation (including smin/smax/umin/umax) is binary.
         NumArgs = !bitCountName(*Op).empty()
                       ? 1
