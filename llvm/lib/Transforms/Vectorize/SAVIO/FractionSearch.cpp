@@ -152,6 +152,10 @@ static SearchResult searchFraction(const Region &R, const RegionGraph &RG,
       const Group &Grp = R.Groups[GroupIdx];
       if (Grp.Recurrence && CopyIdx != 0)
         continue;
+      // Outside a loop, singleton vectorization (ToVector) cannot amortize
+      // cross-domain GPR <-> vector register transfers across iterations.
+      if (!R.L && Grp.Dir == Direction::ToVector)
+        continue;
       unsigned SliceClass = Grp.SliceClass;
       if (Grp.Recurrence)
         RecurrenceClasses.insert(SliceClass);
