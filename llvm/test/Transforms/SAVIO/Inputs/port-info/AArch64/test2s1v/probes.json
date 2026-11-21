@@ -123,6 +123,12 @@
     ],
     "sv.smax v4i32": [
       "T_VSUB"
+    ],
+    "abs i32": [
+      "T_SUB"
+    ],
+    "sv.abs v4i32": [
+      "T_VSUB"
     ]
   }
 }

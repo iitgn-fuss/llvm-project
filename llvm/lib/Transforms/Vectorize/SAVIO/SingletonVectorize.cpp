@@ -31,6 +31,8 @@ static Intrinsic::ID svIntrinsicFor(const Instruction &I) {
       return Intrinsic::savio_sv_ctpop;
     case Intrinsic::ctlz:
       return Intrinsic::savio_sv_ctlz;
+    case Intrinsic::abs:
+      return Intrinsic::abs;
     case Intrinsic::smin:
       return Intrinsic::smin;
     case Intrinsic::smax:
@@ -200,28 +202,42 @@ public:
       }
 
       Value *Args[3];
-      // llvm.ctpop / llvm.ctlz have one data operand (the flag of llvm.ctlz
-      // is an immediate that the one-operand llvm.savio.sv.ctlz does not
-      // take); llvm.fshl / llvm.fshr have 3 operands;
-      // every other operation (including smin/smax/umin/umax) is binary.
-      unsigned NumArgs = !bitCountName(*Op).empty()
-                             ? 1
-                             : (isFunnelShift(*Op) ? 3 : 2);
-      for (unsigned I = 0; I != NumArgs; ++I) {
-        Value *V = Op->getOperand(I);
-        // Arguments and constants are never in the group; they may be cached
-        // in VecOf as inputs, which enter() reuses.
-        auto *VI = dyn_cast<Instruction>(V);
-        if (auto It = VecOf.find(V);
+      unsigned NumArgs = 0;
+      if (isAbs(*Op)) {
+        Value *V0 = Op->getOperand(0);
+        auto *VI = dyn_cast<Instruction>(V0);
+        if (auto It = VecOf.find(V0);
             It != VecOf.end() && VI && isInGroup(G, VI)) {
-          Args[I] = It->second;
-        } else if ((I == 1 && Op->isShift() && isa<ConstantInt>(V)) ||
-                   (I == 2 && isFunnelShift(*Op) && isa<ConstantInt>(V))) {
-          // Constant shift count: a splat the backend matches to an immediate.
-          Args[I] = ConstantVector::getSplat(VecTy->getElementCount(),
-                                             cast<ConstantInt>(V));
+          Args[0] = It->second;
         } else {
-          Args[I] = enter(Op, V);
+          Args[0] = enter(Op, V0);
+        }
+        Args[1] = Op->getOperand(1);
+        NumArgs = 2;
+      } else {
+        // llvm.ctpop / llvm.ctlz have one data operand (the flag of llvm.ctlz
+        // is an immediate that the one-operand llvm.savio.sv.ctlz does not
+        // take); llvm.fshl / llvm.fshr have 3 operands;
+        // every other operation (including smin/smax/umin/umax) is binary.
+        NumArgs = !bitCountName(*Op).empty()
+                      ? 1
+                      : (isFunnelShift(*Op) ? 3 : 2);
+        for (unsigned I = 0; I != NumArgs; ++I) {
+          Value *V = Op->getOperand(I);
+          // Arguments and constants are never in the group; they may be cached
+          // in VecOf as inputs, which enter() reuses.
+          auto *VI = dyn_cast<Instruction>(V);
+          if (auto It = VecOf.find(V);
+              It != VecOf.end() && VI && isInGroup(G, VI)) {
+            Args[I] = It->second;
+          } else if ((I == 1 && Op->isShift() && isa<ConstantInt>(V)) ||
+                     (I == 2 && isFunnelShift(*Op) && isa<ConstantInt>(V))) {
+            // Constant shift count: a splat the backend matches to an immediate.
+            Args[I] = ConstantVector::getSplat(VecTy->getElementCount(),
+                                               cast<ConstantInt>(V));
+          } else {
+            Args[I] = enter(Op, V);
+          }
         }
       }
       B.SetInsertPoint(Op);
