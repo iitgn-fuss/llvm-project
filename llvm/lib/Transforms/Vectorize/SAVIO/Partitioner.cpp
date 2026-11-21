@@ -391,6 +391,36 @@ static SmallVector<Group, 4> formGroups(BasicBlock &BB, Loop *L,
                     Inst);
   }
 
+  // An integer division (UDiv) and remainder (URem) with identical operands in
+  // the same basic block are fused into a single scalar divl instruction on x86
+  // (which simultaneously writes quotient to EAX and remainder to EDX).
+  // If one of them reaches an address (requiring scalar GPR execution), vectorizing
+  // the other alone breaks hardware fusion, forcing separate scalar division +
+  // vector FP division + domain transfers. Keep both in scalar when one reaches address.
+  for (unsigned NodeIdx = 0; NodeIdx != NumInsts; ++NodeIdx) {
+    if (!InScope[NodeIdx] || IsVectorOp[NodeIdx])
+      continue;
+    const Instruction &Inst = *RG.Insts[NodeIdx];
+    if (Inst.getOpcode() != Instruction::UDiv &&
+        Inst.getOpcode() != Instruction::URem)
+      continue;
+    unsigned SiblingOp = (Inst.getOpcode() == Instruction::UDiv)
+                             ? Instruction::URem
+                             : Instruction::UDiv;
+    for (unsigned SiblingIdx = 0; SiblingIdx != NumInsts; ++SiblingIdx) {
+      if (SiblingIdx == NodeIdx)
+        continue;
+      const Instruction &Sib = *RG.Insts[SiblingIdx];
+      if (Sib.getOpcode() == SiblingOp &&
+          Sib.getOperand(0) == Inst.getOperand(0) &&
+          Sib.getOperand(1) == Inst.getOperand(1) &&
+          reachesAddress(Sib, L, &BB)) {
+        InScope[NodeIdx] = false;
+        break;
+      }
+    }
+  }
+
   //===--------------------------------------------------------------------===//
   // Phase 2: Compute SCCs for Recurrence Detection
   //===--------------------------------------------------------------------===//
